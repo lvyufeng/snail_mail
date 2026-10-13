@@ -40,11 +40,11 @@ struct HUDView: View {
 
                 VStack(alignment: .trailing, spacing: 8) {
                     HStack(spacing: 8) {
-                        RoundIconButton(glyph: muted ? "🔇" : "🔊") {
+                        RoundIconButton(icon: .sound(on: !muted)) {
                             muted.toggle()
                             Sound.shared.setMuted(muted)
                         }
-                        RoundIconButton(glyph: state.phase == .paused ? "▶" : "❚❚", action: onPause)
+                        RoundIconButton(icon: state.phase == .paused ? .play : .pause, action: onPause)
                     }
                     Text(String(format: "%.1fs", state.elapsed))
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))

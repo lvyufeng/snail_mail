@@ -172,19 +172,73 @@ struct ArcadeButton: View {
     }
 }
 
-/// Small round icon button (pause / play) drawn with a glyph, matching the kit.
+/// The glyphs the round chrome buttons can show. Drawn as shapes rather than
+/// system characters so they read the same weight as the rest of the kit.
+enum RoundIcon {
+    case sound(on: Bool)
+    case pause
+    case play
+}
+
+/// Small round icon button (mute / pause / play) matching the shared chrome.
 struct RoundIconButton: View {
-    let glyph: String
+    let icon: RoundIcon
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Text(glyph)
-                .font(.system(size: 16, weight: .black))
-                .frame(width: 42, height: 42)
-                .foregroundStyle(.white)
-                .background(Circle().fill(.white.opacity(0.12)))
-                .overlay(Circle().stroke(Palette.cyan.opacity(0.8), lineWidth: 1.5))
+            Canvas { ctx, size in
+                let w = size.width, h = size.height
+                let white = GraphicsContext.Shading.color(.white)
+                switch icon {
+                case .sound(let on):
+                    var body = Path()
+                    body.move(to: CGPoint(x: w * 0.26, y: h * 0.40))
+                    body.addLine(to: CGPoint(x: w * 0.40, y: h * 0.40))
+                    body.addLine(to: CGPoint(x: w * 0.58, y: h * 0.24))
+                    body.addLine(to: CGPoint(x: w * 0.58, y: h * 0.76))
+                    body.addLine(to: CGPoint(x: w * 0.40, y: h * 0.60))
+                    body.addLine(to: CGPoint(x: w * 0.26, y: h * 0.60))
+                    body.closeSubpath()
+                    ctx.fill(body, with: white)
+                    if on {
+                        for r in [0.16, 0.30] as [CGFloat] {
+                            var arc = Path()
+                            arc.addArc(center: CGPoint(x: w * 0.60, y: h * 0.5),
+                                       radius: w * r,
+                                       startAngle: .degrees(-55), endAngle: .degrees(55),
+                                       clockwise: false)
+                            ctx.stroke(arc, with: white,
+                                       style: .init(lineWidth: max(1.5, w * 0.055), lineCap: .round))
+                        }
+                    } else {
+                        var cross = Path()
+                        cross.move(to: CGPoint(x: w * 0.70, y: h * 0.38))
+                        cross.addLine(to: CGPoint(x: w * 0.90, y: h * 0.62))
+                        cross.move(to: CGPoint(x: w * 0.90, y: h * 0.38))
+                        cross.addLine(to: CGPoint(x: w * 0.70, y: h * 0.62))
+                        ctx.stroke(cross, with: white,
+                                   style: .init(lineWidth: max(1.5, w * 0.06), lineCap: .round))
+                    }
+                case .pause:
+                    for x in [0.34, 0.56] as [CGFloat] {
+                        let bar = Path(roundedRect: CGRect(x: w * x, y: h * 0.30,
+                                                           width: w * 0.12, height: h * 0.40),
+                                       cornerRadius: w * 0.04)
+                        ctx.fill(bar, with: white)
+                    }
+                case .play:
+                    var tri = Path()
+                    tri.move(to: CGPoint(x: w * 0.36, y: h * 0.28))
+                    tri.addLine(to: CGPoint(x: w * 0.36, y: h * 0.72))
+                    tri.addLine(to: CGPoint(x: w * 0.72, y: h * 0.50))
+                    tri.closeSubpath()
+                    ctx.fill(tri, with: white)
+                }
+            }
+            .frame(width: 42, height: 42)
+            .background(Circle().fill(.white.opacity(0.12)))
+            .overlay(Circle().stroke(Palette.cyan.opacity(0.8), lineWidth: 1.5))
         }
         .buttonStyle(.plain)
     }

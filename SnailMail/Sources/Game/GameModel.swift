@@ -199,7 +199,7 @@ struct LevelConfig {
                 mode: .challenge,
                 speed: 60,
                 salt: 12,
-                trash: 66,
+                trash: 52,
                 parcels: 0,
                 quota: 0,
                 length: 4000,
@@ -214,7 +214,7 @@ struct LevelConfig {
                 mode: .proChallenge,
                 speed: 74,
                 salt: 22,
-                trash: 96,
+                trash: 70,
                 parcels: 0,
                 quota: 0,
                 length: 6000,
@@ -337,36 +337,53 @@ enum TrackBuilder {
 
     private static func scatterEntities(_ segments: inout [RoadSegment], config: LevelConfig, rng: inout SystemRandomNumberGenerator) {
         guard segments.count > 60 else { return }
-        let usable = Array(segments[40..<(segments.count - 40)])
+        let usable = Array(segments[20..<(segments.count - 30)])
 
-        func place(_ kind: EntityKind, count: Int, minGap: Int) {
-            guard count > 0 else { return }
-            var lastIndex = -minGap
-            var placed = 0
-            var attempts = 0
-            while placed < count && attempts < count * 40 {
-                attempts += 1
-                let seg = usable.randomElement(using: &rng)!
-                if seg.index - lastIndex < minGap { continue }
-                let offset = CGFloat.random(in: -0.8...0.8, using: &rng)
-                seg.sprites.append(EntitySpec(kind: kind, offset: offset, depth: CGFloat.random(in: 0...1, using: &rng)))
-                lastIndex = seg.index
-                placed += 1
+        // Walk the course in a randomised order and greedily drop each pickup on
+        // the first free slot that keeps `minGap` segments between neighbours of
+        // the same kind. Shuffling first spreads items over the whole route
+        // instead of drifting toward one end.
+        @discardableResult
+        func place(_ kind: EntityKind, count: Int, minGap: Int,
+                   avoiding blocked: Set<Int> = []) -> [Int] {
+            guard count > 0 else { return [] }
+            var candidates = Array(20..<(segments.count - 30))
+            candidates.shuffle(using: &rng)
+            var chosen: [Int] = []
+            for index in candidates {
+                if chosen.count >= count { break }
+                if blocked.contains(index) { continue }
+                if chosen.allSatisfy({ abs($0 - index) >= minGap }) {
+                    let seg = segments[index]
+                    let offset = CGFloat.random(in: -0.8...0.8, using: &rng)
+                    seg.sprites.append(EntitySpec(kind: kind, offset: offset, depth: CGFloat.random(in: 0...1, using: &rng)))
+                    chosen.append(index)
+                }
             }
+            return chosen
         }
 
         place(.parcel, count: max(1, config.parcels), minGap: 6)
 
         let hazardCount = usable.count / 6
-        place(.salt, count: Int(CGFloat(hazardCount) * config.salt / 100), minGap: 10)
-        place(.asteroid, count: Int(CGFloat(hazardCount) * config.trash / 200), minGap: 8)
-        place(.slug, count: Int(CGFloat(hazardCount) * config.trash / 300), minGap: 12)
+        // Rings are wide and span the whole road, so reserve their segments
+        // first. Hazards are then kept off those segments so a meteor or slug
+        // never spawns inside a boost ring.
+        var ringSegments = Set<Int>()
+        ringSegments.formUnion(place(.ringUpgrade, count: max(1, usable.count / 70), minGap: 30))
+        ringSegments.formUnion(place(.ringExplode, count: max(1, usable.count / 120), minGap: 50, avoiding: ringSegments))
+        ringSegments.formUnion(place(.ringSlow, count: max(1, usable.count / 110), minGap: 50, avoiding: ringSegments))
+
+        // The guided tutorial stays clean: pickups and rings only, so a new
+        // player can learn the controls without dodging anything.
+        if !config.guided {
+            place(.salt, count: Int(CGFloat(hazardCount) * config.salt / 100), minGap: 10, avoiding: ringSegments)
+            place(.asteroid, count: Int(CGFloat(hazardCount) * config.trash / 200), minGap: 8, avoiding: ringSegments)
+            place(.slug, count: Int(CGFloat(hazardCount) * config.trash / 300), minGap: 12, avoiding: ringSegments)
+            place(.turret, count: usable.count / 130, minGap: 60, avoiding: ringSegments)
+            place(.hole, count: usable.count / 150, minGap: 60, avoiding: ringSegments)
+        }
         place(.heart, count: max(1, usable.count / 90), minGap: 40)
-        place(.ringUpgrade, count: max(1, usable.count / 70), minGap: 30)
-        place(.ringExplode, count: max(1, usable.count / 120), minGap: 50)
-        place(.ringSlow, count: max(1, usable.count / 110), minGap: 50)
-        place(.turret, count: usable.count / 130, minGap: 60)
-        place(.hole, count: usable.count / 150, minGap: 60)
     }
 
     // MARK: easing

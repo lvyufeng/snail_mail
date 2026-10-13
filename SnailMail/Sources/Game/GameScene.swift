@@ -53,6 +53,7 @@ final class GameScene: SKScene {
     private let fxLayer = SKNode()
     private var snail = SKNode()
     private var starLayers: [SKNode] = []
+    private var fogNode = SKNode()
 
     private var roadPool: [SKShapeNode] = []      // tan cells
     private var roadPoolB: [SKShapeNode] = []     // orange cells
@@ -173,6 +174,24 @@ final class GameScene: SKScene {
         }
 
         addChild(sky)
+
+        // Distance haze: a soft band centred on the horizon so the far road and
+        // sprites dissolve into the sky instead of ending on a hard edge. It
+        // sits above the track and billboards but below the snail, which stays
+        // crisp in the near field.
+        fogNode.removeFromParent()
+        fogNode = SKNode()
+        fogNode.zPosition = 8
+        let fog = SKSpriteNode(texture: Sprites.gradientTexture(
+            size: CGSize(width: 8, height: size.height * 0.5),
+            colors: [UIColor(hex: "#160A30").withAlphaComponent(0),
+                     UIColor(hex: "#1A1038").withAlphaComponent(0.96),
+                     UIColor(hex: "#160A30").withAlphaComponent(0)],
+            locations: [0, 0.5, 1]))
+        fog.size = CGSize(width: size.width, height: size.height * 0.5)
+        fog.position = CGPoint(x: size.width / 2, y: size.height * 0.5)
+        fogNode.addChild(fog)
+        addChild(fogNode)
     }
 
     private func preparePools() {
@@ -426,7 +445,11 @@ final class GameScene: SKScene {
 
     private func damage(_ amount: Double, seg: RoadSegment) {
         guard config.damageEnabled else { return }
-        guard state.invincible == false else { return }
+        // Brief invulnerability after any hit. Fixed obstacles (holes, turrets)
+        // stay on the road, so without this the snail would keep taking damage
+        // every frame it overlapped one and die in an instant.
+        guard elapsed >= invincibleUntil else { return }
+        invincibleUntil = elapsed + 0.75
         state.postalMeter = max(0, state.postalMeter - amount)
         Sound.shared.play(.hit)
         if state.postalMeter <= 0 {
@@ -524,9 +547,11 @@ final class GameScene: SKScene {
         renderEntities(baseSegment: baseSegment)
 
         // Player.
-        snail.position = CGPoint(x: size.width * 0.5, y: size.height * 0.14)
+        snail.position = CGPoint(x: size.width * 0.5, y: size.height * 0.17)
         snail.zRotation = -playerX * 0.22
         Sprites.setBoost(snail, on: elapsed < boostUntil || currentSpeed > baseTargetSpeed * 1.05)
+        // Blink while the post-hit invulnerability is active.
+        snail.alpha = elapsed < invincibleUntil ? 0.45 + 0.55 * abs(sin(elapsed * 22)) : 1
         let bob = sin(elapsed * 14) * 2
         snail.position.y += bob
         if let shadow = childNode(withName: "snailshadow") {

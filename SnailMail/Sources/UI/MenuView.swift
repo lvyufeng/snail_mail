@@ -16,7 +16,7 @@ struct MenuView: View {
                         SnailMascot()
                             .frame(width: 170, height: 130)
                             .shadow(color: Palette.magenta.opacity(0.5), radius: 18, y: 6)
-                            .padding(.top, 24)
+                            .padding(.top, 34)
 
                         VStack(spacing: 2) {
                             Text("SNAIL MAIL")
@@ -53,10 +53,10 @@ struct MenuView: View {
                         .padding(.horizontal, 60)
 
                         Text("Drag to steer · hold to fire · dodge salt & meteors")
-                            .font(.system(size: 12, weight: .medium, design: .rounded))
-                            .foregroundStyle(Palette.ink.opacity(0.5))
+                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                            .foregroundStyle(Palette.ink.opacity(0.72))
                             .multilineTextAlignment(.center)
-                            .padding(.bottom, 24)
+                            .padding(.bottom, 44)
                     }
                     .frame(maxWidth: 420)
                     .frame(maxWidth: .infinity)
@@ -68,7 +68,7 @@ struct MenuView: View {
             VStack {
                 HStack {
                     Spacer()
-                    RoundIconButton(glyph: muted ? "🔇" : "🔊") {
+                    RoundIconButton(icon: .sound(on: !muted)) {
                         muted.toggle()
                         Sound.shared.setMuted(muted)
                     }

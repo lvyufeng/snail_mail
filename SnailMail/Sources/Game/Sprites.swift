@@ -142,6 +142,29 @@ enum Sprites {
     // MARK: - Entities
 
     static func makeEntity(_ kind: EntityKind, fringe: UIColor) -> SKNode {
+        let body = makeEntityBody(kind, fringe: fringe)
+        guard groundKinds.contains(kind) else { return body }
+        // A soft contact shadow so road objects read as sitting on the track
+        // instead of floating. It scales with the sprite, so it stays correct
+        // at every depth.
+        let root = SKNode()
+        let w = entityBaseWidth(kind)
+        let shadow = SKShapeNode(ellipseOf: CGSize(width: w * 0.95, height: w * 0.30))
+        shadow.fillColor = UIColor.black.withAlphaComponent(0.32)
+        shadow.strokeColor = .clear
+        shadow.zPosition = -1
+        shadow.position = CGPoint(x: 0, y: -w * 0.18)
+        root.addChild(shadow)
+        root.addChild(body)
+        return root
+    }
+
+    /// Kinds that sit on the road and therefore want a contact shadow.
+    private static let groundKinds: Set<EntityKind> = [
+        .parcel, .salt, .asteroid, .slug, .turret, .heart
+    ]
+
+    private static func makeEntityBody(_ kind: EntityKind, fringe: UIColor) -> SKNode {
         switch kind {
         case .parcel:      return makeParcel()
         case .salt:        return makeSalt()
@@ -295,14 +318,16 @@ enum Sprites {
     // MARK: - Sky
 
     /// A vertical-gradient texture built with Core Graphics, used as the sky.
-    static func gradientTexture(size: CGSize, colors: [UIColor]) -> SKTexture {
+    static func gradientTexture(size: CGSize, colors: [UIColor],
+                                locations: [CGFloat]? = nil) -> SKTexture {
         let renderer = UIGraphicsImageRenderer(size: size)
         let img = renderer.image { ctx in
             let cg = ctx.cgContext
             let cgColors = colors.map { $0.cgColor } as CFArray
             let space = CGColorSpaceCreateDeviceRGB()
+            let stops = locations ?? [0, 0.55, 1]
             let grad = CGGradient(colorsSpace: space, colors: cgColors,
-                                  locations: [0, 0.55, 1])!
+                                  locations: stops)!
             cg.drawLinearGradient(grad, start: .zero,
                                   end: CGPoint(x: 0, y: size.height), options: [])
         }
