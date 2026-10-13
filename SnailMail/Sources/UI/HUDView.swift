@@ -8,13 +8,19 @@ struct HUDView: View {
     let mode: GameMode
     let onPrimary: () -> Void
     let onPause: () -> Void
+    @State private var muted = Sound.shared.muted
 
     var body: some View {
         VStack {
             HStack(alignment: .top, spacing: 16) {
                 NeonPanel(border: Palette.cyan) {
                     VStack(alignment: .leading, spacing: 8) {
-                        StatLabel(text: mode.title)
+                        HStack(spacing: 6) {
+                            StatLabel(text: mode.title)
+                            Text(mode.chinese)
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(Palette.gold.opacity(0.85))
+                        }
                         HStack(spacing: 6) {
                             ParcelIcon()
                                 .frame(width: 18, height: 22)
@@ -33,7 +39,13 @@ struct HUDView: View {
                 Spacer(minLength: 0)
 
                 VStack(alignment: .trailing, spacing: 8) {
-                    RoundIconButton(glyph: state.phase == .paused ? "▶" : "❚❚", action: onPause)
+                    HStack(spacing: 8) {
+                        RoundIconButton(glyph: muted ? "🔇" : "🔊") {
+                            muted.toggle()
+                            Sound.shared.setMuted(muted)
+                        }
+                        RoundIconButton(glyph: state.phase == .paused ? "▶" : "❚❚", action: onPause)
+                    }
                     Text(String(format: "%.1fs", state.elapsed))
                         .font(.system(size: 12, weight: .semibold, design: .monospaced))
                         .foregroundStyle(Palette.ink.opacity(0.85))
@@ -42,6 +54,19 @@ struct HUDView: View {
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
+
+            if mode == .tutorial, state.phase == .running {
+                Text(tutorialHint)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(Palette.ink)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Capsule().fill(Color.black.opacity(0.45)))
+                    .overlay(Capsule().stroke(Palette.cyan.opacity(0.7), lineWidth: 1.5))
+                    .padding(.top, 10)
+                    .transition(.opacity)
+            }
 
             Spacer()
 
@@ -62,6 +87,16 @@ struct HUDView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: state.phase)
+    }
+
+    private var tutorialHint: String {
+        switch state.progress {
+        case ..<0.18: "① Drag left / right to steer"
+        case ..<0.4: "② Hold the screen to fire"
+        case ..<0.62: "③ Fly through parcels to collect"
+        case ..<0.85: "④ Grab rings to upgrade your weapon"
+        default: "⑤ Reach the post office to deliver"
+        }
     }
 }
 

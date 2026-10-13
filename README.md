@@ -10,11 +10,19 @@ the project ships **no art extracted from the retail game**. The remake is
 built for a portrait phone: the pseudo-3D road, the vertical postal meter and
 the mode menu are all laid out for one hand.
 
+The soundtrack is generated at runtime with `AVAudioEngine` (a looping
+chiptune plus shoot / collect / hit / boost effects), so there are no bundled
+audio files either — the app bundle contains no images or sounds at all.
+
 ## Screenshots
 
-| Menu | Gameplay | Challenge | Time Trial |
-| --- | --- | --- | --- |
-| ![menu](docs/screenshots/menu.png) | ![gameplay](docs/screenshots/gameplay.png) | ![challenge](docs/screenshots/challenge.png) | ![time trial](docs/screenshots/time-trial.png) |
+| Menu | Tutorial | Practice |
+| --- | --- | --- |
+| ![menu](docs/screenshots/menu.png) | ![tutorial](docs/screenshots/tutorial.png) | ![practice](docs/screenshots/practice.png) |
+
+| Speed | Challenge | Pro Challenge |
+| --- | --- | --- |
+| ![speed](docs/screenshots/speed.png) | ![challenge](docs/screenshots/challenge.png) | ![pro](docs/screenshots/pro.png) |
 
 ## Gameplay
 
@@ -30,10 +38,19 @@ the mode menu are all laid out for one hand.
 
 ## Modes
 
-- **Postal** — the delivery campaign loop; meet the parcel quota before the
-  route ends.
-- **Challenge** — a long, densely seeded survival highway.
-- **Time Trial** — reach the post office at the end of the route.
+The original mobile build shipped four modes, and this remake keeps them,
+with an extra mobile-only Pro Challenge:
+
+- **教学 Tutorial** — guided, damage-free. On-screen prompts walk through
+  steering, firing, collecting parcels, grabbing upgrade rings and delivering
+  to the post office.
+- **练习 Practice** — free driving at a relaxed pace; hazards are seeded but
+  do no damage, so you can learn the road.
+- **时速 Speed** — a shorter route at high speed; reach the post office and
+  the clock is the score.
+- **挑战 Challenge** — a long, densely seeded survival highway.
+- **挑战+ Pro Challenge** — the mobile Pro mode: the fastest speed and the
+  heaviest hazard density.
 
 ## Art direction
 
@@ -44,6 +61,13 @@ menu backdrop and the in-game sky are generated from the same code
 (`UI/Theme.swift` for SwiftUI, `Game/Sprites.swift` for SpriteKit), and the menu
 mascot is drawn from the same coordinates as the racer itself, so the whole
 game reads as a single product.
+
+## Audio
+
+`Game/Sound.swift` synthesises everything with `AVAudioEngine` into in-memory
+PCM buffers: a looping four-bar chiptune plus `shoot`, `collect`, `upgrade`,
+`hit`, `boost`, `select`, `win` and `lose` cues. It fails silently if audio is
+unavailable, and the menu and HUD both expose a mute toggle.
 
 ## Requirements
 
@@ -74,9 +98,10 @@ docs/
 
 ## Status
 
-Playable portrait remake with the original's three modes. Next steps:
-per-planet level progression, richer enemy behaviour, sound, and saved high
-scores.
+Playable portrait remake with the original's four modes plus Pro Challenge,
+procedural art, procedural audio and a guided tutorial. Next steps: a 50-level
+Postal campaign with per-planet progression, richer enemy behaviour and saved
+high scores.
 
 ---
 Snail Mail is a trademark of its respective owners. This is an independent,

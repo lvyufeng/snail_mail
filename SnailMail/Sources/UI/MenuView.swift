@@ -3,7 +3,8 @@ import SwiftUI
 /// Title screen: pick a game mode and launch. Shares the deep-space backdrop
 /// and mascot with the gameplay screen so the whole game reads as one piece.
 struct MenuView: View {
-    @State private var selected: GameMode = .postal
+    @State private var selected: GameMode = .tutorial
+    @State private var muted = Sound.shared.muted
 
     var body: some View {
         ZStack {
@@ -36,6 +37,7 @@ struct MenuView: View {
                                 ForEach(GameMode.allCases) { mode in
                                     ModeRow(mode: mode, isSelected: selected == mode) {
                                         selected = mode
+                                        Sound.shared.play(.select)
                                     }
                                 }
                             }
@@ -62,7 +64,21 @@ struct MenuView: View {
                     .padding(.horizontal, 20)
                 }
             }
+
+            VStack {
+                HStack {
+                    Spacer()
+                    RoundIconButton(glyph: muted ? "🔇" : "🔊") {
+                        muted.toggle()
+                        Sound.shared.setMuted(muted)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 8)
         }
+        .onAppear { Sound.shared.start() }
     }
 }
 
@@ -82,9 +98,14 @@ private struct ModeRow: View {
                     )
                     .frame(width: 20, height: 20)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(mode.title)
-                        .font(.system(size: 18, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white)
+                    HStack(spacing: 8) {
+                        Text(mode.title)
+                            .font(.system(size: 18, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white)
+                        Text(mode.chinese)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(Palette.gold)
+                    }
                     Text(mode.subtitle)
                         .font(.system(size: 11, weight: .medium, design: .rounded))
                         .foregroundStyle(Palette.ink.opacity(0.6))

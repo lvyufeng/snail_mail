@@ -43,9 +43,7 @@ struct GameView: View {
             }
             .onAppear {
                 model.scene.size = geo.size
-                if ProcessInfo.processInfo.arguments.contains("-autostart") {
-                    model.scene.startRace()
-                }
+                Sound.shared.start()
             }
         }
         .statusBarHidden()
@@ -58,6 +56,9 @@ final class GameViewModel: ObservableObject {
 
     init(mode: GameMode, level: Int) {
         scene = GameScene(mode: mode, level: level, size: CGSize(width: 800, height: 360))
+        #if DEBUG
+        scene.autoStart = ProcessInfo.processInfo.arguments.contains("-autostart")
+        #endif
         scene.onStateChange = { [weak self] newState in
             DispatchQueue.main.async { self?.state = newState }
         }

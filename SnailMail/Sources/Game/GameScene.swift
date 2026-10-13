@@ -22,6 +22,8 @@ final class GameScene: SKScene {
     private let mode: GameMode
     private let level: Int
     private let config: LevelConfig
+    /// Debug/screenshot hook: skip the "tap to start" screen and race at once.
+    var autoStart = false
     private var segments: [RoadSegment] = []
     private var trackLength: CGFloat = 1
     private var fringe: UIColor
@@ -103,6 +105,7 @@ final class GameScene: SKScene {
         preparePools()
         buildSnail()
         resetTrack()
+        if autoStart { startRace() }
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
@@ -343,6 +346,7 @@ final class GameScene: SKScene {
             .hide(),
             .fadeIn(withDuration: 0),
         ]))
+        Sound.shared.play(.shoot)
         hitScan()
     }
 
@@ -378,13 +382,16 @@ final class GameScene: SKScene {
                 case .parcel:
                     state.parcels += 1
                     state.score += 10
+                    Sound.shared.play(.collect)
                     toRemove.append((seg, spec))
                 case .heart:
                     state.postalMeter = min(state.maxMeter, state.postalMeter + 25)
                     state.score += 5
+                    Sound.shared.play(.collect)
                     toRemove.append((seg, spec))
                 case .ringUpgrade:
                     state.weaponLevel = min(state.maxWeaponLevel, state.weaponLevel + 1)
+                    Sound.shared.play(.upgrade)
                     toRemove.append((seg, spec))
                 case .ringExplode:
                     state.score += 40
@@ -418,8 +425,10 @@ final class GameScene: SKScene {
     }
 
     private func damage(_ amount: Double, seg: RoadSegment) {
+        guard config.damageEnabled else { return }
         guard state.invincible == false else { return }
         state.postalMeter = max(0, state.postalMeter - amount)
+        Sound.shared.play(.hit)
         if state.postalMeter <= 0 {
             finish(won: false)
         }
@@ -681,6 +690,7 @@ final class GameScene: SKScene {
         guard state.phase == .running else { return }
         state.phase = .finished(won: won)
         if won { state.score += 500 + state.parcels * 5 }
+        Sound.shared.play(won ? .win : .lose)
         publish()
         onFinish?(won)
     }

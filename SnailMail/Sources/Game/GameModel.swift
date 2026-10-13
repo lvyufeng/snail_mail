@@ -3,28 +3,45 @@ import CoreGraphics
 
 // MARK: - Game modes
 
-/// The three modes from the original: Postal (arcade campaign), Challenge and
-/// Time Trial.
+/// The original modes: 教学 Tutorial, 练习 Practice, 时速 Speed, 挑战
+/// Challenge, plus the mobile-only 挑战+ (Pro Challenge).
 enum GameMode: String, CaseIterable, Identifiable {
-    case postal
+    case tutorial
+    case practice
+    case speedRun
     case challenge
-    case timeTrial
+    case proChallenge
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .postal: "Postal"
+        case .tutorial: "Tutorial"
+        case .practice: "Practice"
+        case .speedRun: "Speed"
         case .challenge: "Challenge"
-        case .timeTrial: "Time Trial"
+        case .proChallenge: "Pro"
+        }
+    }
+
+    /// Original Chinese menu label, shown alongside the title.
+    var chinese: String {
+        switch self {
+        case .tutorial: "教学"
+        case .practice: "练习"
+        case .speedRun: "时速"
+        case .challenge: "挑战"
+        case .proChallenge: "挑战+"
         }
     }
 
     var subtitle: String {
         switch self {
-        case .postal: "Deliver the mail, meet the quota"
-        case .challenge: "Endless random highway"
-        case .timeTrial: "Finish the route, fastest wins"
+        case .tutorial: "Learn to steer, fire and deliver"
+        case .practice: "Free drive, hazards do no damage"
+        case .speedRun: "Finish the route, fastest wins"
+        case .challenge: "Endless hazard gauntlet"
+        case .proChallenge: "Mobile Pro Challenge: triple the danger"
         }
     }
 }
@@ -113,7 +130,8 @@ final class RoadSegment {
 
 // MARK: - Level configuration
 
-/// Straight from the original `LEVELS/*.TXT` files.
+/// Per-mode tuning for the course: speed, hazard density and length, mirroring
+/// the feel of the original's mode files.
 struct LevelConfig {
     var name: String
     var mode: GameMode
@@ -125,51 +143,85 @@ struct LevelConfig {
     var length: Int               // approximate number of segments
     var background: String
     var fringe: SIMD3<Double>    // RGB 0...255
+    var damageEnabled: Bool       // false in Tutorial / Practice
+    var guided: Bool              // shows step-by-step Tutorial hints
 
     static func forMode(_ mode: GameMode, level: Int) -> LevelConfig {
         switch mode {
-        case .postal:
-            let speed = min(100, 20 + CGFloat(level) * 1.6)
-            let salt = min(60, 6 + CGFloat(level) * 1.2)
-            let trash = min(70, 10 + CGFloat(level) * 1.4)
-            let parcels = 15 + level * 3
+        case .tutorial:
             return LevelConfig(
-                name: "Postal \(level + 1)",
-                mode: .postal,
-                speed: speed,
-                salt: salt,
-                trash: trash,
-                parcels: parcels,
-                quota: Int(Double(parcels) * 0.6),
-                length: 260 + level * 12,
-                background: "SpacePurple",
-                fringe: SIMD3(160, 40, 220)
+                name: "Tutorial",
+                mode: .tutorial,
+                speed: 24,
+                salt: 0,
+                trash: 0,
+                parcels: 14,
+                quota: 0,
+                length: 170,
+                background: "SpaceBlue",
+                fringe: SIMD3(88, 225, 255),
+                damageEnabled: false,
+                guided: true
+            )
+        case .practice:
+            return LevelConfig(
+                name: "Practice",
+                mode: .practice,
+                speed: 48,
+                salt: 22,
+                trash: 34,
+                parcels: 0,
+                quota: 0,
+                length: 260,
+                background: "SpaceGreen",
+                fringe: SIMD3(128, 235, 140),
+                damageEnabled: false,
+                guided: false
+            )
+        case .speedRun:
+            return LevelConfig(
+                name: "Speed",
+                mode: .speedRun,
+                speed: 82,
+                salt: 14,
+                trash: 26,
+                parcels: 0,
+                quota: 0,
+                length: 340,
+                background: "SpaceRed",
+                fringe: SIMD3(255, 150, 70),
+                damageEnabled: true,
+                guided: false
             )
         case .challenge:
             return LevelConfig(
                 name: "Challenge",
                 mode: .challenge,
                 speed: 60,
-                salt: 10,
-                trash: 65,
+                salt: 12,
+                trash: 66,
                 parcels: 0,
                 quota: 0,
                 length: 4000,
-                background: "SpaceRed",
-                fringe: SIMD3(0, 255, 254)
+                background: "SpacePurple",
+                fringe: SIMD3(190, 80, 240),
+                damageEnabled: true,
+                guided: false
             )
-        case .timeTrial:
+        case .proChallenge:
             return LevelConfig(
-                name: "Time Trial",
-                mode: .timeTrial,
-                speed: 55,
-                salt: 12,
-                trash: 30,
-                parcels: 20,
+                name: "Pro Challenge",
+                mode: .proChallenge,
+                speed: 74,
+                salt: 22,
+                trash: 96,
+                parcels: 0,
                 quota: 0,
-                length: 300,
-                background: "SpaceGreen",
-                fringe: SIMD3(128, 255, 128)
+                length: 6000,
+                background: "SpacePurple",
+                fringe: SIMD3(255, 90, 120),
+                damageEnabled: true,
+                guided: false
             )
         }
     }

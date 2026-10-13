@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    /// Debug hook used for automated screenshots: `-autostart postal`.
+    /// Debug hook used for automated screenshots: `-autostart tutorial`.
     /// Only compiled into debug builds so shipping builds always show the menu.
     private var autoMode: GameMode? {
         #if DEBUG
