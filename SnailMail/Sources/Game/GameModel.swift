@@ -1,0 +1,328 @@
+import Foundation
+import CoreGraphics
+
+// MARK: - Game modes
+
+/// The three modes from the original: Postal (arcade campaign), Challenge and
+/// Time Trial.
+enum GameMode: String, CaseIterable, Identifiable {
+    case postal
+    case challenge
+    case timeTrial
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .postal: "Postal"
+        case .challenge: "Challenge"
+        case .timeTrial: "Time Trial"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .postal: "Deliver the mail, meet the quota"
+        case .challenge: "Endless random highway"
+        case .timeTrial: "Finish the route, fastest wins"
+        }
+    }
+}
+
+enum GamePhase: Equatable {
+    case ready
+    case running
+    case paused
+    case finished(won: Bool)
+}
+
+// MARK: - Entities
+
+/// Everything that can sit on the highway, mirroring the symbols in the
+/// original segment grid files (`s` salt, `M` meteor, `&` slug, `0` turret,
+/// `#` hole, plus parcels, hearts and the ring pickups).
+enum EntityKind: CaseIterable {
+    case parcel        // collect, counts toward quota
+    case salt          // burns you, cannot be destroyed
+    case asteroid      // shootable, also slows you on contact
+    case slug          // moves, knocks you off, shootable
+    case heart         // restores the postal meter
+    case ringUpgrade   // raises the weapon tier toward rockets
+    case ringSlow      // a dark ring that slows you (avoid)
+    case ringExplode   // yellow ring that detonates nearby enemies
+    case turret        // immobile, cannot be destroyed, steer around
+    case hole          // gap in the road; falling costs health
+    case postOffice    // the finish line
+
+    var isShootable: Bool {
+        switch self {
+        case .asteroid, .slug: true
+        default: false
+        }
+    }
+
+    var hurtsOnContact: Bool {
+        switch self {
+        case .salt, .slug, .turret, .hole, .ringSlow: true
+        default: false
+        }
+    }
+}
+
+// MARK: - World geometry
+
+struct Vec3 {
+    var x: CGFloat = 0
+    var y: CGFloat = 0
+    var z: CGFloat = 0
+}
+
+/// A projected point: world position, camera-relative position and the final
+/// screen position used to draw.
+struct Projection {
+    var world = Vec3()
+    var camera = Vec3()
+    var screenX: CGFloat = 0
+    var screenY: CGFloat = 0
+    var screenW: CGFloat = 0
+    var scale: CGFloat = 0
+}
+
+struct EntitySpec {
+    let kind: EntityKind
+    /// Horizontal placement across the road, -1 (left edge) ... 1 (right edge).
+    let offset: CGFloat
+    /// Extra depth within the segment, 0...1.
+    let depth: CGFloat
+}
+
+/// One slice of road. The list of these forms the whole course, exactly like
+/// the segment files the original shipped with.
+final class RoadSegment {
+    let index: Int
+    var p1 = Projection()
+    var p2 = Projection()
+    var curve: CGFloat = 0
+    var sprites: [EntitySpec] = []
+    var banding: Int = 0
+    var looped = false
+    var clip: CGFloat = 0
+
+    init(index: Int) { self.index = index }
+}
+
+// MARK: - Level configuration
+
+/// Straight from the original `LEVELS/*.TXT` files.
+struct LevelConfig {
+    var name: String
+    var mode: GameMode
+    var speed: CGFloat            // 0...100
+    var salt: CGFloat             // 0...100 probability
+    var trash: CGFloat            // 0...100 probability (asteroids/garbage/slugs)
+    var parcels: Int
+    var quota: Int
+    var length: Int               // approximate number of segments
+    var background: String
+    var fringe: SIMD3<Double>    // RGB 0...255
+
+    static func forMode(_ mode: GameMode, level: Int) -> LevelConfig {
+        switch mode {
+        case .postal:
+            let speed = min(100, 20 + CGFloat(level) * 1.6)
+            let salt = min(60, 6 + CGFloat(level) * 1.2)
+            let trash = min(70, 10 + CGFloat(level) * 1.4)
+            let parcels = 15 + level * 3
+            return LevelConfig(
+                name: "Postal \(level + 1)",
+                mode: .postal,
+                speed: speed,
+                salt: salt,
+                trash: trash,
+                parcels: parcels,
+                quota: Int(Double(parcels) * 0.6),
+                length: 260 + level * 12,
+                background: "SpacePurple",
+                fringe: SIMD3(160, 40, 220)
+            )
+        case .challenge:
+            return LevelConfig(
+                name: "Challenge",
+                mode: .challenge,
+                speed: 60,
+                salt: 10,
+                trash: 65,
+                parcels: 0,
+                quota: 0,
+                length: 4000,
+                background: "SpaceRed",
+                fringe: SIMD3(0, 255, 254)
+            )
+        case .timeTrial:
+            return LevelConfig(
+                name: "Time Trial",
+                mode: .timeTrial,
+                speed: 55,
+                salt: 12,
+                trash: 30,
+                parcels: 20,
+                quota: 0,
+                length: 300,
+                background: "SpaceGreen",
+                fringe: SIMD3(128, 255, 128)
+            )
+        }
+    }
+}
+
+// MARK: - Live state
+
+struct RaceState: Equatable {
+    var speed: Double = 0                 // current forward speed (units/s)
+    var maxSpeed: Double = 1              // reference top speed
+    var distance: Double = 0
+    var trackLength: Double = 1
+    var postalMeter: Double = 100         // health
+    var maxMeter: Double = 100
+    var parcels: Int = 0
+    var quota: Int = 0
+    var weaponLevel: Int = 1
+    var maxWeaponLevel: Int = 4
+    var invincible: Bool = false
+    var score: Int = 0
+    var elapsed: Double = 0
+    var phase: GamePhase = .ready
+
+    var progress: Double {
+        guard trackLength > 0 else { return 0 }
+        return max(0, min(1, distance / trackLength))
+    }
+
+    var meterFraction: Double {
+        guard maxMeter > 0 else { return 0 }
+        return max(0, min(1, postalMeter / maxMeter))
+    }
+
+    var quotaMet: Bool { parcels >= quota }
+}
+
+// MARK: - Track building
+
+enum TrackBuilder {
+
+    static let segmentLength: CGFloat = 200
+    static let rumbleLength = 3
+    static let roadWidth: CGFloat = 1500
+
+    static func build(_ config: LevelConfig) -> [RoadSegment] {
+        var segments: [RoadSegment] = []
+        var rng = SystemRandomNumberGenerator()
+
+        func lastY() -> CGFloat { segments.last?.p2.world.y ?? 0 }
+
+        func addSegment(curve: CGFloat, y: CGFloat) {
+            let n = segments.count
+            let seg = RoadSegment(index: n)
+            seg.curve = curve
+            seg.banding = (n / rumbleLength) % 2
+            seg.p1.world = Vec3(x: 0, y: lastY(), z: CGFloat(n) * segmentLength)
+            seg.p2.world = Vec3(x: 0, y: y, z: CGFloat(n + 1) * segmentLength)
+            segments.append(seg)
+        }
+
+        func addRoad(enter: Int, hold: Int, leave: Int, curve: CGFloat, y: CGFloat) {
+            let startY = lastY()
+            let endY = startY + y * segmentLength
+            let total = enter + hold + leave
+            guard total > 0 else { return }
+            for n in 0..<enter {
+                addSegment(curve: easeIn(0, curve, CGFloat(n) / CGFloat(enter)), y: easeInOut(startY, endY, CGFloat(n) / CGFloat(total)))
+            }
+            for n in 0..<hold {
+                addSegment(curve: curve, y: easeInOut(startY, endY, CGFloat(enter + n) / CGFloat(total)))
+            }
+            for n in 0..<leave {
+                addSegment(curve: easeInOut(curve, 0, CGFloat(n) / CGFloat(leave)), y: easeInOut(startY, endY, CGFloat(enter + hold + n) / CGFloat(total)))
+            }
+        }
+
+        // Opening straight.
+        addRoad(enter: 0, hold: 40, leave: 0, curve: 0, y: 0)
+
+        // Lay out the course in chunks. Curves/hills are chosen so no two
+        // adjacent chunks repeat, which keeps the drive readable.
+        let chunk = max(18, config.length / 12)
+        var remaining = config.length
+        var lastCurve: CGFloat = 0
+        var hill: CGFloat = 0
+
+        while remaining > 0 {
+            let hold = min(chunk, remaining)
+            remaining -= hold
+            let dir: CGFloat = Bool.random(using: &rng) ? 1 : -1
+            var curve = dir * CGFloat.random(in: 1...4, using: &rng)
+            if abs(curve - lastCurve) < 1 { curve = -lastCurve }
+            hill = CGFloat.random(in: -0.6...0.9, using: &rng)
+            let enter = Int.random(in: 8...14, using: &rng)
+            let leave = Int.random(in: 8...14, using: &rng)
+            addRoad(enter: enter, hold: hold, leave: leave, curve: curve, y: hill)
+            lastCurve = curve
+        }
+
+        // Closing straight then finish.
+        addRoad(enter: 8, hold: 30, leave: 0, curve: 0, y: 0)
+
+        // Scatter entities across the middle of the course.
+        scatterEntities(&segments, config: config, rng: &rng)
+
+        // Post office finish at the very last segment.
+        if let last = segments.last {
+            last.sprites.append(EntitySpec(kind: .postOffice, offset: 0, depth: 0.5))
+        }
+
+        return segments
+    }
+
+    private static func scatterEntities(_ segments: inout [RoadSegment], config: LevelConfig, rng: inout SystemRandomNumberGenerator) {
+        guard segments.count > 60 else { return }
+        let usable = Array(segments[40..<(segments.count - 40)])
+
+        func place(_ kind: EntityKind, count: Int, minGap: Int) {
+            guard count > 0 else { return }
+            var lastIndex = -minGap
+            var placed = 0
+            var attempts = 0
+            while placed < count && attempts < count * 40 {
+                attempts += 1
+                let seg = usable.randomElement(using: &rng)!
+                if seg.index - lastIndex < minGap { continue }
+                let offset = CGFloat.random(in: -0.8...0.8, using: &rng)
+                seg.sprites.append(EntitySpec(kind: kind, offset: offset, depth: CGFloat.random(in: 0...1, using: &rng)))
+                lastIndex = seg.index
+                placed += 1
+            }
+        }
+
+        place(.parcel, count: max(1, config.parcels), minGap: 6)
+
+        let hazardCount = usable.count / 6
+        place(.salt, count: Int(CGFloat(hazardCount) * config.salt / 100), minGap: 10)
+        place(.asteroid, count: Int(CGFloat(hazardCount) * config.trash / 200), minGap: 8)
+        place(.slug, count: Int(CGFloat(hazardCount) * config.trash / 300), minGap: 12)
+        place(.heart, count: max(1, usable.count / 90), minGap: 40)
+        place(.ringUpgrade, count: max(1, usable.count / 70), minGap: 30)
+        place(.ringExplode, count: max(1, usable.count / 120), minGap: 50)
+        place(.ringSlow, count: max(1, usable.count / 110), minGap: 50)
+        place(.turret, count: usable.count / 130, minGap: 60)
+        place(.hole, count: usable.count / 150, minGap: 60)
+    }
+
+    // MARK: easing
+
+    static func easeIn(_ a: CGFloat, _ b: CGFloat, _ p: CGFloat) -> CGFloat {
+        a + (b - a) * pow(p, 2)
+    }
+    static func easeInOut(_ a: CGFloat, _ b: CGFloat, _ p: CGFloat) -> CGFloat {
+        a + (b - a) * (-cos(p * .pi) / 2 + 0.5)
+    }
+}
