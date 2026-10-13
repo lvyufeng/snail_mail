@@ -1,96 +1,253 @@
 import SpriteKit
 import UIKit
 
-/// Sprite factory. Wherever possible this uses the original game's artwork
-/// (bundled in `Resources/`), so the remake looks like Snail Mail rather than a
-/// generic clone. Anything without a shipped texture — the pickup rings and the
-/// weapon projectiles — is drawn procedurally in the same palette.
+/// Every actor and the sky are drawn here from primitives in a single flat,
+/// cartoon-neon style: bold dark outlines, saturated fills, a shared palette.
 enum Sprites {
 
-    // MARK: - Texture loading
+    // MARK: - Shared palette
 
-    static func texture(_ name: String) -> SKTexture? {
-        guard UIImage(named: name) != nil else { return nil }
-        let t = SKTexture(imageNamed: name)
-        t.filteringMode = .linear
-        return t
+    static let ink      = UIColor(hex: "#2A1440")   // outline
+    static let shell    = UIColor(hex: "#8B5CF6")
+    static let shellHi  = UIColor(hex: "#C9A6FF")
+    static let shellLo  = UIColor(hex: "#5B2E9E")
+    static let body     = UIColor(hex: "#F2D9A0")
+    static let bodyLo   = UIColor(hex: "#D8B472")
+    static let metal    = UIColor(hex: "#8A8FA8")
+    static let metalLo  = UIColor(hex: "#5A5F78")
+    static let gold     = UIColor(hex: "#FFC64B")
+    static let magenta  = UIColor(hex: "#FF3CA6")
+    static let cyan     = UIColor(hex: "#58E1FF")
+    static let good     = UIColor(hex: "#6BE36B")
+    static let danger   = UIColor(hex: "#FF5A6E")
+
+    // MARK: - Helpers
+
+    private static func shape(_ path: CGPath, fill: UIColor, stroke: UIColor = ink,
+                              line: CGFloat = 3) -> SKShapeNode {
+        let n = SKShapeNode(path: path)
+        n.fillColor = fill
+        n.strokeColor = stroke
+        n.lineWidth = line
+        n.lineJoin = .round
+        return n
     }
 
-    /// A sprite sized so its width equals `width`, preserving the texture's
-    /// aspect ratio. The renderer then scales it by distance.
-    static func sprite(_ name: String, width: CGFloat, fallback: SKNode) -> SKNode {
-        guard let tex = texture(name) else { return fallback }
-        let node = SKSpriteNode(texture: tex)
-        let size = tex.size()
-        let aspect = size.height / max(size.width, 1)
-        node.size = CGSize(width: width, height: width * aspect)
-        return node
+    private static func circle(_ r: CGFloat, _ c: CGPoint, fill: UIColor,
+                               stroke: UIColor = ink, line: CGFloat = 3) -> SKShapeNode {
+        shape(CGPath(ellipseIn: CGRect(x: c.x - r, y: c.y - r, width: r * 2, height: r * 2),
+                     transform: nil), fill: fill, stroke: stroke, line: line)
     }
 
-    // MARK: - Turbo the snail
+    private static func roundRect(_ w: CGFloat, _ h: CGFloat, _ c: CGPoint,
+                                  radius: CGFloat, fill: UIColor,
+                                  stroke: UIColor = ink, line: CGFloat = 3) -> SKShapeNode {
+        let r = CGRect(x: c.x - w / 2, y: c.y - h / 2, width: w, height: h)
+        return shape(CGPath(roundedRect: r, cornerWidth: radius, cornerHeight: radius,
+                            transform: nil), fill: fill, stroke: stroke, line: line)
+    }
+
+    private static func line(from a: CGPoint, to b: CGPoint, width: CGFloat,
+                             color: UIColor) -> SKShapeNode {
+        let p = CGMutablePath()
+        p.move(to: a); p.addLine(to: b)
+        let n = SKShapeNode(path: p)
+        n.strokeColor = color
+        n.lineWidth = width
+        n.lineCap = .round
+        return n
+    }
+
+    // MARK: - Turbo the snail (seen from behind as it races away)
 
     static func makeSnail() -> SKNode {
         let root = SKNode()
-        let body = sprite("snail", width: 108, fallback: proceduralSnail())
-        root.addChild(body)
 
-        // Jetpack flame, tucked behind the shell. It only shows while boosting.
-        if let thrust = texture("thrust") {
-            let flame = SKSpriteNode(texture: thrust)
-            flame.size = CGSize(width: 40, height: 40 * thrust.size().height / max(thrust.size().width, 1))
-            flame.position = CGPoint(x: -34, y: -14)
-            flame.zRotation = .pi / 2
-            flame.alpha = 0
+        // Jetpack tucked behind the shell.
+        root.addChild(roundRect(40, 46, CGPoint(x: 0, y: -22), radius: 10,
+                                fill: metal, stroke: ink, line: 3))
+        root.addChild(line(from: CGPoint(x: -12, y: -40), to: CGPoint(x: -12, y: -52), width: 8, color: metalLo))
+        root.addChild(line(from: CGPoint(x: 12, y: -40), to: CGPoint(x: 12, y: -52), width: 8, color: metalLo))
+        root.addChild(circle(5, CGPoint(x: 0, y: -6), fill: cyan, stroke: ink, line: 2))
+
+        // Flame, only visible while boosting.
+        if let flame = makeFlame() {
             flame.name = "flame"
-            flame.run(.repeatForever(.sequence([
-                .scaleY(to: 1.25, duration: 0.1),
-                .scaleY(to: 0.85, duration: 0.1),
-            ])))
+            flame.position = CGPoint(x: 0, y: -58)
+            flame.alpha = 0
             root.addChild(flame)
         }
+
+        // Foot / body.
+        let bodyPath = CGMutablePath()
+        bodyPath.addEllipse(in: CGRect(x: -60, y: -30, width: 120, height: 64))
+        root.addChild(shape(bodyPath, fill: bodyLo, line: 3))
+        let bellyPath = CGMutablePath()
+        bellyPath.addEllipse(in: CGRect(x: -52, y: -22, width: 104, height: 48))
+        root.addChild(shape(bellyPath, fill: body, line: 0))
+
+        // Shell with a spiral.
+        root.addChild(circle(40, CGPoint(x: 0, y: 18), fill: shell, stroke: ink, line: 4))
+        let spiral = CGMutablePath()
+        var radius: CGFloat = 30
+        var angle: CGFloat = 0
+        spiral.move(to: CGPoint(x: 0, y: 18))
+        while radius > 4 {
+            angle += 0.9
+            radius -= 3.4
+            spiral.addLine(to: CGPoint(x: cos(angle) * radius, y: sin(angle) * radius + 18))
+        }
+        let spiralNode = SKShapeNode(path: spiral)
+        spiralNode.strokeColor = shellHi
+        spiralNode.lineWidth = 5
+        spiralNode.lineCap = .round
+        root.addChild(spiralNode)
+        root.addChild(circle(9, CGPoint(x: -14, y: 34), fill: shellHi.withAlphaComponent(0.7), stroke: .clear, line: 0))
+
+        // Eye stalks peeking over the shell.
+        for sgn in [-1.0, 1.0] as [CGFloat] {
+            root.addChild(line(from: CGPoint(x: sgn * 12, y: 48),
+                               to: CGPoint(x: sgn * 22, y: 74), width: 7, color: body))
+            root.addChild(circle(9, CGPoint(x: sgn * 22, y: 76), fill: .white, stroke: ink, line: 3))
+            root.addChild(circle(4, CGPoint(x: sgn * 22 + sgn * 2, y: 77), fill: ink, stroke: .clear, line: 0))
+        }
+
+        return root
+    }
+
+    private static func makeFlame() -> SKNode? {
+        let root = SKNode()
+        let outer = CGMutablePath()
+        outer.move(to: CGPoint(x: 0, y: -30))
+        outer.addQuadCurve(to: CGPoint(x: 0, y: 20), control: CGPoint(x: -20, y: -6))
+        outer.addQuadCurve(to: CGPoint(x: 0, y: -30), control: CGPoint(x: 20, y: -6))
+        root.addChild(shape(outer, fill: UIColor(hex: "#FF7A2D"), stroke: .clear, line: 0))
+        let inner = CGMutablePath()
+        inner.move(to: CGPoint(x: 0, y: -22))
+        inner.addQuadCurve(to: CGPoint(x: 0, y: 8), control: CGPoint(x: -10, y: -6))
+        inner.addQuadCurve(to: CGPoint(x: 0, y: -22), control: CGPoint(x: 10, y: -6))
+        root.addChild(shape(inner, fill: UIColor(hex: "#FFD24C"), stroke: .clear, line: 0))
+        root.run(.repeatForever(.sequence([
+            .scaleY(to: 1.25, duration: 0.09),
+            .scaleY(to: 0.8, duration: 0.09),
+        ])))
         return root
     }
 
     static func setBoost(_ node: SKNode, on: Bool) {
         guard let flame = node.childNode(withName: "flame") else { return }
-        flame.alpha = on ? 0.9 : 0
-    }
-
-    private static func proceduralSnail() -> SKNode {
-        let root = SKNode()
-        let shell = SKShapeNode(circleOfRadius: 22)
-        shell.fillColor = UIColor(red: 0.62, green: 0.4, blue: 0.85, alpha: 1)
-        shell.strokeColor = UIColor(red: 0.36, green: 0.2, blue: 0.55, alpha: 1)
-        shell.lineWidth = 3
-        root.addChild(shell)
-        return root
+        flame.alpha = on ? 0.95 : 0
     }
 
     // MARK: - Entities
 
     static func makeEntity(_ kind: EntityKind, fringe: UIColor) -> SKNode {
-        let w = entityBaseWidth(kind)
         switch kind {
-        case .parcel:      return sprite("parcel", width: w, fallback: fallbackBox(fringe: UIColor(hex: "#C88A3C")))
-        case .salt:        return sprite("salt", width: w, fallback: fallbackBox(fringe: UIColor(hex: "#E7ECF5")))
-        case .heart:       return sprite("heart", width: w, fallback: fallbackBox(fringe: UIColor(hex: "#FF4E8A")))
-        case .asteroid:    return sprite(["rock_a", "rock_b", "rock_c", "rock_d"].randomElement()!, width: w, fallback: fallbackBox(fringe: UIColor(hex: "#4E6FD8")))
-        case .slug:        return sprite("slug", width: w, fallback: fallbackBox(fringe: UIColor(hex: "#6BC24E")))
-        case .turret:      return sprite("pillar", width: w, fallback: fallbackBox(fringe: UIColor(hex: "#8A8FA8")))
-        case .postOffice:  return sprite("postoffice", width: w, fallback: fallbackBox(fringe: UIColor(hex: "#E23C9B")))
-        case .ringUpgrade: return makeRing(color: UIColor(hex: "#4CE07A"))
+        case .parcel:      return makeParcel()
+        case .salt:        return makeSalt()
+        case .heart:       return makeHeart()
+        case .asteroid:    return makeAsteroid()
+        case .slug:        return makeSlug()
+        case .turret:      return makePillar()
+        case .postOffice:  return makePostOffice()
+        case .ringUpgrade: return makeRing(color: good)
         case .ringSlow:    return makeRing(color: UIColor(hex: "#7A5CFF"))
-        case .ringExplode: return makeRing(color: UIColor(hex: "#FFD24C"))
+        case .ringExplode: return makeRing(color: gold)
         case .hole:        return makeHole()
         }
     }
 
-    private static func fallbackBox(fringe: UIColor) -> SKNode {
-        let node = SKShapeNode(rectOf: CGSize(width: 40, height: 40), cornerRadius: 6)
-        node.fillColor = fringe
-        node.strokeColor = .white
-        node.lineWidth = 2
-        return node
+    private static func makeParcel() -> SKNode {
+        let root = SKNode()
+        root.addChild(roundRect(46, 46, .zero, radius: 5, fill: UIColor(hex: "#B5783C")))
+        root.addChild(line(from: CGPoint(x: 0, y: -22), to: CGPoint(x: 0, y: 22), width: 6,
+                           color: UIColor(hex: "#7A4C25")))
+        root.addChild(line(from: CGPoint(x: -22, y: 0), to: CGPoint(x: 22, y: 0), width: 6,
+                           color: UIColor(hex: "#7A4C25")))
+        root.addChild(circle(7, CGPoint(x: 12, y: 13), fill: UIColor(hex: "#E23C9B"), stroke: ink, line: 2))
+        return root
+    }
+
+    private static func makeSalt() -> SKNode {
+        let root = SKNode()
+        let pts = [CGPoint(x: 0, y: 26), CGPoint(x: 18, y: -6), CGPoint(x: -18, y: -6)]
+        let p = CGMutablePath(); p.addLines(between: pts); p.closeSubpath()
+        root.addChild(shape(p, fill: UIColor(hex: "#EAF2FF"), line: 3))
+        let p2 = CGMutablePath()
+        p2.addLines(between: [CGPoint(x: -22, y: 8), CGPoint(x: -6, y: -6), CGPoint(x: -22, y: -20)])
+        p2.closeSubpath()
+        root.addChild(shape(p2, fill: UIColor(hex: "#CFE0F5"), line: 3))
+        let p3 = CGMutablePath()
+        p3.addLines(between: [CGPoint(x: 22, y: 6), CGPoint(x: 8, y: -8), CGPoint(x: 22, y: -22)])
+        p3.closeSubpath()
+        root.addChild(shape(p3, fill: UIColor(hex: "#CFE0F5"), line: 3))
+        return root
+    }
+
+    private static func makeHeart() -> SKNode {
+        let p = CGMutablePath()
+        p.move(to: CGPoint(x: 0, y: -22))
+        p.addCurve(to: CGPoint(x: -24, y: 10), control1: CGPoint(x: -14, y: -12), control2: CGPoint(x: -24, y: -2))
+        p.addArc(center: CGPoint(x: -12, y: 10), radius: 12, startAngle: .pi, endAngle: 0, clockwise: false)
+        p.addArc(center: CGPoint(x: 12, y: 10), radius: 12, startAngle: .pi, endAngle: 0, clockwise: false)
+        p.addCurve(to: CGPoint(x: 0, y: -22), control1: CGPoint(x: 24, y: -2), control2: CGPoint(x: 14, y: -12))
+        p.closeSubpath()
+        return shape(p, fill: UIColor(hex: "#FF4E8A"), line: 3)
+    }
+
+    private static func makeAsteroid() -> SKNode {
+        let root = SKNode()
+        let n = 9
+        let p = CGMutablePath()
+        for i in 0..<n {
+            let a = CGFloat(i) / CGFloat(n) * .pi * 2
+            let r = 34 + CGFloat((i * 37) % 10) - 5
+            let pt = CGPoint(x: cos(a) * r, y: sin(a) * r)
+            if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+        }
+        p.closeSubpath()
+        root.addChild(shape(p, fill: UIColor(hex: "#4E6FD8"), line: 4))
+        root.addChild(circle(8, CGPoint(x: -10, y: 8), fill: UIColor(hex: "#374FA8"), stroke: .clear, line: 0))
+        root.addChild(circle(5, CGPoint(x: 12, y: -12), fill: UIColor(hex: "#374FA8"), stroke: .clear, line: 0))
+        root.addChild(circle(4, CGPoint(x: 6, y: 16), fill: UIColor(hex: "#6B88E8"), stroke: .clear, line: 0))
+        return root
+    }
+
+    private static func makeSlug() -> SKNode {
+        let root = SKNode()
+        root.addChild(circle(22, CGPoint(x: 0, y: 0), fill: UIColor(hex: "#6BC24E"), line: 3))
+        root.addChild(line(from: CGPoint(x: -8, y: 18), to: CGPoint(x: -14, y: 32), width: 5, color: UIColor(hex: "#6BC24E")))
+        root.addChild(line(from: CGPoint(x: 8, y: 18), to: CGPoint(x: 14, y: 32), width: 5, color: UIColor(hex: "#6BC24E")))
+        root.addChild(circle(5, CGPoint(x: -14, y: 34), fill: .white, stroke: ink, line: 2))
+        root.addChild(circle(5, CGPoint(x: 14, y: 34), fill: .white, stroke: ink, line: 2))
+        root.addChild(circle(2, CGPoint(x: -14, y: 34), fill: ink, stroke: .clear, line: 0))
+        root.addChild(circle(2, CGPoint(x: 14, y: 34), fill: ink, stroke: .clear, line: 0))
+        return root
+    }
+
+    private static func makePillar() -> SKNode {
+        let root = SKNode()
+        root.addChild(roundRect(34, 90, CGPoint(x: 0, y: 0), radius: 8, fill: metal, line: 3))
+        root.addChild(roundRect(52, 26, CGPoint(x: 0, y: 40), radius: 8, fill: metalLo, line: 3))
+        root.addChild(circle(7, CGPoint(x: 0, y: 40), fill: danger, stroke: ink, line: 2))
+        return root
+    }
+
+    private static func makePostOffice() -> SKNode {
+        let root = SKNode()
+        root.addChild(roundRect(150, 100, CGPoint(x: 0, y: 0), radius: 12,
+                                fill: UIColor(hex: "#E23C9B"), line: 4))
+        root.addChild(roundRect(120, 34, CGPoint(x: 0, y: 8), radius: 6,
+                                fill: UIColor(hex: "#2A1440"), line: 0))
+        root.addChild(roundRect(150, 22, CGPoint(x: 0, y: 62), radius: 10,
+                                fill: gold, line: 4))
+        // Little flag.
+        root.addChild(line(from: CGPoint(x: 52, y: 62), to: CGPoint(x: 52, y: 96), width: 6, color: ink))
+        let flag = CGMutablePath()
+        flag.addLines(between: [CGPoint(x: 52, y: 96), CGPoint(x: 82, y: 86), CGPoint(x: 52, y: 76)])
+        flag.closeSubpath()
+        root.addChild(shape(flag, fill: cyan, line: 3))
+        return root
     }
 
     private static func makeRing(color: UIColor) -> SKNode {
@@ -101,9 +258,7 @@ enum Sprites {
         ring.lineWidth = 9
         ring.glowWidth = 4
         root.addChild(ring)
-        let inner = SKShapeNode(circleOfRadius: 30)
-        inner.fillColor = color.withAlphaComponent(0.12)
-        inner.strokeColor = .clear
+        let inner = circle(30, .zero, fill: color.withAlphaComponent(0.12), stroke: .clear, line: 0)
         root.addChild(inner)
         root.run(.repeatForever(.sequence([
             .scale(to: 1.1, duration: 0.5),
@@ -113,10 +268,10 @@ enum Sprites {
     }
 
     private static func makeHole() -> SKNode {
-        let node = SKShapeNode(ellipseOf: CGSize(width: 120, height: 46))
-        node.fillColor = UIColor.black.withAlphaComponent(0.92)
-        node.strokeColor = UIColor(hex: "#2A1E4A")
-        node.lineWidth = 3
+        let node = shape(CGPath(ellipseIn: CGRect(x: -60, y: -23, width: 120, height: 46),
+                                transform: nil),
+                         fill: UIColor.black.withAlphaComponent(0.92),
+                         stroke: UIColor(hex: "#4A2E7A"), line: 3)
         node.name = "hole"
         return node
     }
@@ -124,20 +279,50 @@ enum Sprites {
     // MARK: - Projectiles
 
     static func makeBullet(level: Int) -> SKNode {
-        let name = level >= 3 ? "rocket" : "laser"
-        let width: CGFloat = level >= 3 ? 34 : 22
-        if let node = sprite(name, width: width, fallback: proceduralBullet(level: level)) as? SKSpriteNode {
-            return node
+        if level >= 3 {
+            let root = SKNode()
+            root.addChild(roundRect(30, 14, .zero, radius: 6, fill: gold, line: 2))
+            let nose = CGMutablePath()
+            nose.addLines(between: [CGPoint(x: 15, y: 7), CGPoint(x: 26, y: 0), CGPoint(x: 15, y: -7)])
+            nose.closeSubpath()
+            root.addChild(shape(nose, fill: UIColor(hex: "#FF7A2D"), line: 2))
+            return root
         }
-        return proceduralBullet(level: level)
+        return roundRect(24, 9, .zero, radius: 4, fill: UIColor(hex: "#FFE24C"),
+                         stroke: UIColor(hex: "#FF9A3D"), line: 2)
     }
 
-    private static func proceduralBullet(level: Int) -> SKNode {
-        let node = SKShapeNode(rectOf: CGSize(width: 24, height: 8), cornerRadius: 4)
-        node.fillColor = level >= 3 ? UIColor(hex: "#FF7A3D") : UIColor(hex: "#FFE24C")
-        node.strokeColor = .white
-        node.lineWidth = 2
-        return node
+    // MARK: - Sky
+
+    /// A vertical-gradient texture built with Core Graphics, used as the sky.
+    static func gradientTexture(size: CGSize, colors: [UIColor]) -> SKTexture {
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let img = renderer.image { ctx in
+            let cg = ctx.cgContext
+            let cgColors = colors.map { $0.cgColor } as CFArray
+            let space = CGColorSpaceCreateDeviceRGB()
+            let grad = CGGradient(colorsSpace: space, colors: cgColors,
+                                  locations: [0, 0.55, 1])!
+            cg.drawLinearGradient(grad, start: .zero,
+                                  end: CGPoint(x: 0, y: size.height), options: [])
+        }
+        return SKTexture(image: img)
+    }
+
+    /// A soft radial glow used for nebulae behind the road.
+    static func radialTexture(size: CGFloat, color: UIColor) -> SKTexture {
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: size, height: size))
+        let img = renderer.image { ctx in
+            let cg = ctx.cgContext
+            let space = CGColorSpaceCreateDeviceRGB()
+            let grad = CGGradient(colorsSpace: space,
+                                  colors: [color.cgColor, color.withAlphaComponent(0).cgColor] as CFArray,
+                                  locations: [0, 1])!
+            let c = CGPoint(x: size / 2, y: size / 2)
+            cg.drawRadialGradient(grad, startCenter: c, startRadius: 0,
+                                  endCenter: c, endRadius: size / 2, options: [])
+        }
+        return SKTexture(image: img)
     }
 
     // MARK: - Base widths (world units the renderer scales against)

@@ -17,36 +17,7 @@
 		AA0000000000000000000008 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000008 /* Assets.xcassets */; };
 		AA0000000000000000000009 /* HUDView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000009 /* HUDView.swift */; };
 		AA0000000000000000000010 /* ResultOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000010 /* ResultOverlay.swift */; };
-		AA0000000000000000000032 /* bg_blue.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000032 /* bg_blue.png */; };
-		AA0000000000000000000033 /* bg_green.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000033 /* bg_green.png */; };
-		AA0000000000000000000034 /* bg_purple.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000034 /* bg_purple.png */; };
-		AA0000000000000000000035 /* bg_red.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000035 /* bg_red.png */; };
-		AA0000000000000000000036 /* gauge.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000036 /* gauge.png */; };
-		AA0000000000000000000037 /* gauge_full.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000037 /* gauge_full.png */; };
-		AA0000000000000000000038 /* heart.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000038 /* heart.png */; };
-		AA0000000000000000000039 /* laser.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000039 /* laser.png */; };
-		AA0000000000000000000040 /* less.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000040 /* less.png */; };
-		AA0000000000000000000041 /* life.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000041 /* life.png */; };
-		AA0000000000000000000042 /* more.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000042 /* more.png */; };
-		AA0000000000000000000043 /* parcel.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000043 /* parcel.png */; };
-		AA0000000000000000000044 /* pillar.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000044 /* pillar.png */; };
-		AA0000000000000000000045 /* postoffice.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000045 /* postoffice.png */; };
-		AA0000000000000000000046 /* rock_a.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000046 /* rock_a.png */; };
-		AA0000000000000000000047 /* rock_b.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000047 /* rock_b.png */; };
-		AA0000000000000000000048 /* rock_c.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000048 /* rock_c.png */; };
-		AA0000000000000000000049 /* rock_d.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000049 /* rock_d.png */; };
-		AA0000000000000000000050 /* rocket.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000050 /* rocket.png */; };
-		AA0000000000000000000051 /* salt.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000051 /* salt.png */; };
-		AA0000000000000000000052 /* signstop.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000052 /* signstop.png */; };
-		AA0000000000000000000053 /* slug.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000053 /* slug.png */; };
-		AA0000000000000000000054 /* snail.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000054 /* snail.png */; };
-		AA0000000000000000000055 /* thrust.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000055 /* thrust.png */; };
-		AA0000000000000000000056 /* tramp.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000056 /* tramp.png */; };
-		AA0000000000000000000060 /* menu_bg.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000060 /* menu_bg.png */; };
-		AA0000000000000000000061 /* progress.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000061 /* progress.png */; };
-		AA0000000000000000000062 /* progress_lit.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000062 /* progress_lit.png */; };
-		AA0000000000000000000063 /* meter.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000063 /* meter.png */; };
-		AA0000000000000000000064 /* play.png in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000064 /* play.png */; };
+		AA0000000000000000000070 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000070 /* Theme.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -61,36 +32,7 @@
 		BB0000000000000000000008 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB0000000000000000000009 /* HUDView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HUDView.swift; sourceTree = "<group>"; };
 		BB0000000000000000000010 /* ResultOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultOverlay.swift; sourceTree = "<group>"; };
-		BB0000000000000000000032 /* bg_blue.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = bg_blue.png; sourceTree = "<group>"; };
-		BB0000000000000000000033 /* bg_green.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = bg_green.png; sourceTree = "<group>"; };
-		BB0000000000000000000034 /* bg_purple.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = bg_purple.png; sourceTree = "<group>"; };
-		BB0000000000000000000035 /* bg_red.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = bg_red.png; sourceTree = "<group>"; };
-		BB0000000000000000000036 /* gauge.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = gauge.png; sourceTree = "<group>"; };
-		BB0000000000000000000037 /* gauge_full.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = gauge_full.png; sourceTree = "<group>"; };
-		BB0000000000000000000038 /* heart.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = heart.png; sourceTree = "<group>"; };
-		BB0000000000000000000039 /* laser.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = laser.png; sourceTree = "<group>"; };
-		BB0000000000000000000040 /* less.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = less.png; sourceTree = "<group>"; };
-		BB0000000000000000000041 /* life.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = life.png; sourceTree = "<group>"; };
-		BB0000000000000000000042 /* more.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = more.png; sourceTree = "<group>"; };
-		BB0000000000000000000043 /* parcel.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = parcel.png; sourceTree = "<group>"; };
-		BB0000000000000000000044 /* pillar.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = pillar.png; sourceTree = "<group>"; };
-		BB0000000000000000000045 /* postoffice.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = postoffice.png; sourceTree = "<group>"; };
-		BB0000000000000000000046 /* rock_a.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = rock_a.png; sourceTree = "<group>"; };
-		BB0000000000000000000047 /* rock_b.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = rock_b.png; sourceTree = "<group>"; };
-		BB0000000000000000000048 /* rock_c.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = rock_c.png; sourceTree = "<group>"; };
-		BB0000000000000000000049 /* rock_d.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = rock_d.png; sourceTree = "<group>"; };
-		BB0000000000000000000050 /* rocket.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = rocket.png; sourceTree = "<group>"; };
-		BB0000000000000000000051 /* salt.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = salt.png; sourceTree = "<group>"; };
-		BB0000000000000000000052 /* signstop.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = signstop.png; sourceTree = "<group>"; };
-		BB0000000000000000000053 /* slug.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = slug.png; sourceTree = "<group>"; };
-		BB0000000000000000000054 /* snail.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = snail.png; sourceTree = "<group>"; };
-		BB0000000000000000000055 /* thrust.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = thrust.png; sourceTree = "<group>"; };
-		BB0000000000000000000056 /* tramp.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = tramp.png; sourceTree = "<group>"; };
-		BB0000000000000000000060 /* menu_bg.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = menu_bg.png; sourceTree = "<group>"; };
-		BB0000000000000000000061 /* progress.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = progress.png; sourceTree = "<group>"; };
-		BB0000000000000000000062 /* progress_lit.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = progress_lit.png; sourceTree = "<group>"; };
-		BB0000000000000000000063 /* meter.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = meter.png; sourceTree = "<group>"; };
-		BB0000000000000000000064 /* play.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = play.png; sourceTree = "<group>"; };
+		BB0000000000000000000070 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -119,7 +61,6 @@
 				DD0000000000000000000003 /* Game */,
 				DD0000000000000000000004 /* UI */,
 				BB0000000000000000000008 /* Assets.xcassets */,
-				DD0000000000000000000007 /* Resources */,
 			);
 			path = SnailMail;
 			sourceTree = "<group>";
@@ -149,6 +90,7 @@
 				BB0000000000000000000007 /* MenuView.swift */,
 				BB0000000000000000000006 /* GameView.swift */,
 				BB0000000000000000000009 /* HUDView.swift */,
+				BB0000000000000000000070 /* Theme.swift */,
 				BB0000000000000000000010 /* ResultOverlay.swift */,
 			);
 			path = Sources/UI;
@@ -160,43 +102,6 @@
 				BB0000000000000000000000 /* SnailMail.app */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		DD0000000000000000000007 /* Resources */ = {
-			isa = PBXGroup;
-			children = (
-				BB0000000000000000000032 /* bg_blue.png */,
-				BB0000000000000000000033 /* bg_green.png */,
-				BB0000000000000000000034 /* bg_purple.png */,
-				BB0000000000000000000035 /* bg_red.png */,
-				BB0000000000000000000036 /* gauge.png */,
-				BB0000000000000000000037 /* gauge_full.png */,
-				BB0000000000000000000038 /* heart.png */,
-				BB0000000000000000000039 /* laser.png */,
-				BB0000000000000000000040 /* less.png */,
-				BB0000000000000000000041 /* life.png */,
-				BB0000000000000000000042 /* more.png */,
-				BB0000000000000000000043 /* parcel.png */,
-				BB0000000000000000000044 /* pillar.png */,
-				BB0000000000000000000045 /* postoffice.png */,
-				BB0000000000000000000046 /* rock_a.png */,
-				BB0000000000000000000047 /* rock_b.png */,
-				BB0000000000000000000048 /* rock_c.png */,
-				BB0000000000000000000049 /* rock_d.png */,
-				BB0000000000000000000050 /* rocket.png */,
-				BB0000000000000000000051 /* salt.png */,
-				BB0000000000000000000052 /* signstop.png */,
-				BB0000000000000000000053 /* slug.png */,
-				BB0000000000000000000054 /* snail.png */,
-				BB0000000000000000000055 /* thrust.png */,
-				BB0000000000000000000056 /* tramp.png */,
-				BB0000000000000000000060 /* menu_bg.png */,
-				BB0000000000000000000061 /* progress.png */,
-				BB0000000000000000000062 /* progress_lit.png */,
-				BB0000000000000000000063 /* meter.png */,
-				BB0000000000000000000064 /* play.png */,
-			);
-			path = Resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -258,36 +163,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000008 /* Assets.xcassets in Resources */,
-				AA0000000000000000000032 /* bg_blue.png in Resources */,
-				AA0000000000000000000033 /* bg_green.png in Resources */,
-				AA0000000000000000000034 /* bg_purple.png in Resources */,
-				AA0000000000000000000035 /* bg_red.png in Resources */,
-				AA0000000000000000000036 /* gauge.png in Resources */,
-				AA0000000000000000000037 /* gauge_full.png in Resources */,
-				AA0000000000000000000038 /* heart.png in Resources */,
-				AA0000000000000000000039 /* laser.png in Resources */,
-				AA0000000000000000000040 /* less.png in Resources */,
-				AA0000000000000000000041 /* life.png in Resources */,
-				AA0000000000000000000042 /* more.png in Resources */,
-				AA0000000000000000000043 /* parcel.png in Resources */,
-				AA0000000000000000000044 /* pillar.png in Resources */,
-				AA0000000000000000000045 /* postoffice.png in Resources */,
-				AA0000000000000000000046 /* rock_a.png in Resources */,
-				AA0000000000000000000047 /* rock_b.png in Resources */,
-				AA0000000000000000000048 /* rock_c.png in Resources */,
-				AA0000000000000000000049 /* rock_d.png in Resources */,
-				AA0000000000000000000050 /* rocket.png in Resources */,
-				AA0000000000000000000051 /* salt.png in Resources */,
-				AA0000000000000000000052 /* signstop.png in Resources */,
-				AA0000000000000000000053 /* slug.png in Resources */,
-				AA0000000000000000000054 /* snail.png in Resources */,
-				AA0000000000000000000055 /* thrust.png in Resources */,
-				AA0000000000000000000056 /* tramp.png in Resources */,
-				AA0000000000000000000060 /* menu_bg.png in Resources */,
-				AA0000000000000000000061 /* progress.png in Resources */,
-				AA0000000000000000000062 /* progress_lit.png in Resources */,
-				AA0000000000000000000063 /* meter.png in Resources */,
-				AA0000000000000000000064 /* play.png in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -307,6 +182,7 @@
 				AA0000000000000000000007 /* MenuView.swift in Sources */,
 				AA0000000000000000000009 /* HUDView.swift in Sources */,
 				AA0000000000000000000010 /* ResultOverlay.swift in Sources */,
+				AA0000000000000000000070 /* Theme.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

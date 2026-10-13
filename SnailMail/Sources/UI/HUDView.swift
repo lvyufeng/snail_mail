@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// HUD: the "Postal Meter" (health, shown on the right like the original),
-/// parcel quota, weapon tier, speed and time.
+/// parcel quota, weapon tier, speed and time. Drawn entirely with the shared
+/// theme kit so it matches the menu and the racer.
 struct HUDView: View {
     let state: RaceState
     let mode: GameMode
@@ -9,119 +10,102 @@ struct HUDView: View {
     let onPause: () -> Void
 
     var body: some View {
-        ZStack {
-            VStack {
-                HStack(alignment: .top, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(mode.title.uppercased())
-                            .font(.system(size: 12, weight: .heavy, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.8))
+        VStack {
+            HStack(alignment: .top, spacing: 16) {
+                NeonPanel(border: Palette.cyan) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        StatLabel(text: mode.title)
                         HStack(spacing: 6) {
-                            if let icon = UIImage(named: "parcel") {
-                                Image(uiImage: icon)
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 20, height: 26)
-                            }
+                            ParcelIcon()
+                                .frame(width: 18, height: 22)
                             Text("\(state.parcels)\(state.quota > 0 ? " / \(state.quota)" : "")")
                                 .font(.system(size: 20, weight: .heavy, design: .rounded))
-                                .foregroundStyle(Color(hex: "#FFD24C"))
+                                .foregroundStyle(Palette.gold)
                         }
                         WeaponPips(level: state.weaponLevel, max: state.maxWeaponLevel)
                         Text(String(format: "%.0f km/h", state.speed / 40))
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.85))
+                            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(Palette.ink.opacity(0.85))
                     }
-
-                    Spacer()
-
-                    VStack(alignment: .trailing, spacing: 8) {
-                        Button(action: onPause) {
-                            Image(systemName: state.phase == .paused ? "play.fill" : "pause.fill")
-                                .font(.system(size: 16, weight: .bold))
-                                .frame(width: 40, height: 40)
-                                .background(.white.opacity(0.15))
-                                .foregroundStyle(.white)
-                                .clipShape(Circle())
-                        }
-                        Text(String(format: "%.1fs", state.elapsed))
-                            .font(.system(size: 12, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.white.opacity(0.85))
-                        PostalMeter(fraction: state.meterFraction, invincible: state.invincible)
-                    }
+                    .padding(.horizontal, 2)
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 10)
 
-                Spacer()
+                Spacer(minLength: 0)
 
-                RouteProgress(progress: state.progress)
-
-                if state.phase == .ready {
-                    VStack(spacing: 8) {
-                        Text("DRAG to steer · HOLD to shoot")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white.opacity(0.75))
-                        Button(action: onPrimary) {
-                            Text("TAP TO START")
-                                .font(.system(size: 20, weight: .heavy, design: .rounded))
-                                .padding(.horizontal, 28)
-                                .padding(.vertical, 12)
-                                .background(Color(hex: "#3A6BFF"))
-                                .foregroundStyle(.white)
-                                .clipShape(Capsule())
-                        }
-                    }
-                    .padding(.bottom, 24)
+                VStack(alignment: .trailing, spacing: 8) {
+                    RoundIconButton(glyph: state.phase == .paused ? "▶" : "❚❚", action: onPause)
+                    Text(String(format: "%.1fs", state.elapsed))
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(Palette.ink.opacity(0.85))
+                    PostalMeter(fraction: state.meterFraction, invincible: state.invincible)
                 }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+
+            Spacer()
+
+            RouteProgress(progress: state.progress)
+
+            if state.phase == .ready {
+                VStack(spacing: 10) {
+                    Text("DRAG to steer · HOLD to fire")
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Palette.ink.opacity(0.8))
+                    Button(action: onPrimary) {
+                        ArcadeLabel(title: "TAP TO START", tint: Palette.cyan)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: 260)
+                }
+                .padding(.bottom, 26)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: state.phase)
     }
 }
 
-/// Vertical postal meter drawn with the original damage-gauge texture.
+/// Vertical postal meter: a neon tube that fills from the bottom, tinted by how
+/// much health is left.
 private struct PostalMeter: View {
     let fraction: Double
     let invincible: Bool
 
-    var body: some View {
-        ZStack {
-            if let art = UIImage(named: "meter") {
-                Image(uiImage: art)
-                    .resizable()
-                    .scaledToFit()
-                    .opacity(0.28)
-                Image(uiImage: art)
-                    .resizable()
-                    .scaledToFit()
-                    .mask {
-                        GeometryReader { g in
-                            VStack(spacing: 0) {
-                                Spacer(minLength: 0)
-                                Rectangle().frame(height: g.size.height * clamped)
-                            }
-                        }
-                    }
-                    .overlay {
-                        if invincible {
-                            Rectangle().fill(Color(hex: "#7AC8FF").opacity(0.45))
-                        }
-                    }
-            } else {
-                Capsule().fill(.white.opacity(0.2))
-            }
-        }
-        .frame(width: 30, height: 168)
-        .overlay(alignment: .top) {
-            Text("POSTAL")
-                .font(.system(size: 8, weight: .heavy, design: .rounded))
-                .foregroundStyle(.white.opacity(0.8))
-                .offset(y: -12)
+    private var clamped: Double { min(1, max(0, fraction)) }
+    private var fill: Color {
+        switch clamped {
+        case ..<0.3: Palette.danger
+        case ..<0.6: Palette.gold
+        default: Palette.good
         }
     }
 
-    private var clamped: Double { min(1, max(0, fraction)) }
+    var body: some View {
+        VStack(spacing: 4) {
+            StatLabel(text: "Postal")
+            ZStack(alignment: .bottom) {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.black.opacity(0.5))
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(LinearGradient(colors: [fill, fill.opacity(0.55)],
+                                         startPoint: .top, endPoint: .bottom))
+                    .padding(3)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .scaleEffect(y: clamped, anchor: .bottom)
+                    .animation(.easeOut(duration: 0.2), value: clamped)
+                if invincible {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Palette.cyan.opacity(0.35))
+                }
+            }
+            .frame(width: 26, height: 150)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Palette.ink.opacity(0.6), lineWidth: 1.5)
+            )
+            .shadow(color: fill.opacity(0.6), radius: 8)
+        }
+    }
 }
 
 private struct WeaponPips: View {
@@ -132,8 +116,8 @@ private struct WeaponPips: View {
         HStack(spacing: 3) {
             ForEach(0..<max, id: \.self) { i in
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(i < level ? Color(hex: "#7AC8FF") : Color.white.opacity(0.2))
-                    .frame(width: 18, height: 6)
+                    .fill(i < level ? Palette.cyan : Palette.ink.opacity(0.2))
+                    .frame(width: 16, height: 6)
             }
         }
     }
@@ -143,16 +127,19 @@ private struct RouteProgress: View {
     let progress: Double
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            Capsule().fill(.black.opacity(0.35))
-            Capsule().fill(
-                LinearGradient(colors: [Color(hex: "#FFD24C"), Color(hex: "#FF8A3D")],
-                               startPoint: .leading, endPoint: .trailing)
-            )
-            .frame(width: max(4, 300 * progress))
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule().fill(.black.opacity(0.4))
+                Capsule().fill(
+                    LinearGradient(colors: [Palette.gold, Palette.goldDeep],
+                                   startPoint: .leading, endPoint: .trailing)
+                )
+                .frame(width: max(6, geo.size.width * progress))
+            }
+            .overlay(Capsule().stroke(Palette.ink.opacity(0.4), lineWidth: 1))
         }
-        .frame(width: 300, height: 8)
-        .overlay(Capsule().stroke(.white.opacity(0.4), lineWidth: 1))
+        .frame(height: 8)
+        .padding(.horizontal, 40)
         .padding(.bottom, 14)
     }
 }

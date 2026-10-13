@@ -90,16 +90,6 @@ final class GameScene: SKScene {
         }
     }
 
-    /// The original shipped one starfield per galaxy; reuse those.
-    private func backgroundImageName(for name: String) -> String {
-        switch name {
-        case "SpaceRed": "bg_red"
-        case "SpaceGreen": "bg_green"
-        case "SpaceBlue": "bg_blue"
-        default: "bg_purple"
-        }
-    }
-
     // MARK: - Lifecycle
 
     override func didMove(to view: SKView) {
@@ -115,16 +105,56 @@ final class GameScene: SKScene {
         resetTrack()
     }
 
+    override func didChangeSize(_ oldSize: CGSize) {
+        super.didChangeSize(oldSize)
+        buildBackground()
+    }
+
     private func buildBackground() {
-        if let tex = Sprites.texture(backgroundImageName(for: config.background)) {
-            let bg = SKSpriteNode(texture: tex)
-            let s = max(size.width / tex.size().width, size.height / tex.size().height)
-            bg.size = CGSize(width: tex.size().width * s, height: tex.size().height * s)
-            bg.position = CGPoint(x: size.width / 2, y: size.height / 2)
-            bg.zPosition = -100
-            bg.name = "bg"
-            addChild(bg)
-        }
+        guard size.width > 0, size.height > 0 else { return }
+        childNode(withName: "sky")?.removeFromParent()
+        let sky = SKNode()
+        sky.name = "sky"
+        sky.zPosition = -100
+
+        let top = UIColor(hex: backgroundHex(for: config.background))
+        let grad = Sprites.gradientTexture(size: CGSize(width: 8, height: size.height),
+                                           colors: [top, UIColor(hex: "#140A2C"), UIColor(hex: "#06040D")])
+        let backdrop = SKSpriteNode(texture: grad)
+        backdrop.size = size
+        backdrop.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        sky.addChild(backdrop)
+
+        let g1 = SKSpriteNode(texture: Sprites.radialTexture(size: 512, color: UIColor(hex: "#7A1E7A")))
+        g1.size = CGSize(width: size.width * 2.1, height: size.width * 2.1)
+        g1.position = CGPoint(x: size.width * 0.15, y: size.height * 0.92)
+        g1.alpha = 0.55
+        sky.addChild(g1)
+        let g2 = SKSpriteNode(texture: Sprites.radialTexture(size: 512, color: UIColor(hex: "#1B3B7A")))
+        g2.size = CGSize(width: size.width * 1.9, height: size.width * 1.9)
+        g2.position = CGPoint(x: size.width * 0.95, y: size.height * 0.72)
+        g2.alpha = 0.5
+        sky.addChild(g2)
+
+        // Distant ringed planet.
+        let planetR = size.width * 0.22
+        let planet = SKShapeNode(circleOfRadius: planetR)
+        planet.fillColor = UIColor(hex: "#6E3FA8")
+        planet.strokeColor = UIColor(hex: "#B98CFF").withAlphaComponent(0.7)
+        planet.lineWidth = 2
+        planet.position = CGPoint(x: size.width * 0.8, y: size.height * 0.84)
+        planet.glowWidth = 8
+        sky.addChild(planet)
+        let ring = SKShapeNode(ellipseOf: CGSize(width: planetR * 3.2, height: planetR * 0.8))
+        ring.fillColor = .clear
+        ring.strokeColor = UIColor(hex: "#58E1FF").withAlphaComponent(0.6)
+        ring.lineWidth = 3
+        ring.position = planet.position
+        ring.zRotation = -0.32
+        sky.addChild(ring)
+
+        // Drifting stars.
+        starLayers.removeAll()
         for _ in 0..<2 {
             let layer = SKNode()
             for _ in 0..<60 {
@@ -136,8 +166,10 @@ final class GameScene: SKScene {
                 layer.addChild(star)
             }
             starLayers.append(layer)
-            addChild(layer)
+            sky.addChild(layer)
         }
+
+        addChild(sky)
     }
 
     private func preparePools() {
