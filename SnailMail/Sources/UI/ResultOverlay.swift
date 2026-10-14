@@ -19,12 +19,15 @@ struct ResultOverlay: View {
                         .shadow(color: (won ? Palette.good : Palette.danger).opacity(0.6), radius: 10)
 
                     VStack(spacing: 6) {
-                        StatRow(label: "Parcel Collect", value: "\(state.sheet.parcelCollect)")
-                        StatRow(label: "Parcel Deliver", value: "\(state.sheet.parcelDeliver)")
-                        StatRow(label: "Ring", value: "\(state.sheet.ring)")
-                        StatRow(label: "Slug", value: "\(state.sheet.slug)")
-                        StatRow(label: "Garbage", value: "\(state.sheet.garbage)")
-                        StatRow(label: "Bonus", value: "\(state.sheet.bonus)")
+                        // The original prints its six tallies as shares of the
+                        // run's total, in this order and with these labels, so
+                        // the remake keeps the same breakdown.
+                        StatRow(label: "Garbage", value: percent(state.sheet.garbage))
+                        StatRow(label: "Slug", value: percent(state.sheet.slug))
+                        StatRow(label: "Ring", value: percent(state.sheet.ring))
+                        StatRow(label: "Parcel Collect", value: percent(state.sheet.parcelCollect))
+                        StatRow(label: "Parcel Deliver", value: percent(state.sheet.parcelDeliver))
+                        StatRow(label: "Bonus", value: percent(state.sheet.bonus))
 
                         Rectangle()
                             .fill(Palette.ink.opacity(0.18))
@@ -33,7 +36,7 @@ struct ResultOverlay: View {
 
                         StatRow(label: "Parcels",
                                 value: state.quota > 0 ? "\(state.delivered) / \(state.quota)" : "\(state.parcels)")
-                        StatRow(label: "Score", value: "\(state.score)")
+                        StatRow(label: "Score Stats", value: "\(state.score)")
                         StatRow(label: "Time", value: String(format: "%.1fs", state.elapsed))
                     }
                     .padding(16)
@@ -55,6 +58,13 @@ struct ResultOverlay: View {
     private var headline: String {
         if !won { return "GONE POSTAL" }
         return state.perfect ? "PERFECT SCORE!" : "LEVEL COMPLETE!"
+    }
+
+    /// One tally as a whole-number share of the run's total score — the
+    /// `Bonus :%i%%` columns the original's results screen shows.
+    private func percent(_ value: Int) -> String {
+        guard state.score > 0 else { return "0%" }
+        return "\(value * 100 / state.score)%"
     }
 }
 
