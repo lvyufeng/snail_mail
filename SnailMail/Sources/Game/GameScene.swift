@@ -565,6 +565,12 @@ final class GameScene: SKScene {
         state.distance = Double(positionZ)
         state.speed = Double(currentSpeed)
         updateTutorialScript()
+        // The retail voice script asks for a line roughly every twenty seconds
+        // (`Frequency:20`). Events supply most of them; `Misc` is the set for
+        // the quiet stretches in between, so Turbo keeps a running commentary
+        // when nothing in particular is happening. The tutorial's scripted
+        // voice-over already fills those stretches, so it is left alone.
+        if mode != .tutorial { Sound.shared.chatter() }
 
         if positionZ >= trackLength {
             positionZ = trackLength
@@ -770,7 +776,11 @@ final class GameScene: SKScene {
     private func destroy(_ spec: EntitySpec, in seg: RoadSegment) {
         seg.sprites.removeAll { $0.kind == spec.kind && $0.offset == spec.offset }
         switch spec.kind {
-        case .slug: state.sheet.slug += 400
+        case .slug:
+            state.sheet.slug += 400
+            // The snail's blaster is the only thing that kills a slug, so a
+            // slug destroyed here was shot: give it its death rattle.
+            Sound.shared.speakSlug(.killed)
         default:    state.sheet.garbage += 200
         }
     }
@@ -861,7 +871,10 @@ final class GameScene: SKScene {
                     damage(4, seg: seg, sound: .asteroid)
                     toRemove.append((seg, spec))
                 case .slug:
-                    damage(12, seg: seg)
+                    // A slug takes a bite: the snail gives the slugged line and
+                    // the slug gloats over it.
+                    Sound.shared.speakSlug(.attack)
+                    damage(12, seg: seg, bySlug: true)
                     toRemove.append((seg, spec))
                 case .enemy:
                     guard !invincible else {
@@ -872,6 +885,7 @@ final class GameScene: SKScene {
                     }
                     // The highway pest shoves the snail toward the edge of the
                     // road as well as denting the meter.
+                    Sound.shared.speak(.enemies)
                     damage(14, seg: seg)
                     targetX = max(-1, min(1, playerX + (playerX >= 0 ? 0.45 : -0.45)))
                     toRemove.append((seg, spec))
@@ -937,7 +951,8 @@ final class GameScene: SKScene {
             ?? CGPoint(x: size.width * 0.5, y: size.height * 0.2)
     }
 
-    private func damage(_ amount: Double, seg: RoadSegment, sound: Sound.Effect = .hit) {
+    private func damage(_ amount: Double, seg: RoadSegment, sound: Sound.Effect = .hit,
+                        bySlug: Bool = false) {
         guard config.damageEnabled else { return }
         // Brief invulnerability after any hit. Fixed obstacles (holes, turrets)
         // stay on the road, so without this the snail would keep taking damage
@@ -946,12 +961,17 @@ final class GameScene: SKScene {
         invincibleUntil = elapsed + 0.75
         state.postalMeter = max(0, state.postalMeter - amount)
         Sound.shared.play(sound)
+        if state.postalMeter <= 0 {
+            // A fatal hit is the snail's last word, not one complaint stacked
+            // on another: skip the hurt grunt and let `finish` say the dying
+            // line — `Slugged` when a slug landed the killing blow.
+            if bySlug { Sound.shared.speakSlug(.gloat) }
+            finish(won: false, signOff: bySlug ? .slugged : .dying)
+            return
+        }
         // The retail snail complains when it is hurt; its voice script makes
         // `Ouch` a subset of the same complaint set.
         Sound.shared.speak(amount >= 10 ? .damage : .ouch)
-        if state.postalMeter <= 0 {
-            finish(won: false)
-        }
     }
 
     // MARK: - Falling into a hole
@@ -1611,7 +1631,10 @@ final class GameScene: SKScene {
 
     // MARK: - Finish
 
-    private func finish(won: Bool) {
+    /// `signOff` names the line the snail leaves on, for a loss whose cause the
+    /// caller knows better than the generic `Dying` set — dying to a slug uses
+    /// the retail's own `Slugged` set.
+    private func finish(won: Bool, signOff: Sound.Voice? = nil) {
         guard state.phase == .running else { return }
         // Hand the mail over: everything on board is delivered at the post
         // office, which is what the "Parcel Deliver" gauge measures.
@@ -1628,7 +1651,7 @@ final class GameScene: SKScene {
         }
         state.phase = .finished(won: won)
         Sound.shared.play(won ? .win : .lose)
-        Sound.shared.speak(won ? .victory : .dying)
+        Sound.shared.speak(signOff ?? (won ? .victory : .dying))
         publish()
         onFinish?(won)
     }

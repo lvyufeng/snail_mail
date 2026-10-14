@@ -56,7 +56,7 @@ final class Sound {
     /// The snail's spoken lines, one case per set `Voice/_Voice.txt` declares.
     enum Voice {
         case start, victory, damage, ouch, dying, fall, package
-        case powerup, slow, enemies, postal, misc, wormTunnel, superTramp
+        case powerup, slow, enemies, postal, misc, wormTunnel, superTramp, slugged
 
         var lines: [String] {
             switch self {
@@ -73,6 +73,10 @@ final class Sound {
             case .dying:
                 ["abandonshell", "imfallingandicantgetup", "ineedanewjob", "notcool",
                  "thisisnotmyday"]
+            // `Set:Slugged` — the lines Turbo keeps for dying to a slug rather
+            // than to the track, hence the smaller set shared with `Dying`.
+            case .slugged:
+                ["ineedanewjob", "notcool", "thisisnotmyday"]
             case .ouch:
                 ["ow1", "ow2", "ow3", "ow4"]
             case .fall:
@@ -103,6 +107,26 @@ final class Sound {
         }
     }
 
+    /// The slugs' own voice, which the retail build never lists in
+    /// `_Voice.txt` — the eleven `slug-*.ogg` clips are hard-wired to slug
+    /// events in the executable. The snail taunts them and they answer: they
+    /// call out when they lunge, they grunt and die when shot, and they gloat
+    /// when one of them takes Turbo down.
+    enum SlugVoice {
+        case attack   // a slug has the snail in its sights
+        case killed   // struck by the snail's fire and dying
+        case gloat    // the slug that took Turbo down, crowing over it
+
+        var lines: [String] {
+            switch self {
+            case .attack: ["slug-snailalert", "slug-gothim", "slug-hestoofast"]
+            case .killed: ["slug-hit1", "slug-hit2", "slug-hit3",
+                           "slug-destroy", "slug-death1", "slug-death2"]
+            case .gloat:  ["slug-victory", "slug-victory2"]
+            }
+        }
+    }
+
     private let engine = AVAudioEngine()
     /// The synthesised bank's buses.
     private let sfxNode = AVAudioPlayerNode()
@@ -111,6 +135,9 @@ final class Sound {
     /// round-robin over a small pool instead of cutting each other off.
     private let retailMixer = AVAudioMixerNode()
     private let voiceNode = AVAudioPlayerNode()
+    /// The slugs talk on their own node so a slug's line and the snail's can
+    /// stack, exactly as two separate speakers do in the retail mix.
+    private let slugVoiceNode = AVAudioPlayerNode()
     private var retailNodes: [AVAudioPlayerNode] = []
     private var retailCursor = 0
 
@@ -141,10 +168,19 @@ final class Sound {
     private static let voice: Float = 1.0
     /// `Frequency:20` — how often the original lets the snail speak.
     private static let voiceInterval: TimeInterval = 20
+    /// How long Turbo stays quiet before idle banter (see `chatter()`).
+    private static let chatterInterval: TimeInterval = 26
 
     private var voiceBusy = false
     private var lastVoiceAt: TimeInterval = -1000
     private var lastVoiceLine: String?
+
+    /// The slug bank keeps its own clock and its own "already saying" flag: the
+    /// snail's line must not swallow a slug's, nor a slug's the snail's.
+    private static let slugVoiceInterval: TimeInterval = 1.2
+    private var slugVoiceBusy = false
+    private var lastSlugVoiceAt: TimeInterval = -1000
+    private var lastSlugVoiceLine: String?
 
     private enum Key {
         static let music = "audio.musicLevel"
@@ -174,10 +210,12 @@ final class Sound {
         engine.attach(musicNode)
         engine.attach(retailMixer)
         engine.attach(voiceNode)
+        engine.attach(slugVoiceNode)
         engine.connect(sfxNode, to: engine.mainMixerNode, format: format)
         engine.connect(musicNode, to: engine.mainMixerNode, format: musicFormat)
         engine.connect(retailMixer, to: engine.mainMixerNode, format: format)
         engine.connect(voiceNode, to: engine.mainMixerNode, format: format)
+        engine.connect(slugVoiceNode, to: engine.mainMixerNode, format: format)
         for node in retailNodes {
             engine.attach(node)
             engine.connect(node, to: retailMixer, format: format)
@@ -215,7 +253,13 @@ final class Sound {
         var spoken = 0
         var missing: [String] = []
         for voice in [Voice.start, .victory, .damage, .ouch, .dying, .fall, .package, .powerup,
-                      .slow, .enemies, .postal, .misc, .wormTunnel, .superTramp] {
+                      .slow, .enemies, .postal, .misc, .wormTunnel, .superTramp, .slugged] {
+            for line in voice.lines {
+                spoken += 1
+                if retail("Audio/Voice/\(line).m4a", format: format) == nil { missing.append(line) }
+            }
+        }
+        for voice in [SlugVoice.attack, .killed, .gloat] {
             for line in voice.lines {
                 spoken += 1
                 if retail("Audio/Voice/\(line).m4a", format: format) == nil { missing.append(line) }
@@ -262,6 +306,7 @@ final class Sound {
         sfxNode.volume = muted ? 0 : Self.synthSfx * Float(sfxLevel)
         retailMixer.volume = muted ? 0 : Self.retailSfx * Float(sfxLevel)
         voiceNode.volume = muted ? 0 : Self.voice * Float(sfxLevel)
+        slugVoiceNode.volume = muted ? 0 : Self.voice * Float(sfxLevel)
     }
 
     // MARK: - Music
@@ -316,6 +361,20 @@ final class Sound {
         playVoiceLine(line)
     }
 
+    /// Turbo's idle banter — the retail's `Misc` set, the one line list no
+    /// event claims. `Frequency:20` is the script's *target* rate, not a quota
+    /// to fill at any cost, so this waits out a longer silence (roughly the
+    /// twenty seconds plus the length of a typical line) before chipping in:
+    /// in a busy stretch the events already supply the chatter, and only a
+    /// genuinely quiet run needs `Misc` to keep Turbo talking.
+    func chatter() {
+        guard ready, !muted, hasRetailAudio else { return }
+        guard ProcessInfo.processInfo.systemUptime - lastVoiceAt >= Self.chatterInterval else {
+            return
+        }
+        speak(.misc)
+    }
+
     /// Plays the tutorial's own voice-over.  Each scripted line names one
     /// recording (`tut1`…`tut18`) rather than drawing from a set, and the
     /// track files give it its own `Duration`, so the twenty-second chatter
@@ -324,6 +383,32 @@ final class Sound {
     func speak(tutorialLine name: String) {
         guard ready, !muted, hasRetailAudio else { return }
         playVoiceLine(name)
+    }
+
+    /// Plays one of the slugs' own lines. Their clips are not part of the
+    /// snail's `_Voice.txt` chatter, so none of its rules apply: a slug speaks
+    /// promptly when it acts instead of waiting out the twenty-second
+    /// `Frequency`, and it talks over the snail rather than replacing it. Only
+    /// a short guard stops twenty slugs from all shouting at once.
+    func speakSlug(_ voice: SlugVoice) {
+        guard ready, !muted, hasRetailAudio else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard !slugVoiceBusy, now - lastSlugVoiceAt >= Self.slugVoiceInterval else { return }
+        let lines = voice.lines
+        guard !lines.isEmpty else { return }
+        var line = lines[Int.random(in: 0..<lines.count)]
+        if lines.count > 1, line == lastSlugVoiceLine {
+            line = lines[Int.random(in: 0..<lines.count)]
+        }
+        guard let buffer = retail("Audio/Voice/\(line).m4a", format: format) else { return }
+        lastSlugVoiceLine = line
+        lastSlugVoiceAt = ProcessInfo.processInfo.systemUptime
+        slugVoiceBusy = true
+        slugVoiceNode.scheduleBuffer(buffer, at: nil, options: [.interrupts],
+                                     completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            DispatchQueue.main.async { self?.slugVoiceBusy = false }
+        }
+        if !slugVoiceNode.isPlaying { slugVoiceNode.play() }
     }
 
     private func playVoiceLine(_ line: String) {
