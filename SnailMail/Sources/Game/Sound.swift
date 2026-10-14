@@ -49,6 +49,7 @@ final class Sound {
         case highlight
         case servo            // star-map cursor
         case win
+        case perfect          // the whole quota handed over without a scratch
         case lose
         case fall
     }
@@ -138,8 +139,12 @@ final class Sound {
     /// The slugs talk on their own node so a slug's line and the snail's can
     /// stack, exactly as two separate speakers do in the retail mix.
     private let slugVoiceNode = AVAudioPlayerNode()
+    /// The "going postal" alarm loops on its own node, so it can run under the
+    /// shots and voices and be cut off the moment the meter climbs back.
+    private let postalNode = AVAudioPlayerNode()
     private var retailNodes: [AVAudioPlayerNode] = []
     private var retailCursor = 0
+    private var postalAlarmOn = false
 
     private let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
     private let musicFormat = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
@@ -211,11 +216,15 @@ final class Sound {
         engine.attach(retailMixer)
         engine.attach(voiceNode)
         engine.attach(slugVoiceNode)
+        engine.attach(postalNode)
         engine.connect(sfxNode, to: engine.mainMixerNode, format: format)
         engine.connect(musicNode, to: engine.mainMixerNode, format: musicFormat)
         engine.connect(retailMixer, to: engine.mainMixerNode, format: format)
         engine.connect(voiceNode, to: engine.mainMixerNode, format: format)
         engine.connect(slugVoiceNode, to: engine.mainMixerNode, format: format)
+        // The alarm rides the effects bus, so the Options screen's sound level
+        // and the mute toggle both reach it without extra bookkeeping.
+        engine.connect(postalNode, to: retailMixer, format: format)
         for node in retailNodes {
             engine.attach(node)
             engine.connect(node, to: retailMixer, format: format)
@@ -244,12 +253,13 @@ final class Sound {
         let effects: [Effect] = [.shoot(1), .shoot(2), .shoot(3), .enemyFire, .collect, .deliver,
                                  .upgrade(1), .upgrade(7), .hit, .asteroid, .boost, .jetpack,
                                  .skid, .heart, .extraLife, .slow, .explodeRing, .invincible,
-                                 .trampoline, .select, .highlight, .servo, .win]
+                                 .trampoline, .select, .highlight, .servo, .win, .perfect]
         for effect in effects {
             let name = retailName(effect)
             let buffer = name.flatMap { retail($0, format: format) }
             lines.append("sfx \(name ?? "-"): \(describe(buffer))")
         }
+        lines.append("sfx postalloop: \(describe(retail("Audio/Sfx/postalloop.m4a", format: format)))")
         var spoken = 0
         var missing: [String] = []
         for voice in [Voice.start, .victory, .damage, .ouch, .dying, .fall, .package, .powerup,
@@ -346,6 +356,21 @@ final class Sound {
         if !sfxNode.isPlaying { sfxNode.play() }
     }
 
+    /// The "going postal" alarm. The tutorial warns that too much damage sends
+    /// Turbo postal, and the retail build loops `postalloop` under a meter in
+    /// the red until he claws it back. `on` is edge-triggered, so it is safe to
+    /// call every frame.
+    func setPostalAlarm(_ on: Bool) {
+        guard ready, on != postalAlarmOn else { return }
+        postalAlarmOn = on
+        guard on, !muted, let buffer = retail("Audio/Sfx/postalloop.m4a", format: format) else {
+            postalNode.stop()
+            return
+        }
+        postalNode.scheduleBuffer(buffer, at: nil, options: [.loops], completionHandler: nil)
+        postalNode.play()
+    }
+
     /// Plays one of the snail's spoken lines, no more often than the original's
     /// twenty seconds and never cutting off the line already speaking.
     func speak(_ voice: Voice) {
@@ -429,10 +454,14 @@ final class Sound {
     private func retailName(_ effect: Effect) -> String? {
         switch effect {
         case .shoot(let tier):
+            // The build ships three fire samples per weapon family — the
+            // launcher's tubes and the blaster's barrels each have their own
+            // recording — so sustained fire rotates through them the same way
+            // the paired impacts and servos alternate below.
             switch tier {
             case 1: return "Audio/Sfx/laser1.m4a"
-            case 2: return "Audio/Sfx/laser2.m4a"
-            default: return "Audio/Sfx/rocket1.m4a"
+            case 2: return "Audio/Sfx/laser\(flip("laser", of: 2) + 2).m4a"
+            default: return "Audio/Sfx/rocket\(flip("rocket", of: 3) + 1).m4a"
             }
         case .enemyFire:   return "Audio/Sfx/enemyfire.m4a"
         case .collect:     return "Audio/Sfx/packagecount.m4a"
@@ -453,6 +482,7 @@ final class Sound {
         case .highlight:   return "Audio/Sfx/highlight.m4a"
         case .servo:       return "Audio/Sfx/servo\(flip("servo", of: 2) + 1).m4a"
         case .win:         return "Audio/Sfx/cheers.m4a"
+        case .perfect:     return "Audio/Sfx/perfect.m4a"
         case .lose:        return nil
         case .fall:        return nil
         }
@@ -467,7 +497,7 @@ final class Sound {
         case .hit, .asteroid, .skid, .explodeRing: "hit"
         case .boost, .jetpack, .trampoline, .slow: "boost"
         case .select, .highlight, .servo: "select"
-        case .win: "win"
+        case .win, .perfect: "win"
         case .lose: "lose"
         case .fall: "fall"
         }

@@ -635,7 +635,13 @@ final class GameScene: SKScene {
         // Turbo's animation rides the same clock, but a paused race holds its
         // pose; a finished one keeps playing so a loss can fall into its shell.
         frameDelta = state.phase == .paused ? 0 : fdt
-        guard state.phase == .running else { renderRoad(); return }
+        guard state.phase == .running else {
+            // Paused or finished: the "going postal" alarm has nothing left to
+            // warn about.
+            Sound.shared.setPostalAlarm(false)
+            renderRoad()
+            return
+        }
 
         elapsed += fdt
         state.elapsed = Double(elapsed)
@@ -685,6 +691,7 @@ final class GameScene: SKScene {
         updateGapFlight()
         handleCollisions()
         updateInvincibility()
+        updatePostalAlarm()
         #if DEBUG
         parkDebugTurret()
         #endif
@@ -724,6 +731,13 @@ final class GameScene: SKScene {
     private func updateSteering(fdt: CGFloat) {
         playerX += (targetX - playerX) * min(1, fdt * 6)
         playerX = max(-1, min(1, playerX))
+    }
+
+    /// The tutorial's warning that too much damage sends Turbo postal: the
+    /// retail build loops its alarm while the meter is in the red and cuts it
+    /// the moment a heart climbs the gauge back up.
+    private func updatePostalAlarm() {
+        Sound.shared.setPostalAlarm(state.meterFraction < 0.25)
     }
 
     private func scrollStars(fdt: CGFloat) {
@@ -1846,7 +1860,13 @@ final class GameScene: SKScene {
             }
         }
         state.phase = .finished(won: won)
-        Sound.shared.play(won ? .win : .lose)
+        // The results screen's own fanfare: a clean clear rings the "PERFECT
+        // SCORE!" jingle, anything else the crowd, and a loss its own sting.
+        Sound.shared.setPostalAlarm(false)
+        // Reaching the post office empties the sack: `placepackage` is the
+        // sound of the parcels going down on the counter, under the fanfare.
+        if handedOver { Sound.shared.play(.deliver) }
+        Sound.shared.play(won ? (state.perfect ? .perfect : .win) : .lose)
         Sound.shared.speak(signOff ?? (won ? .victory : .dying))
         publish()
         onFinish?(won)
