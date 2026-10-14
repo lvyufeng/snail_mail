@@ -119,7 +119,7 @@ struct OptionsView: View {
                 }
                 .buttonStyle(.plain)
 
-                Text("Music and effects are synthesised in the app, so the remake ships no audio from the original.")
+                Text("The original's own music, effects and voice play when the retail assets are installed; without them the app falls back to synthesised audio.")
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .foregroundStyle(Palette.ink.opacity(0.6))
                     .multilineTextAlignment(.center)
