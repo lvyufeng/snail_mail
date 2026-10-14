@@ -407,23 +407,37 @@ private struct ParcelCounter: View {
     private var labelFont: CGFloat { max(11, 20 * scale) }
 }
 
-/// The snail's remaining lives, bottom-left. The retail file is 32x32 with the
-/// snail drawn in rows 6...24.
+/// The snail's remaining lives, bottom-left.
+///
+/// The original kept nine 32x32 `Art/Sprites/Life.tga` slots in a bottom-left
+/// row — x = 13 + 24i at y = 430 of its 640x480 frame — and lit one per spare
+/// shell in hand, so the row reads as the lives still banked (`0x43aef0` walks
+/// the nine sprite pointers at `0x35bb98` and shows the first `lives` of them).
+/// A run starts with none: the score pays them out a thousand points at a time.
+/// The retail file draws the snail in rows 6...24, hence the 19-point height.
 private struct LifeCounter: View {
     let state: RaceState
     let scale: CGFloat
 
     var body: some View {
         HStack(spacing: 6 * scale) {
-            Group {
-                if let icon = RetailAssets.billboardImage("Art/Sprites/life.png") {
-                    Image(uiImage: icon).resizable().interpolation(.medium)
-                        .aspectRatio(contentMode: .fit)
-                } else {
-                    Circle().fill(Palette.good)
+            // Slots overlap by eight pixels at the retail pitch, so the icons
+            // sit 24 apart while each keeps its own 32-pixel width.
+            HStack(spacing: -8 * scale) {
+                ForEach(0..<RaceState.maxLives, id: \.self) { slot in
+                    Group {
+                        if let icon = RetailAssets.billboardImage("Art/Sprites/life.png") {
+                            Image(uiImage: icon).resizable().interpolation(.medium)
+                                .aspectRatio(contentMode: .fit)
+                        } else {
+                            Circle().fill(Palette.good)
+                        }
+                    }
+                    .frame(width: 32 * scale, height: 19 * scale)
+                    .opacity(slot < state.lives ? 1 : 0)
                 }
             }
-            .frame(width: 32 * scale, height: 19 * scale)
+            .padding(.leading, -2 * scale)
 
             Text(String(format: "%.1fs", state.elapsed))
                 .font(.retail(13, weight: .bold))

@@ -286,6 +286,19 @@ final class GameScene: SKScene {
             snail.isHidden = true
             childNode(withName: "snailshadow")?.isHidden = true
         }
+        // `-lives N` banks spare shells, so the HUD's row of life icons can be
+        // photographed lit without earning them a thousand points at a time.
+        if let i = args.firstIndex(of: "-lives"), i + 1 < args.count,
+           let count = Int(args[i + 1]) {
+            state.lives = max(0, min(count, RaceState.maxLives))
+        }
+        // `-score N` starts the run with N points already on the board, so the
+        // thousand-point life payouts (`0x4402a0`) can be watched landing on the
+        // HUD without racing to them.
+        if let i = args.firstIndex(of: "-score"), i + 1 < args.count,
+           let points = Int(args[i + 1]) {
+            state.sheet.bonus = points
+        }
         guard let i = args.firstIndex(of: "-weapon"), i + 1 < args.count,
               let level = Int(args[i + 1]) else { return }
         state.weaponLevel = max(1, min(level, state.maxWeaponLevel))
@@ -344,6 +357,14 @@ final class GameScene: SKScene {
             let idx = segmentIndex(at: positionZ + playerZ)
             segments[idx].sprites.removeAll { $0.kind == .hole }
             segments[idx].sprites.append(EntitySpec(kind: .hole, offset: 0, depth: 0.5))
+        }
+        if ProcessInfo.processInfo.arguments.contains("-fatal") {
+            startRace()
+            // Land a lethal blow on the start line, so the fatal hit can be
+            // watched: with a spare shell banked the run goes on and the postal
+            // meter refills, without one the race ends where it stands.
+            damage(state.maxMeter + 1,
+                   seg: segments[segmentIndex(at: positionZ + playerZ)])
         }
         if ProcessInfo.processInfo.arguments.contains("-gaptop") {
             startRace()
@@ -1225,6 +1246,8 @@ final class GameScene: SKScene {
         state.postalMeter = max(0, state.postalMeter - amount)
         Sound.shared.play(sound)
         if state.postalMeter <= 0 {
+            // A banked spare shell buys the snail another go on the road.
+            if revive(bySlug: bySlug) { return }
             // A fatal hit is the snail's last word, not one complaint stacked
             // on another: skip the hurt grunt and let `finish` say the dying
             // line — `Slugged` when a slug landed the killing blow.
@@ -1238,6 +1261,24 @@ final class GameScene: SKScene {
         // The retail snail complains when it is hurt; its voice script makes
         // `Ouch` a subset of the same complaint set.
         Sound.shared.speak(amount >= 10 ? .damage : .ouch)
+    }
+
+    /// Spends a banked spare shell after a fatal hit. While a life is left the
+    /// snail goes back on the road with a full postal meter and a moment of
+    /// mercy invincibility, and only the last life ends the run — the question
+    /// the retail build asks of its `0x4340` counter at `0x446e25`. Returns
+    /// whether the run goes on.
+    private func revive(bySlug: Bool) -> Bool {
+        guard state.spendLife() else { return false }
+        state.postalMeter = state.maxMeter
+        hurtUntil = 0
+        invincibleUntil = elapsed + 2
+        // The dying line still belongs to the death that was survived, with the
+        // slug's own gloat over the top when it landed the blow.
+        Sound.shared.speak(bySlug ? .slugged : .dying)
+        if bySlug { Sound.shared.speakSlug(.gloat) }
+        publish()
+        return true
     }
 
     // MARK: - Falling into a hole
@@ -1350,6 +1391,7 @@ final class GameScene: SKScene {
             Sound.shared.play(.hit)
             hurtUntil = elapsed + 0.3
             if state.postalMeter <= 0 {
+                if revive(bySlug: false) { return }
                 finish(won: false)
                 return
             }
@@ -2177,5 +2219,12 @@ final class GameScene: SKScene {
         onFinish?(won)
     }
 
-    private func publish() { onStateChange?(state) }
+    private func publish() {
+        // The score pays its extra lives out as it is tallied: the retail award
+        // routine checks the thousand-point boundary itself (`0x4402a0`) and
+        // rings `ExtraLife` when a spare shell is banked. Every award lands
+        // before the frame's publish, so this is where the cheque clears.
+        if state.bankMilestones() > 0 { Sound.shared.play(.extraLife) }
+        onStateChange?(state)
+    }
 }

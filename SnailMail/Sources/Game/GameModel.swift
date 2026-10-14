@@ -398,6 +398,19 @@ struct RaceState: Equatable {
     var weaponLevel: Int = 1
     var maxWeaponLevel: Int = 3
 
+    /// Spare shells in hand. The retail build hands a fresh run none at all and
+    /// pays one out every time the score passes another thousand points: the
+    /// award routine at `0x4402a0` checks the boundary on every payout and banks
+    /// the extra lives in `0x4340`, capped at nine. A fatal hit therefore ends
+    /// the run until the snail has earned its first spare shell.
+    var lives: Int = 0
+    /// The thousand-point milestone the score has already paid out on, so a
+    /// boundary pays once instead of on every frame the total sits above it.
+    var paidMilestone: Int = 0
+
+    static let maxLives = 9
+    static let milestoneStep = 1000
+
     /// The three weapons the original climbs through, in order: the starting
     /// blaster, then the laser, then the rocket launcher the ladder tops out on.
     var weaponName: String {
@@ -445,6 +458,29 @@ struct RaceState: Equatable {
 
     /// A full quota handed over without losing a sliver of the postal meter.
     var perfect: Bool { quota > 0 && delivered >= quota && postalMeter >= maxMeter }
+
+    /// Banks the extra lives the score has earned since the last check, the way
+    /// `0x4402a0` does when the total crosses another thousand. Returns how many
+    /// were paid out so the caller can ring `ExtraLife` (sound id `0x2c`, the
+    /// table's `sfx2/ExtraLife.ogg`).
+    mutating func bankMilestones() -> Int {
+        let reached = sheet.total / Self.milestoneStep
+        guard reached > paidMilestone else { return 0 }
+        let crossings = reached - paidMilestone
+        paidMilestone = reached
+        let paid = min(crossings, Self.maxLives - lives)
+        lives += paid
+        return paid
+    }
+
+    /// Spends a spare shell on the snail's behalf after a fatal hit. The retail
+    /// build asks the same question of `0x4340` at `0x446e25` before it decides
+    /// whether the race continues.
+    mutating func spendLife() -> Bool {
+        guard lives > 0 else { return false }
+        lives -= 1
+        return true
+    }
 }
 
 /// The score breakdown the original prints on its results screen: six separate
