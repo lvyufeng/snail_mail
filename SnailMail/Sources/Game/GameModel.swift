@@ -266,6 +266,11 @@ final class RoadSegment {
     /// Index into `TrackData.tutorialScript` for the pool entry this slice came
     /// from, or -1 where the run has no script — every level but the tutorial.
     var script = -1
+    /// True on a row the piece tags `NoFall`: the build's own word for a row a
+    /// snail may cross without dropping off the highway. Every one of them
+    /// lies under a trampoline's bounce, where the road is left behind and has
+    /// to be picked up again on the way down.
+    var noFall = false
 
     init(index: Int) { self.index = index }
 }
@@ -603,6 +608,8 @@ enum TrackBuilder {
             /// The road band this piece's own `P` row declares for this
             /// row, or `nil` for a row that carries no marker.
             var band: TrackData.Band?
+            /// Whether this piece tags this row `NoFall`.
+            var noFall = false
         }
         var slices: [Slice] = []
         slices.reserveCapacity(max(64, config.rows + 32))
@@ -652,6 +659,8 @@ enum TrackBuilder {
             for band in TrackData.band[name] ?? [] {
                 bandsByRow[band.row] = band
             }
+            // The same numbering again for the rows the piece marks `NoFall`.
+            let noFallRows = Set(TrackData.noFall[name] ?? [])
             for (n, row) in rows.enumerated() {
                 slices.append(Slice(cells: row, family: family,
                                     along: CGFloat(n) / span, step: 1 / span,
@@ -659,7 +668,8 @@ enum TrackBuilder {
                                     jetpackOff: jetpackOff, script: scriptIndex,
                                     signs: signsByRow[n] ?? [],
                                     parcels: parcelsByRow[n] ?? [],
-                                    band: bandsByRow[n]))
+                                    band: bandsByRow[n],
+                                    noFall: noFallRows.contains(n)))
             }
         }
 
@@ -802,6 +812,7 @@ enum TrackBuilder {
             seg.airborne = airborne
             seg.jetpackOff = slices[i].jetpackOff
             seg.script = slices[i].script
+            seg.noFall = slices[i].noFall
 
             /// Map a grid column to a position across the road.
             func across(_ col: Int) -> CGFloat {

@@ -120,6 +120,9 @@ final class GameScene: SKScene {
     private var debugTurretSegment: Int?
     /// >= 0 while the snail is dropping into a hole; -1 the rest of the time.
     private var fallTimer: CGFloat = -1
+    /// `-ignoretnf`: debug only — pretend no row carries the `NoFall` tag, so a
+    /// capture pair can show what the tag holds up.
+    private var debugIgnoreNoFall = false
     /// Where the pit sat across the road, so the snail climbs out beside it.
     private var fallOffset: CGFloat = 0
     /// >= 0 while the snail is flying off a ramp; -1 the rest of the time.
@@ -348,6 +351,27 @@ final class GameScene: SKScene {
             segments[idx].sprites.removeAll { $0.kind == .jetpack }
             segments[idx].sprites.append(EntitySpec(kind: .jetpack, offset: 0, depth: 0.5))
         }
+        if ProcessInfo.processInfo.arguments.contains("-offroad") {
+            startRace()
+            // Carry the snail over the highway's edge, the way a shove does,
+            // so the plunge off the side can be watched without waiting to be
+            // knocked off by a highway pest.
+            playerX = 1.15
+            targetX = 1.15
+        }
+        if ProcessInfo.processInfo.arguments.contains("-offroadnf") {
+            startRace()
+            // The same, but over a row the piece tags `NoFall` — the trampoline
+            // flights are the only rows that carry the tag off the void — so a
+            // capture pair can show the tag holding the snail up where the
+            // bare edge would drop it.
+            if let idx = segments.firstIndex(where: { $0.noFall && !$0.airborne }) {
+                positionZ = max(0, CGFloat(idx) * segmentLength - playerZ)
+            }
+            playerX = 1.15
+            targetX = 1.15
+        }
+        debugIgnoreNoFall = ProcessInfo.processInfo.arguments.contains("-ignoretnf")
         let launchArgs = ProcessInfo.processInfo.arguments
         if let arg = launchArgs.firstIndex(of: "-turret"), arg + 1 < launchArgs.count,
            let tier = Int(launchArgs[arg + 1]) {
@@ -683,6 +707,7 @@ final class GameScene: SKScene {
 
         updateSpeed(fdt: fdt)
         updateSteering(fdt: fdt)
+        updateRoadEdge()
 
         let move = currentSpeed * fdt
         positionZ += move
@@ -757,7 +782,28 @@ final class GameScene: SKScene {
 
     private func updateSteering(fdt: CGFloat) {
         playerX += (targetX - playerX) * min(1, fdt * 6)
-        playerX = max(-1, min(1, playerX))
+        // Steering on its own stops at the edge: the touch range maps to
+        // -1...1, which is the highway's own width. A shove from a hazard is
+        // written to `targetX` past that, so the position is left free to
+        // cross the line and `updateRoadEdge` decides whether that is a fall.
+        playerX = max(-1.6, min(1.6, playerX))
+    }
+
+    /// The highway runs from -1 to 1 across, and its own edge is the tire line
+    /// the ribbon ends on: a snail whose centre crosses that line has left the
+    /// road. Nothing steers it out by itself, so only a shove — the highway
+    /// pest's, or a fence's — carries it over, which is what the help screen
+    /// means when it says they "knock you off the road". A row a piece tags
+    /// `NoFall`, and a row it leaves airborne, are road the whole way out; the
+    /// build marks those so a trampoline's bounce or a gap's arc cannot drop
+    /// the snail that is still travelling over them.
+    private func updateRoadEdge() {
+        guard state.phase == .running, fallTimer < 0, hopTimer < 0 else { return }
+        guard abs(playerX) > 1 else { return }
+        guard !segments.isEmpty else { return }
+        let seg = segments[segmentIndex(at: positionZ + playerZ)]
+        guard !seg.airborne, debugIgnoreNoFall || !seg.noFall else { return }
+        beginFall(offset: playerX)
     }
 
     /// The tutorial's warning that too much damage sends Turbo postal: the
@@ -1074,10 +1120,12 @@ final class GameScene: SKScene {
                         continue
                     }
                     // The highway pest shoves the snail toward the edge of the
-                    // road as well as denting the meter.
+                    // road as well as denting the meter. The shove is written
+                    // past the edge rather than clamped to it, so a snail
+                    // already hugging that side is carried over and falls.
                     Sound.shared.speak(.enemies)
                     damage(14, seg: seg)
-                    targetX = max(-1, min(1, playerX + (playerX >= 0 ? 0.45 : -0.45)))
+                    targetX = playerX + (playerX >= 0 ? 0.45 : -0.45)
                     toRemove.append((seg, spec))
                 case .barrier:
                     // A fence or cage pillar: cut the speed and nudge the snail
@@ -1660,6 +1708,18 @@ final class GameScene: SKScene {
                   + " body w=\(body?.width ?? 0) h=\(body?.height ?? 0)"
                   + " centre=(\(f.midX),\(f.midY)) scene=\(size.width)x\(size.height)"
                   + " half=\(snailRowHalfWidth)")
+        }
+        // `-edgeprobe`: print where the snail sits against the highway's edge
+        // and whether a fall has started, so the edge rule can be read off a
+        // run instead of compared between two screenshots.
+        if ProcessInfo.processInfo.arguments.contains("-edgeprobe") {
+            let row = segments.isEmpty ? -1 : segmentIndex(at: positionZ + playerZ)
+            let seg = row >= 0 ? segments[row] : nil
+            if framesToFreeze >= 0 && framesRun >= framesToFreeze {
+                print("EDGEPROBE frame=\(framesRun) x=\(playerX) target=\(targetX)"
+                      + " fall=\(fallTimer) row=\(row) noFall=\(seg?.noFall ?? false)"
+                      + " air=\(seg?.airborne ?? false)")
+            }
         }
         #endif
     }
