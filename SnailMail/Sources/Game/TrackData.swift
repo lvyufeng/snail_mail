@@ -206,6 +206,26 @@ enum TrackData {
         "jetpackoff.txt",
     ]
 
+    /// A roadside sign a piece hangs with a `3DModel=<name>.x
+    /// (x, y, z)` tag.  `row` numbers the rows that lay road, the way
+    /// the reader slices a piece (the all-`@` seams are dropped), and
+    /// `x` is the lateral placement in the engine's own units — the
+    /// road is 9 wide there, so `x / 4.5` is where it sits across the
+    /// road.  The retail build draws the sign from a little 3-D model
+    /// (`X/signBang.x`, `signConstruction.x`, `signStop.x`); the remake
+    /// keys off the name and draws a flat stand-in.
+    struct Sign {
+        let row: Int
+        let model: String
+        let x: Double
+    }
+    static let sign: [String: [Sign]] = [
+        "jetpack 2.txt": [Sign(row: 57, model: "signbang", x: 1.0), Sign(row: 58, model: "signconstruction", x: 4.0)],
+        "jetpack 3.txt": [Sign(row: 45, model: "signbang", x: 1.0), Sign(row: 46, model: "signconstruction", x: 4.0)],
+        "jetpack.txt": [Sign(row: 14, model: "signbang", x: 2.0), Sign(row: 15, model: "signbang", x: 1.0), Sign(row: 16, model: "signconstruction", x: 4.0)],
+        "register.txt": [Sign(row: 62, model: "signbang", x: 1.0), Sign(row: 63, model: "signconstruction", x: 4.0)],
+    ]
+
     /// The tutorial's scripted lines, in the order its level file
     /// lists them.  Entry `n` belongs to the piece the pool lays at
     /// index `n`; an empty string leaves the previous line on

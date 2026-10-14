@@ -159,18 +159,22 @@ def parse_level(txt):
 
 
 def parse_segment(txt):
-    """Return (grid, path, jetpack_off) for one segment.
+    """Return (grid, path, jetpack_off, signs) for one segment.
 
     `grid` is the rows, `path` its `Path=` family, and `jetpack_off` whether
     any row is tagged `JetPack=Off` — the piece that switches off a jetpack the
     player picked up earlier (see `Jetpack.txt` and `JetpackOff.txt`).
+    `signs` is the list of roadside signs the piece hangs with a
+    `3DModel=<name>.x (x,y,z)` tag, each as `(row, model, x)` where `row`
+    counts the rows that lay road, the way the reader numbers the slices.
     A row tagged `Ring=<effect>` is folded so each of its orientation glyphs
     becomes the token naming that ring's effect (see `RING`). `Parcel=` rows
     carry a single parcel's 3D position as metadata on an otherwise blank row;
     the parcels the player actually grabs are the `$` cells in the grid, so
     the metadata row is left blank rather than expanded into a band of parcels.
     """
-    rows, path, jetpack_off = [], "", False
+    rows, path, jetpack_off, signs = [], "", False, []
+    laid = 0
     for line in txt.splitlines():
         m = re.match(r"^@(.{8})@(.*)$", line)
         if m:
@@ -181,11 +185,18 @@ def parse_segment(txt):
             if ring:
                 token = RING.get(ring.group(1).lower(), "-")
                 row = "".join(token if c in RING_GLYPHS else c for c in row)
+            # A row of nothing but `@` is the seam between pieces, not road:
+            # the reader drops it, so the sign row index has to drop it too.
+            if row != "@" * 8:
+                sign = re.search(r"3DModel\s*=\s*(\w+)\.x\s*\(\s*([-\d.]+)", attr)
+                if sign:
+                    signs.append((laid, sign.group(1).lower(), float(sign.group(2))))
+                laid += 1
             rows.append(row)
         p = re.search(r"Path=(\S+)", line)
         if p:
             path = p.group(1)
-    return "".join(rows), path, jetpack_off
+    return "".join(rows), path, jetpack_off, signs
 
 
 def swift_string(s):
@@ -219,16 +230,18 @@ def main():
         need.update([first.lower(), last.lower()])
         need.update(n.lower() for n, _ in segs)
 
-    grids, paths, jetpacks_off = {}, {}, set()
+    grids, paths, jetpacks_off, sign_map = {}, {}, set(), {}
     for key in sorted(need):
         if key not in segments:
             continue
-        grid, path, jetpack_off = parse_segment(segments[key])
+        grid, path, jetpack_off, signs = parse_segment(segments[key])
         grids[key] = grid
         if path:
             paths[key] = path
         if jetpack_off:
             jetpacks_off.add(key)
+        if signs:
+            sign_map[key] = signs
 
     def encode(route):
         first, segs, last = route
@@ -281,6 +294,26 @@ def main():
               "    /// as the gaps it has to clear instead of a fixed spell.",
               "    static let jetpackOff: Set<String> = ["]
     lines += [f"        {swift_string(k)}," for k in sorted(jetpacks_off)]
+    lines += ["    ]", "",
+              "    /// A roadside sign a piece hangs with a `3DModel=<name>.x",
+              "    /// (x, y, z)` tag.  `row` numbers the rows that lay road, the way",
+              "    /// the reader slices a piece (the all-`@` seams are dropped), and",
+              "    /// `x` is the lateral placement in the engine's own units — the",
+              "    /// road is 9 wide there, so `x / 4.5` is where it sits across the",
+              "    /// road.  The retail build draws the sign from a little 3-D model",
+              "    /// (`X/signBang.x`, `signConstruction.x`, `signStop.x`); the remake",
+              "    /// keys off the name and draws a flat stand-in.",
+              "    struct Sign {",
+              "        let row: Int",
+              "        let model: String",
+              "        let x: Double",
+              "    }",
+              "    static let sign: [String: [Sign]] = ["]
+    for k in sorted(sign_map):
+        body = ", ".join(
+            "Sign(row: %d, model: %s, x: %s)" % (r, swift_string(m), x)
+            for r, m, x in sign_map[k])
+        lines.append(f"        {swift_string(k)}: [{body}],")
     lines += ["    ]", "",
               "    /// The tutorial's scripted lines, in the order its level file",
               "    /// lists them.  Entry `n` belongs to the piece the pool lays at",

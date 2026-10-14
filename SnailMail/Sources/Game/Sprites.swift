@@ -185,6 +185,9 @@ enum Sprites {
         case .ramp:        return makeRamp()
         case .trampoline:  return makeTrampoline()
         case .jetpack:     return makeJetpackPickup()
+        case .signBang:         return makeSignBang()
+        case .signConstruction: return makeSignConstruction()
+        case .signStop:         return makeSignStop()
         }
     }
 
@@ -418,6 +421,82 @@ enum Sprites {
         return root
     }
 
+    // MARK: - Roadside signs (the `3DModel=` rows)
+
+    /// The warning board a piece hangs either side of it (`signBang.x`): the
+    /// retail model is two square panels at x ±3, centred 2 units up, so the
+    /// remake draws the same pair of gold panels in the model's own units.
+    private static func makeSignBang() -> SKNode {
+        let root = SKNode()
+        for side in [CGFloat(-1), 1] {
+            let panel = SKNode()
+            panel.position = CGPoint(x: side * 3.0, y: 2.0)
+            panel.addChild(roundRect(1.94, 1.94, .zero, radius: 0.24,
+                                     fill: gold, line: 0.18))
+            // The "bang": a tapered bar over a dot, the universal warning mark.
+            panel.addChild(roundRect(0.40, 1.02, CGPoint(x: 0, y: 0.30), radius: 0.20,
+                                     fill: ink, stroke: .clear, line: 0))
+            panel.addChild(circle(0.26, CGPoint(x: 0, y: -0.52), fill: ink,
+                                  stroke: .clear, line: 0))
+            root.addChild(panel)
+        }
+        return root
+    }
+
+    /// The roadworks hoarding (`signConstruction.x`): the model is a single
+    /// board 12 across and 12 tall, floating a unit above the road, so it is
+    /// drawn as a wide wall of hazard stripes.
+    private static func makeSignConstruction() -> SKNode {
+        let root = SKNode()
+        let board = CGRect(x: -6, y: 1, width: 12, height: 12)
+        root.addChild(shape(CGPath(roundedRect: board, cornerWidth: 0.4, cornerHeight: 0.4,
+                                   transform: nil),
+                            fill: .white, stroke: ink, line: 0.22))
+        // Slanted stripes, clipped to the board so they break cleanly at its
+        // edge instead of spilling past the frame.
+        let stripes = SKCropNode()
+        let mask = SKShapeNode(path: CGPath(roundedRect: board.insetBy(dx: 0.3, dy: 0.3),
+                                            cornerWidth: 0.2, cornerHeight: 0.2,
+                                            transform: nil))
+        mask.fillColor = .white
+        mask.strokeColor = .clear
+        stripes.maskNode = mask
+        for i in stride(from: -11, through: 12, by: 3) {
+            let x = CGFloat(i)
+            let p = CGMutablePath()
+            p.addLines(between: [CGPoint(x: x, y: 0.6), CGPoint(x: x + 1.5, y: 0.6),
+                                 CGPoint(x: x + 1.5 - 13, y: 13.4), CGPoint(x: x - 13, y: 13.4)])
+            p.closeSubpath()
+            stripes.addChild(shape(p, fill: UIColor(hex: "#FF7A2D"), stroke: .clear, line: 0))
+        }
+        root.addChild(stripes)
+        return root
+    }
+
+    /// The stop sign (`signStop.x`): one small octagon, the only sign the
+    /// shipped pieces never actually place.
+    private static func makeSignStop() -> SKNode {
+        let root = SKNode()
+        let centre = CGPoint(x: 0, y: 0.21), r: CGFloat = 1.03
+        root.addChild(shape(octagon(centre: centre, r: r), fill: danger, line: 0.16))
+        root.addChild(shape(octagon(centre: centre, r: r * 0.74),
+                            fill: .clear, stroke: .white, line: 0.12))
+        root.addChild(roundRect(1.24, 0.34, centre, radius: 0.10,
+                                fill: .white, stroke: .clear, line: 0))
+        return root
+    }
+
+    private static func octagon(centre: CGPoint, r: CGFloat) -> CGPath {
+        let path = CGMutablePath()
+        for i in 0..<8 {
+            let a = CGFloat.pi / 8 + CGFloat(i) * .pi / 4
+            let p = CGPoint(x: centre.x + r * cos(a), y: centre.y + r * sin(a))
+            if i == 0 { path.move(to: p) } else { path.addLine(to: p) }
+        }
+        path.closeSubpath()
+        return path
+    }
+
     // MARK: - Projectiles
 
     /// The three weapons the pickup ladder climbs: the blaster's pellet, the
@@ -531,6 +610,8 @@ enum Sprites {
         case .ramp: 80
         case .trampoline: 84
         case .barrier: 44
+        case .signBang, .signConstruction, .signStop:
+            CGFloat(SignKind(entity: kind)?.modelWidth ?? 48)
         default: 48
         }
     }

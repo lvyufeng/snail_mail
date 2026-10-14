@@ -776,6 +776,10 @@ final class GameScene: SKScene {
                     break
                 case .postOffice:
                     break
+                case .signBang, .signConstruction, .signStop:
+                    // Roadside scenery: the snail drives past it, and it
+                    // never blocks or touches the road itself.
+                    break
                 }
             }
         }
@@ -1131,6 +1135,8 @@ final class GameScene: SKScene {
                 switch spec.kind {
                 case .postOffice: widthFactor = 1.1
                 case .hole:       widthFactor = spec.width > 0 ? spec.width : holeHalfWidth * 2
+                case .signBang, .signConstruction, .signStop:
+                    widthFactor = spec.width > 0 ? spec.width : 0.42
                 default:          widthFactor = 0.42
                 }
                 let spriteWidth = p.screenW * widthFactor

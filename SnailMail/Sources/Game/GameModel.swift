@@ -82,6 +82,9 @@ enum EntityKind: CaseIterable {
     case turret        // immobile, cannot be destroyed, steer around
     case hole          // gap in the road; falling costs health
     case postOffice    // the finish line
+    case signBang          // roadside warning sign, scenery only
+    case signConstruction  // roadside roadworks board, scenery only
+    case signStop          // roadside stop sign, scenery only
 
     var isShootable: Bool {
         switch self {
@@ -97,6 +100,58 @@ enum EntityKind: CaseIterable {
         }
     }
 
+}
+
+/// The roadside signs the retail build places with a `3DModel=` tag on a
+/// piece row (`TrackData.sign`). It ships three — a warning "bang" panel, a
+/// roadworks board and a stop sign — all scenery the snail drives past.
+enum SignKind {
+    case bang, construction, stop
+
+    /// The `TrackData.Sign.model` a row names, or nil for a model the remake
+    /// does not draw.
+    init?(model: String) {
+        switch model {
+        case "signbang": self = .bang
+        case "signconstruction": self = .construction
+        case "signstop": self = .stop
+        default: return nil
+        }
+    }
+
+    /// The sign the entity kind draws, if any.
+    init?(entity: EntityKind) {
+        switch entity {
+        case .signBang: self = .bang
+        case .signConstruction: self = .construction
+        case .signStop: self = .stop
+        default: return nil
+        }
+    }
+
+    var entity: EntityKind {
+        switch self {
+        case .bang: .signBang
+        case .construction: .signConstruction
+        case .stop: .signStop
+        }
+    }
+
+    /// The width the retail model gives the board, in the engine's own units
+    /// (the road is 9 wide there). The remake draws each sign in those units,
+    /// so this is both how wide the sprite is drawn and, over the road width,
+    /// how much of the track it spans.
+    var modelWidth: Double {
+        switch self {
+        case .bang: 7.9406          // two 1.94 panels, either side of the anchor
+        case .construction: 12.0    // the wide hoarding, x -6...6
+        case .stop: 1.8669          // one small octagon, x -0.93...0.93
+        }
+    }
+
+    /// `modelWidth` as a fraction of the road, the way `EntitySpec.width`
+    /// and the renderer's `widthFactor` measure it.
+    var widthFraction: Double { modelWidth / 9 }
 }
 
 // MARK: - World geometry
@@ -499,6 +554,8 @@ enum TrackBuilder {
             var jetpackOff: Bool
             /// Index into `TrackData.tutorialScript` for this entry, or -1.
             var script: Int
+            /// The roadside signs the piece hangs off this row.
+            var signs: [TrackData.Sign] = []
         }
         var slices: [Slice] = []
         slices.reserveCapacity(max(64, config.rows + 32))
@@ -528,11 +585,19 @@ enum TrackBuilder {
                 i += 8
             }
             let span = CGFloat(max(1, rows.count - 1))
+            // `TrackData.sign` numbers its rows the same way the reader does,
+            // counting only the rows that lay road (the all-`@` seams dropped
+            // above), so the row it names is `rows`' own index.
+            var signsByRow: [Int: [TrackData.Sign]] = [:]
+            for sign in TrackData.sign[name] ?? [] {
+                signsByRow[sign.row, default: []].append(sign)
+            }
             for (n, row) in rows.enumerated() {
                 slices.append(Slice(cells: row, family: family,
                                     along: CGFloat(n) / span, step: 1 / span,
                                     flip: flip, angle: angle,
-                                    jetpackOff: jetpackOff, script: scriptIndex))
+                                    jetpackOff: jetpackOff, script: scriptIndex,
+                                    signs: signsByRow[n] ?? []))
             }
         }
 
@@ -738,6 +803,16 @@ enum TrackBuilder {
                     break
                 }
                 col += 1
+            }
+            // The piece's roadside signs sit on the row they were tagged
+            // with, off to the side the model's own x places them (the
+            // engine's road is 9 wide there, so `x / 4.5` is across-road).
+            for sign in slices[i].signs {
+                guard let kind = SignKind(model: sign.model) else { continue }
+                sprites.append(EntitySpec(kind: kind.entity,
+                                          offset: max(-0.95, min(0.95, CGFloat(sign.x) / 4.5)),
+                                          depth: 0.5,
+                                          width: CGFloat(kind.widthFraction)))
             }
             seg.sprites = sprites
 
