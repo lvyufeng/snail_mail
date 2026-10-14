@@ -142,10 +142,15 @@ final class GameScene: SKScene {
     private var roadTonePool: [[SKShapeNode]] = []
     private let roadSurface: RetailAssets.TrackSurface?
     /// How much of the road's width one retail tile covers, and how many cells
-    /// the tiling has on a side. The lattice is 16 cells square and half of it
-    /// spans the highway, so eight cells lie across the road.
+    /// the tiling has on a side. The lattice is 32 cells square and half of it
+    /// spans the highway, so sixteen cells lie across the road.
     private let roadTilesAcross: CGFloat = 0.5
-    private let roadCellsAcross = 8
+    private let roadCellsAcross = 16
+    /// How many points wide a road cell has to be before the tiling bothers to
+    /// cut it out separately, and how tall a strip has to be before it is cut
+    /// at a texture row. Below these the lattice is sub-pixel.
+    private let detailMinCell: CGFloat = 3
+    private let detailMinHeight: CGFloat = 4
     private var wallLeftPool: [SKShapeNode] = []
     private var wallRightPool: [SKShapeNode] = []
     private var entityPool: [EntityKind: [SKNode]] = [:]
@@ -1442,7 +1447,7 @@ final class GameScene: SKScene {
 
         // Cut the segment at every texture row boundary it crosses.
         var cuts: [CGFloat] = [0, 1]
-        if dv > 0 {
+        if dv > 0 && abs(y2 - y1) >= detailMinHeight {
             var m = Int(floor(v1 * blocks)) + 1
             while CGFloat(m) / blocks < v2 {
                 let t = (CGFloat(m) / blocks - v1) / dv
@@ -1451,6 +1456,14 @@ final class GameScene: SKScene {
             }
         }
         cuts.sort()
+
+        // A texture cell that lands on less than a couple of points cannot be
+        // told apart from its neighbours, so a thin sliver near the horizon is
+        // drawn as one cell instead of sixteen. Only the strips close to the
+        // camera carry the lattice.
+        let span = max(r1 - l1, r2 - l2)
+        let cellsAcross = max(1, min(roadCellsAcross,
+                                     Int((span / detailMinCell).rounded())))
 
         // Cells overlap by a fraction of a point so the seams between them do
         // not show as hairlines against the sky.
@@ -1467,11 +1480,17 @@ final class GameScene: SKScene {
             let ax0L = l1 + (l2 - l1) * ta, ax0R = r1 + (r2 - r1) * ta
             let ax1L = l1 + (l2 - l1) * tb, ax1R = r1 + (r2 - r1) * tb
 
-            for c in 0..<roadCellsAcross {
-                let f0 = CGFloat(c) / CGFloat(roadCellsAcross)
-                let f1 = CGFloat(c + 1) / CGFloat(roadCellsAcross)
-                let bx = Int(floor(((f0 + f1) / 2) * roadTilesAcross * blocks))
-                let tone = surface.toneIndex(blockX: bx, blockY: by)
+            for c in 0..<cellsAcross {
+                let f0 = CGFloat(c) / CGFloat(cellsAcross)
+                let f1 = CGFloat(c + 1) / CGFloat(cellsAcross)
+                // The texture columns this cell covers: the last one is
+                // inclusive, so a cell that still has full detail samples the
+                // single column it lands on.
+                let bx0 = Int(floor(f0 * roadTilesAcross * blocks))
+                let bx1 = max(bx0, Int(ceil(f1 * roadTilesAcross * blocks)) - 1)
+                let tone = bx1 > bx0
+                    ? surface.meanTone(fromBlockX: bx0, toBlockX: bx1, blockY: by)
+                    : surface.toneIndex(blockX: bx0, blockY: by)
                 guard tone < tones.count else { continue }
 
                 let p: CGMutablePath

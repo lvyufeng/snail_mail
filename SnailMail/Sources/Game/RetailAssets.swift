@@ -91,18 +91,20 @@ enum RetailAssets {
 
     // MARK: - Road surface
 
-    /// One level's highway tiling, reduced to the handful of tones it is drawn
-    /// from. The retail `Art/Objects/track0-3.png` is a 256x256 diamond lattice
-    /// — light lines over a base colour — and the renderer cannot lay a texture
-    /// across a perspective trapezoid, so the file is read as a 16x16 grid of
-    /// cells and each road cell takes the tone of the texture cell it covers.
+    /// One level's highway tiling, reduced to the tones it is drawn from. The
+    /// retail `Art/Objects/track0-3.png` is a 256x256 diamond lattice — light
+    /// lines over a base colour — and the renderer cannot lay a texture across
+    /// a perspective trapezoid, so the file is read as a 32x32 grid of cells
+    /// and each road cell takes the tone of the texture cell it covers.
     struct TrackSurface {
-        /// Cells on a side of the texture, e.g. 16 for a 256-pixel file.
+        /// Cells on a side of the texture, e.g. 32 for a 256-pixel file.
         let blocks: Int
         /// Tone index per cell, row-major (`blocks * blocks` entries).
         let tone: [UInt8]
         /// The colour each tone index draws with.
         let palette: [UIColor]
+        /// The same colours as plain components, for `meanTone`.
+        let components: [(r: Double, g: Double, b: Double)]
 
         /// The tone at a texture cell, with the lattice wrapping in both axes.
         func toneIndex(blockX: Int, blockY: Int) -> Int {
@@ -111,14 +113,40 @@ enum RetailAssets {
             let by = ((blockY % n) + n) % n
             return Int(tone[by * n + bx])
         }
+
+        /// The tone that stands for the cells `bx0...bx1` of one texture row.
+        /// A strip of road too small to show the lattice separately takes the
+        /// colour the cells it covers average to, so it minifies to the mean
+        /// rather than banding between whichever two cells it happens to span.
+        func meanTone(fromBlockX bx0: Int, toBlockX bx1: Int, blockY: Int) -> Int {
+            var r = 0.0, g = 0.0, b = 0.0, n = 0.0
+            var bx = bx0
+            while bx <= bx1 {
+                let c = components[toneIndex(blockX: bx, blockY: blockY)]
+                r += c.r; g += c.g; b += c.b
+                n += 1
+                bx += 1
+            }
+            guard n > 0 else { return 0 }
+            r /= n; g /= n; b /= n
+            var best = 0
+            var bestD = Double.greatestFiniteMagnitude
+            for (i, c) in components.enumerated() {
+                let dr = c.r - r, dg = c.g - g, db = c.b - b
+                let d = dr * dr + dg * dg + db * db
+                if d < bestD { bestD = d; best = i }
+            }
+            return best
+        }
     }
 
     private static var surfaces: [Int: TrackSurface] = [:]
 
     /// How many tones a road tiling is reduced to. The lattice is a base colour
-    /// with a few lighter steps for its lines, so five clusters keep the steps
-    /// apart without turning the blocky noise in the file into extra bands.
-    private static let roadTones = 5
+    /// with a long ramp of lighter steps for its lines; sampling it at 32x32
+    /// leaves roughly one tone per step, and a dozen cut points keep the ramp
+    /// apart without splitting it so finely that each step costs a shape.
+    private static let roadTones = 12
 
     static func trackSurface(_ track: Int) -> TrackSurface? {
         let key = max(0, min(3, track))
@@ -138,7 +166,7 @@ enum RetailAssets {
 
         // One mean colour per texture cell, so the JPEG grain in the file
         // averages out before the tones are picked.
-        let blocks = 16
+        let blocks = 32
         let bw = max(1, w / blocks), bh = max(1, h / blocks)
         var cells: [(r: Double, g: Double, b: Double)] = []
         cells.reserveCapacity(blocks * blocks)
@@ -193,7 +221,8 @@ enum RetailAssets {
         }
         let surface = TrackSurface(blocks: blocks,
                                    tone: assign.map { UInt8($0) },
-                                   palette: palette)
+                                   palette: palette,
+                                   components: centres)
         surfaces[key] = surface
         return surface
     }
