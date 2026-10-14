@@ -24,7 +24,7 @@ struct BriefingView: View {
         guard mode == .arcade else { return nil }
         let star = LevelCatalog.star(level)
         guard star.galaxy < LevelCatalog.galaxies.count else { return nil }
-        return "GALAXY \(star.galaxy + 1) · \(LevelCatalog.galaxies[star.galaxy])"
+        return "GALAXY \(star.galaxy + 1) * \(LevelCatalog.galaxies[star.galaxy])"
     }
 
     var body: some View {
@@ -37,7 +37,7 @@ struct BriefingView: View {
                         VStack(spacing: 4) {
                             StatLabel(text: "Postal Briefing", color: Palette.cyan)
                             Text(levelName)
-                                .font(.system(size: 30, weight: .black, design: .rounded))
+                                .font(.retail(30, weight: .black))
                                 .foregroundStyle(
                                     LinearGradient(colors: [Palette.gold, Palette.goldDeep],
                                                    startPoint: .top, endPoint: .bottom)
@@ -46,7 +46,7 @@ struct BriefingView: View {
                                 .shadow(color: .black.opacity(0.8), radius: 6, y: 3)
                             if let galaxyName {
                                 Text(galaxyName)
-                                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                                    .font(.retail(11, weight: .semibold))
                                     .foregroundStyle(Palette.ink.opacity(0.7))
                             }
                         }
@@ -56,7 +56,7 @@ struct BriefingView: View {
                                 SnailMascot()
                                     .frame(width: 96, height: 74)
                                 Text(text)
-                                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                                    .font(.retail(17, weight: .semibold))
                                     .foregroundStyle(Palette.ink)
                                     .fixedSize(horizontal: false, vertical: true)
                                     .frame(maxWidth: .infinity, alignment: .leading)

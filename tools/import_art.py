@@ -10,6 +10,9 @@ formats iOS reads natively:
     textures   TGA  -> PNG
     audio      Ogg  -> M4A (AAC), through macOS's `afconvert`
     models     .x2  -> `.x`, copied as they are (plain text)
+    lettering  `FONT-MENU-HOVER.TGA` -> `SnailMailRetail.ttf`, through
+               `make_font.py`, which rebuilds the shipped bitmap strip as a
+               face iOS can register
 
 Blobs are routed by their own extension rather than the folder they sit in,
 because the archive mixes both kinds in the same place — `X/` holds the snail's
@@ -39,6 +42,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import import_tracks as it  # noqa: E402  (shares the archive decoder)
 import bake_meshes as bm  # noqa: E402  (turns the .x models into billboards)
+import make_font as mf  # noqa: E402  (rebuilds the menu strip as a font)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "SnailMail", "Resources", "Retail")
@@ -156,6 +160,13 @@ def main():
                         os.path.join(args.out, "Art", "Textures"),
                         os.path.join(args.out, "Art", "Baked"), log=lambda m: None)
     print("baked %d billboards" % baked)
+
+    # The menu lettering is the strip the 3-D font is not; rebuild it as a face
+    # the app can register, so labels can be set in the original letterforms.
+    strip = os.path.join(args.out, "Art", "Objects", "font_font-menu-hover.png")
+    if os.path.exists(strip):
+        face = os.path.join(args.out, "Art", "Objects", "SnailMailRetail.ttf")
+        print("wrote %d glyphs to %s" % (mf.build(strip, face), face))
 
 
 if __name__ == "__main__":

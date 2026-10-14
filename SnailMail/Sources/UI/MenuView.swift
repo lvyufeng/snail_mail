@@ -22,7 +22,7 @@ struct MenuView: View {
 
                         VStack(spacing: 2) {
                             Text("SNAIL MAIL")
-                                .font(.system(size: 46, weight: .black, design: .rounded))
+                                .font(.retail(46, weight: .black))
                                 .tracking(1)
                                 .foregroundStyle(
                                     LinearGradient(colors: [Palette.gold, Palette.goldDeep],
@@ -106,8 +106,8 @@ struct MenuView: View {
                         }
                         .padding(.horizontal, 20)
 
-                        Text("Drag to steer · hold to fire · dodge salt & meteors")
-                            .font(.system(size: 13, weight: .medium, design: .rounded))
+                        Text("Drag to steer * hold to fire * dodge salt and meteors")
+                            .font(.retail(13, weight: .medium))
                             .foregroundStyle(Palette.ink.opacity(0.72))
                             .multilineTextAlignment(.center)
                             .padding(.bottom, 44)
@@ -157,14 +157,14 @@ private struct ModeRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
                         Text(mode.title)
-                            .font(.system(size: 18, weight: .heavy, design: .rounded))
+                            .font(.retail(18, weight: .heavy))
                             .foregroundStyle(.white)
                         Text(mode.chinese)
                             .font(.system(size: 13, weight: .bold))
                             .foregroundStyle(Palette.gold)
                     }
                     Text(mode.subtitle)
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .font(.retail(11, weight: .medium))
                         .foregroundStyle(Palette.ink.opacity(0.6))
                 }
                 Spacer(minLength: 8)
@@ -185,7 +185,7 @@ private struct ModeRow: View {
     }
 }
 
-/// A labelled value the player steps through with `‹` / `›`, the way the
+/// A labelled value the player steps through with `<` / `>`, the way the
 /// original's `Select Speed >` and `Select Difficulty >` rows cycle.
 private struct CycleRow: View {
     let title: String
@@ -197,20 +197,20 @@ private struct CycleRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Text(title)
-                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                .font(.retail(13, weight: .heavy))
                 .foregroundStyle(Palette.ink.opacity(0.85))
             Spacer(minLength: 8)
-            StepButton(icon: "‹", action: previous)
+            StepButton(icon: "<", action: previous)
             VStack(spacing: 0) {
                 Text(value)
-                    .font(.system(size: 15, weight: .black, design: .rounded))
+                    .font(.retail(15, weight: .black))
                     .foregroundStyle(Palette.gold)
                 Text(detail)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.retail(10, weight: .semibold))
                     .foregroundStyle(Palette.ink.opacity(0.55))
             }
             .frame(minWidth: 76)
-            StepButton(icon: "›", action: next)
+            StepButton(icon: ">", action: next)
         }
     }
 }
@@ -222,7 +222,7 @@ private struct StepButton: View {
     var body: some View {
         Button(action: action) {
             Text(icon)
-                .font(.system(size: 20, weight: .black, design: .rounded))
+                .font(.retail(20, weight: .black))
                 .foregroundStyle(.white)
                 .frame(width: 34, height: 34)
                 .background(Circle().fill(Palette.cyan.opacity(0.28)))
@@ -240,7 +240,7 @@ private struct MenuChip: View {
     var body: some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 12, weight: .heavy, design: .rounded))
+                .font(.retail(12, weight: .heavy))
                 .tracking(0.5)
                 .foregroundStyle(Palette.ink)
                 .lineLimit(1)

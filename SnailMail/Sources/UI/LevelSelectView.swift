@@ -45,7 +45,7 @@ struct LevelSelectView: View {
                     .frame(height: 46)
             } else {
                 Text("GALAXY MAP")
-                    .font(.system(size: 34, weight: .black, design: .rounded))
+                    .font(.retail(34, weight: .black))
                     .tracking(1)
                     .foregroundStyle(
                         LinearGradient(colors: [Palette.gold, Palette.goldDeep],
@@ -139,11 +139,11 @@ private struct GalaxyPanel: View {
                 HStack(spacing: 8) {
                     GalaxyBadge(galaxy: galaxy).frame(width: 26, height: 26)
                     Text("GALAXY \(galaxy + 1)")
-                        .font(.system(size: 12, weight: .heavy, design: .rounded))
+                        .font(.retail(12, weight: .heavy))
                         .foregroundStyle(Palette.gold)
                     Spacer(minLength: 4)
                     Text(LevelCatalog.galaxies[galaxy])
-                        .font(.system(size: 11, weight: .medium, design: .rounded))
+                        .font(.retail(11, weight: .medium))
                         .foregroundStyle(Palette.ink.opacity(0.6))
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -188,12 +188,12 @@ private struct StarRow: View {
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(level.name)
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .font(.retail(15, weight: .heavy))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
-                Text("Star \(level.star + 1) · \(level.speed) Gph · \(level.parcels) parcels")
-                    .font(.system(size: 10, weight: .medium, design: .rounded))
+                Text("Star \(level.star + 1) * \(level.speed) Gph * \(level.parcels) parcels")
+                    .font(.retail(10, weight: .medium))
                     .foregroundStyle(Palette.ink.opacity(0.6))
             }
 

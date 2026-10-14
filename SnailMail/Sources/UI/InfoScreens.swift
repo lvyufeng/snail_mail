@@ -18,7 +18,7 @@ private struct InfoScaffold<Content: View>: View {
                     VStack(spacing: 3) {
                         if let icon { Text(icon).font(.system(size: 30)) }
                         Text(title)
-                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .font(.retail(30, weight: .black))
                             .tracking(0.5)
                             .foregroundStyle(
                                 LinearGradient(colors: [Palette.gold, Palette.goldDeep],
@@ -63,13 +63,13 @@ struct HelpView: View {
 
     private let items: [Item] = [
         Item(keys: "DRAG LEFT / RIGHT", text: "Steer Turbo across the highway. Hold near an edge to hug that side of the road."),
-        Item(keys: "TOUCH & HOLD", text: "Fire. Drive through a power-up ring to climb from the blaster to the laser and the rocket launcher."),
-        Item(keys: "PARCELS {", text: "Pick up packages to fill the Parcel Collect gauge, then reach the Post Office to hand the quota in."),
-        Item(keys: "SALT ^", text: "Salt burns and cannot be shot. Steer around it."),
-        Item(keys: "ASTEROIDS & SLUGS", text: "They slow you down and knock you off the road — shoot them, or use a blast ring."),
+        Item(keys: "TOUCH + HOLD", text: "Fire. Drive through a power-up ring to climb from the blaster to the laser and the rocket launcher."),
+        Item(keys: "PARCELS", text: "Pick up packages to fill the Parcel Collect gauge, then reach the Post Office to hand the quota in."),
+        Item(keys: "SALT", text: "Salt burns and cannot be shot. Steer around it."),
+        Item(keys: "ASTEROIDS + SLUGS", text: "They slow you down and knock you off the road. Shoot them, or use a blast ring."),
         Item(keys: "GAPS", text: "A ramp carries you over a pit, and a jetpack carries you over the long ones. Fall in and you lose postal meter."),
-        Item(keys: "POSTAL METER", text: "Your health, on the right. Hearts restore it; lose it all and you go postal."),
-        Item(keys: "? RINGS", text: "Slow rings cost you speed. Yellow rings blow up nearby enemies."),
+        Item(keys: "POSTAL METER", text: "Your health, on the right. Hearts restore it. Lose it all and you go postal."),
+        Item(keys: "RINGS", text: "Slow rings cost you speed. Yellow rings blow up nearby enemies."),
     ]
 
     var body: some View {
@@ -78,10 +78,10 @@ struct HelpView: View {
                 ForEach(items) { item in
                     VStack(alignment: .leading, spacing: 3) {
                         Text(item.keys)
-                            .font(.system(size: 12, weight: .heavy, design: .rounded))
+                            .font(.retail(12, weight: .heavy))
                             .foregroundStyle(Palette.cyan)
                         Text(item.text)
-                            .font(.system(size: 14, weight: .medium, design: .rounded))
+                            .font(.retail(14, weight: .medium))
                             .foregroundStyle(Palette.ink.opacity(0.9))
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -113,14 +113,14 @@ struct OptionsView: View {
                         StatLabel(text: "Sound")
                         Spacer(minLength: 40)
                         Text(muted ? "Off" : "On")
-                            .font(.system(size: 16, weight: .heavy, design: .rounded))
+                            .font(.retail(16, weight: .heavy))
                             .foregroundStyle(muted ? Palette.danger : Palette.good)
                     }
                 }
                 .buttonStyle(.plain)
 
-                Text("The original's own music, effects and voice play when the retail assets are installed; without them the app falls back to synthesised audio.")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                Text("The original's own music, effects and voice play when the retail assets are installed. Without them the app falls back to synthesised audio.")
+                    .font(.retail(11, weight: .medium))
                     .foregroundStyle(Palette.ink.opacity(0.6))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
@@ -140,7 +140,7 @@ private struct VolumeRow: View {
                 StatLabel(text: title)
                 Spacer(minLength: 40)
                 Text("\(Int(value * 100))%")
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .font(.retail(15, weight: .heavy))
                     .foregroundStyle(Palette.ink)
             }
             Slider(value: $value, in: 0...1)
@@ -168,8 +168,8 @@ struct HighScoresView: View {
                         }
                         let rows = scores.entries(board)
                         if rows.isEmpty {
-                            Text("No scores yet — deliver some mail!")
-                                .font(.system(size: 13, weight: .medium, design: .rounded))
+                            Text("No scores yet. Deliver some mail!")
+                                .font(.retail(13, weight: .medium))
                                 .foregroundStyle(Palette.ink.opacity(0.55))
                         } else {
                             ForEach(Array(rows.enumerated()), id: \.element.id) { index, entry in
@@ -191,24 +191,24 @@ private struct ScoreRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Text("\(place)")
-                .font(.system(size: 13, weight: .black, design: .rounded))
+                .font(.retail(13, weight: .black))
                 .foregroundStyle(place == 1 ? Palette.gold : Palette.ink.opacity(0.7))
                 .frame(width: 16, alignment: .leading)
             VStack(alignment: .leading, spacing: 1) {
                 Text(entry.name)
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
+                    .font(.retail(15, weight: .heavy))
                     .foregroundStyle(.white)
                     .lineLimit(1)
                 if !entry.level.isEmpty {
                     Text(entry.level)
-                        .font(.system(size: 10, weight: .medium, design: .rounded))
+                        .font(.retail(10, weight: .medium))
                         .foregroundStyle(Palette.ink.opacity(0.55))
                         .lineLimit(1)
                 }
             }
             Spacer(minLength: 6)
             Text("\(entry.score)")
-                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                .font(.retail(16, weight: .heavy))
                 .foregroundStyle(Palette.ink)
         }
         .padding(.horizontal, 12)
@@ -238,7 +238,7 @@ struct IntroView: View {
             VStack {
                 Spacer()
                 Text(slides.isEmpty ? "SNAIL MAIL" : slides[min(index, slides.count - 1)])
-                    .font(.system(size: 20, weight: .semibold, design: .serif))
+                    .font(.retail(20, weight: .semibold))
                     .foregroundStyle(Color(hex: "#FFE9A8"))
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
@@ -252,7 +252,7 @@ struct IntroView: View {
             VStack {
                 Spacer()
                 Text(isLast ? "CLICK TO START" : "TAP TO CONTINUE")
-                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .font(.retail(13, weight: .heavy))
                     .tracking(2)
                     .foregroundStyle(Palette.cyan.opacity(0.9))
                     .padding(.bottom, 40)
@@ -286,13 +286,13 @@ struct CreditsView: View {
             VStack(spacing: 16) {
                 ForEach(Array(TrackData.creditsSlides.enumerated()), id: \.offset) { _, slide in
                     Text(slide)
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+                        .font(.retail(15, weight: .semibold))
                         .foregroundStyle(Palette.ink.opacity(0.9))
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
                 }
-                Text("Remake: original art, audio and code. All original game data © its authors.")
-                    .font(.system(size: 11, weight: .medium, design: .rounded))
+                Text("Remake: original art, audio and code. All original game data (c) its authors.")
+                    .font(.retail(11, weight: .medium))
                     .foregroundStyle(Palette.ink.opacity(0.55))
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)

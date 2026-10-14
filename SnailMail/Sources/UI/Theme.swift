@@ -169,7 +169,7 @@ struct ArcadeLabel: View {
         HStack(spacing: 10) {
             if let icon { Text(icon).font(.system(size: 18, weight: .black)) }
             Text(title)
-                .font(.system(size: 22, weight: .heavy, design: .rounded))
+                .font(.retail(22, weight: .heavy))
                 .tracking(1)
         }
         .frame(maxWidth: .infinity, minHeight: 56)
@@ -275,7 +275,7 @@ struct StatLabel: View {
 
     var body: some View {
         Text(text.uppercased())
-            .font(.system(size: 11, weight: .heavy, design: .rounded))
+            .font(.retail(11, weight: .heavy))
             .tracking(1.5)
             .foregroundStyle(color)
     }

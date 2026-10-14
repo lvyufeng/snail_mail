@@ -30,13 +30,13 @@ struct ResultOverlay: View {
                 VStack(spacing: 18) {
                     VStack(spacing: 4) {
                         Text(headline)
-                            .font(.system(size: 30, weight: .black, design: .rounded))
+                            .font(.retail(30, weight: .black))
                             .foregroundStyle(won ? Palette.good : Palette.danger)
                             .multilineTextAlignment(.center)
                             .shadow(color: (won ? Palette.good : Palette.danger).opacity(0.6), radius: 10)
                         if let subline {
                             Text(subline)
-                                .font(.system(size: 14, weight: .heavy, design: .rounded))
+                                .font(.retail(14, weight: .heavy))
                                 .tracking(0.5)
                                 .foregroundStyle(Palette.gold)
                                 .multilineTextAlignment(.center)
@@ -61,7 +61,7 @@ struct ResultOverlay: View {
 
                         // "NN Packages Delivered", singular for a lone package.
                         Text("\(state.delivered) \(state.delivered == 1 ? "Package" : "Packages") Delivered")
-                            .font(.system(size: 15, weight: .heavy, design: .rounded))
+                            .font(.retail(15, weight: .heavy))
                             .foregroundStyle(Palette.ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         StatRow(label: "Score Stats", value: "\(state.score)")
@@ -80,8 +80,8 @@ struct ResultOverlay: View {
                             submitted = true
                         }
                     } else if let place, let board {
-                        Text("\(board.title) — #\(place)")
-                            .font(.system(size: 13, weight: .heavy, design: .rounded))
+                        Text("\(board.title) #\(place)")
+                            .font(.retail(13, weight: .heavy))
                             .foregroundStyle(Palette.gold)
                     }
 
@@ -134,13 +134,13 @@ private struct NameEntry: View {
     var body: some View {
         VStack(spacing: 10) {
             Text("\(board.title)!")
-                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                .font(.retail(13, weight: .heavy))
                 .foregroundStyle(Palette.gold)
             TextField("Enter your name here!", text: $name)
                 .textInputAutocapitalization(.characters)
                 .autocorrectionDisabled()
                 .multilineTextAlignment(.center)
-                .font(.system(size: 16, weight: .heavy, design: .rounded))
+                .font(.retail(16, weight: .heavy))
                 .foregroundStyle(.white)
                 .padding(.vertical, 8)
                 .padding(.horizontal, 12)
@@ -176,7 +176,7 @@ private struct StatRow: View {
             StatLabel(text: label)
             Spacer(minLength: 40)
             Text(value)
-                .font(.system(size: 17, weight: .heavy, design: .rounded))
+                .font(.retail(17, weight: .heavy))
                 .foregroundStyle(Palette.ink)
         }
     }

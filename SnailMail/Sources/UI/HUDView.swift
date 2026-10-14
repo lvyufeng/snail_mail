@@ -51,8 +51,8 @@ struct HUDView: View {
 
                 if state.phase == .ready {
                     VStack(spacing: 12) {
-                        Text("DRAG to steer · HOLD to fire")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        Text("DRAG to steer * HOLD to fire")
+                            .font(.retail(13, weight: .semibold))
                             .foregroundStyle(Palette.ink.opacity(0.85))
                         Button(action: onPrimary) {
                             ArcadeLabel(title: "TAP TO START", tint: Palette.cyan)
@@ -65,7 +65,7 @@ struct HUDView: View {
 
                 if state.phase == .paused {
                     Text("PAUSED")
-                        .font(.system(size: 34, weight: .heavy, design: .rounded))
+                        .font(.retail(34, weight: .heavy))
                         .tracking(6)
                         .foregroundStyle(Palette.ink)
                         .shadow(color: Palette.cyan.opacity(0.7), radius: 12)
@@ -354,7 +354,7 @@ private struct ParcelGauges: View {
             .frame(width: w, height: h)
 
             Text("\(label):\(Int((clamped * 100).rounded()))%")
-                .font(.system(size: max(10, 18 * scale), weight: .heavy, design: .rounded))
+                .font(.retail(max(10, 18 * scale), weight: .heavy))
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.85), radius: 2)
                 .frame(width: w, height: h)
@@ -385,18 +385,18 @@ private struct ParcelCounter: View {
 
             VStack(alignment: .leading, spacing: 2 * scale) {
                 Text(state.quota > 0 ? "\(state.parcels)/\(state.quota)" : "\(state.parcels)")
-                    .font(.system(size: valueFont, weight: .heavy, design: .rounded))
+                    .font(.retail(valueFont, weight: .heavy))
                     .foregroundStyle(Palette.gold)
                     .shadow(color: .black.opacity(0.7), radius: 2)
 
                 Text(state.weaponName)
-                    .font(.system(size: labelFont, weight: .black, design: .rounded))
+                    .font(.retail(labelFont, weight: .black))
                     .tracking(1)
                     .foregroundStyle(Palette.cyan)
                     .shadow(color: .black.opacity(0.7), radius: 2)
 
                 Text(mode.title)
-                    .font(.system(size: labelFont - 1, weight: .bold, design: .rounded))
+                    .font(.retail(labelFont - 1, weight: .bold))
                     .foregroundStyle(Palette.ink.opacity(0.75))
             }
             .padding(.top, 4 * scale)
@@ -426,7 +426,7 @@ private struct LifeCounter: View {
             .frame(width: 32 * scale, height: 19 * scale)
 
             Text(String(format: "%.1fs", state.elapsed))
-                .font(.system(size: 13, weight: .bold, design: .monospaced))
+                .font(.retail(13, weight: .bold))
                 .foregroundStyle(Palette.ink.opacity(0.85))
                 .shadow(color: .black.opacity(0.7), radius: 2)
         }
@@ -487,7 +487,7 @@ private struct TutorialBanner: View {
                         switch token {
                         case .words(let s):
                             Text(s)
-                                .font(.system(size: fontSize, weight: .bold, design: .rounded))
+                                .font(.retail(fontSize, weight: .bold))
                                 .foregroundStyle(Palette.ink)
                         case .icon(let ch):
                             icon(ch)
@@ -514,7 +514,7 @@ private struct TutorialBanner: View {
                 .baselineOffset(-2)
         } else if let entry = TutorialBanner.icons[ch] {
             Text(entry.word)
-                .font(.system(size: fontSize, weight: .bold, design: .rounded))
+                .font(.retail(fontSize, weight: .bold))
                 .foregroundStyle(Palette.ink)
         }
     }
