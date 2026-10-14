@@ -152,6 +152,14 @@ final class GameScene: SKScene {
     private let fxLayer = SKNode()
     private var snail = SKNode()
     private var starLayers: [SKNode] = []
+    /// The retail backdrop: the strip of tiles that slides past the camera,
+    /// how tall one of them is, how fast the level asks it to travel and how
+    /// far along the scroll has got. `update` carries it, so the sky moves on
+    /// the race's own clock.
+    private var skyTiles: SKNode?
+    private var skyTileHeight: CGFloat = 0
+    private var skyScrollSpeed: CGFloat = 0
+    private var skyScroll: CGFloat = 0
     private var fogNode = SKNode()
 
     private var roadPool: [SKShapeNode] = []      // tan cells (procedural fallback)
@@ -330,6 +338,10 @@ final class GameScene: SKScene {
     private func buildBackground() {
         guard size.width > 0, size.height > 0 else { return }
         childNode(withName: "sky")?.removeFromParent()
+        skyTiles = nil
+        skyTileHeight = 0
+        skyScrollSpeed = 0
+        skyScroll = 0
         let sky = SKNode()
         sky.name = "sky"
         sky.zPosition = -100
@@ -446,11 +458,9 @@ final class GameScene: SKScene {
         // Distort runs 0 (still) up to 20 (the purple nebula). Scale it into a
         // comfortable scroll: the fastest sky crosses one tile in a few seconds.
         let distort = RetailAssets.backgroundDistort(config.background)
-        if distort > 0 {
-            let duration = TimeInterval(max(1.6, tileH / (distort * 12)))
-            let down = SKAction.moveBy(x: 0, y: -tileH, duration: duration)
-            list.run(.repeatForever(.sequence([down, .moveBy(x: 0, y: tileH, duration: 0)])))
-        }
+        skyTiles = list
+        skyTileHeight = tileH
+        skyScrollSpeed = distort > 0 ? tileH / max(1.6, tileH / (distort * 12)) : 0
     }
 
     private func preparePools() {
@@ -615,6 +625,7 @@ final class GameScene: SKScene {
         let fdt = CGFloat(dt)
 
         scrollStars(fdt: fdt)
+        scrollSky(fdt: fdt)
         // Turbo's animation rides the same clock, but a paused race holds its
         // pose; a finished one keeps playing so a loss can fall into its shell.
         frameDelta = state.phase == .paused ? 0 : fdt
@@ -721,6 +732,21 @@ final class GameScene: SKScene {
                 }
             }
         }
+    }
+
+    /// Carry the retail backdrop past the camera at the rate its level script
+    /// asks for. The tiles wrap rather than travel, so the strip only ever
+    /// shows one tile's worth of offset and the sky can scroll forever.
+    ///
+    /// Driven here rather than by an `SKAction`, which would run on the view's
+    /// own clock: the original's sky is part of the world, so it has to hold
+    /// still while a paused race does, and a frozen capture has to land on the
+    /// same offset twice.
+    private func scrollSky(fdt: CGFloat) {
+        guard let tiles = skyTiles, skyTileHeight > 0, skyScrollSpeed > 0 else { return }
+        skyScroll += skyScrollSpeed * fdt
+        if skyScroll >= skyTileHeight { skyScroll -= skyTileHeight }
+        tiles.position.y = -skyScroll
     }
 
     // MARK: - Shooting & collisions
