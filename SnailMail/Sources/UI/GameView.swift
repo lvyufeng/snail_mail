@@ -56,10 +56,8 @@ struct GameView: View {
 
     /// The name the results screen files a high score under.
     private var levelName: String {
-        guard mode == .arcade,
-              let star = LevelCatalog.arcade.first(where: { $0.id == level })
-        else { return mode.title }
-        return star.name
+        guard mode == .arcade else { return mode.title }
+        return LevelCatalog.star(level).name
     }
 }
 

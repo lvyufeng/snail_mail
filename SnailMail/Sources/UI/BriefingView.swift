@@ -14,18 +14,16 @@ struct BriefingView: View {
     private var levelName: String {
         switch mode {
         case .arcade:
-            let star = LevelCatalog.arcade[max(0, min(level, LevelCatalog.arcade.count - 1))]
-            return star.name
+            return LevelCatalog.star(level).name
         default:
             return mode.title
         }
     }
 
     private var galaxyName: String? {
-        guard mode == .arcade,
-              let star = LevelCatalog.arcade.first(where: { $0.id == level }),
-              star.galaxy < LevelCatalog.galaxies.count
-        else { return nil }
+        guard mode == .arcade else { return nil }
+        let star = LevelCatalog.star(level)
+        guard star.galaxy < LevelCatalog.galaxies.count else { return nil }
         return "GALAXY \(star.galaxy + 1) · \(LevelCatalog.galaxies[star.galaxy])"
     }
 

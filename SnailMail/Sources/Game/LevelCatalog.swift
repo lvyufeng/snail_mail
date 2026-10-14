@@ -6,7 +6,8 @@ import simd
 /// per-level scripts). Every field is the value the 2005 build shipped with,
 /// so the remake stops guessing its per-level tuning from the mode alone.
 struct ArcadeLevel: Identifiable {
-    let id: Int             // 0-based star index, matches the original Arcade%03i.txt
+    let id: Int             // 0-based star index on the galaxy map (0...49)
+    let source: Int         // the file it plays: the original's Arcade%03i.txt (1...50)
     let galaxy: Int         // 0...9
     let star: Int           // 0...4 within the galaxy
     let name: String        // the level's own title
@@ -42,57 +43,56 @@ enum LevelCatalog {
     ]
 
     static let arcade: [ArcadeLevel] = [
-        ArcadeLevel(id: 0, galaxy: 0, star: 0, name: "Test", speed: 40, salt: 10, trash: 0, slug: 65, parcels: 5, quota: 1, route: 500, background: "SpacePurple", fringe: SIMD3(128, 24, 200)),
-        ArcadeLevel(id: 1, galaxy: 0, star: 1, name: "Snail Mail 101", speed: 20, salt: 10, trash: 10, slug: 0, parcels: 15, quota: 0, route: 500, background: "SpacePurple", fringe: SIMD3(128, 24, 200)),
-        ArcadeLevel(id: 2, galaxy: 0, star: 2, name: "Jump Pod", speed: 20, salt: 10, trash: 10, slug: 0, parcels: 20, quota: 1, route: 500, background: "SpacePurple", fringe: SIMD3(128, 24, 200)),
-        ArcadeLevel(id: 3, galaxy: 0, star: 3, name: "Loopy", speed: 20, salt: 10, trash: 0, slug: 10, parcels: 25, quota: 1, route: 500, background: "SpacePurple", fringe: SIMD3(128, 24, 200)),
-        ArcadeLevel(id: 4, galaxy: 0, star: 4, name: "Jumper!", speed: 20, salt: 10, trash: 15, slug: 0, parcels: 15, quota: 1, route: 500, background: "SpacePurple", fringe: SIMD3(128, 24, 200)),
-        ArcadeLevel(id: 5, galaxy: 1, star: 0, name: "Hills and Valleys", speed: 20, salt: 10, trash: 10, slug: 0, parcels: 20, quota: 0, route: 500, background: "SpacePurple", fringe: SIMD3(128, 24, 200)),
-        ArcadeLevel(id: 6, galaxy: 1, star: 1, name: "Keep Still!", speed: 25, salt: 10, trash: 10, slug: 0, parcels: 20, quota: 1, route: 500, background: "SpaceBlue", fringe: SIMD3(128, 24, 200)),
-        ArcadeLevel(id: 7, galaxy: 1, star: 2, name: "To Infinity!", speed: 25, salt: 10, trash: 10, slug: 0, parcels: 15, quota: 0, route: 500, background: "SpaceBlue", fringe: SIMD3(128, 24, 200)),
-        ArcadeLevel(id: 8, galaxy: 1, star: 3, name: "Zigzag Away!", speed: 25, salt: 10, trash: 10, slug: 0, parcels: 20, quota: 0, route: 500, background: "SpaceBlue", fringe: SIMD3(128, 24, 200)),
-        ArcadeLevel(id: 9, galaxy: 1, star: 4, name: "Slugfest!", speed: 25, salt: 10, trash: 10, slug: 0, parcels: 20, quota: 0, route: 500, background: "SpaceBlue", fringe: SIMD3(128, 24, 200)),
-        ArcadeLevel(id: 10, galaxy: 2, star: 0, name: "Turrets", speed: 25, salt: 10, trash: 20, slug: 0, parcels: 25, quota: 0, route: 1000, background: "SpaceBlue", fringe: SIMD3(128, 24, 200)),
-        ArcadeLevel(id: 11, galaxy: 2, star: 1, name: "30 Gph!", speed: 30, salt: 10, trash: 20, slug: 0, parcels: 45, quota: 25, route: 1000, background: "SpaceRed", fringe: SIMD3(128, 24, 200)),
-        ArcadeLevel(id: 12, galaxy: 2, star: 2, name: "Slug Attack!", speed: 30, salt: 10, trash: 30, slug: 0, parcels: 35, quota: 20, route: 200, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 13, galaxy: 2, star: 3, name: "Loopsville", speed: 30, salt: 10, trash: 30, slug: 0, parcels: 40, quota: 20, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 14, galaxy: 2, star: 4, name: "Jump Junction", speed: 30, salt: 10, trash: 30, slug: 0, parcels: 35, quota: 20, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 15, galaxy: 3, star: 0, name: "Curvature", speed: 30, salt: 10, trash: 30, slug: 0, parcels: 35, quota: 20, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 16, galaxy: 3, star: 1, name: "Flying Slugs", speed: 35, salt: 10, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 17, galaxy: 3, star: 2, name: "Sodium Chloride", speed: 30, salt: 70, trash: 30, slug: 0, parcels: 35, quota: 10, route: 500, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 18, galaxy: 3, star: 3, name: "Distorted Route", speed: 35, salt: 20, trash: 30, slug: 0, parcels: 40, quota: 10, route: 500, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 19, galaxy: 3, star: 4, name: "Slug Half Pipe", speed: 35, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 20, galaxy: 4, star: 0, name: "40 Gph", speed: 40, salt: 20, trash: 30, slug: 0, parcels: 40, quota: 10, route: 500, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 21, galaxy: 4, star: 1, name: "Return of the Slugs!", speed: 40, salt: 20, trash: 30, slug: 0, parcels: 40, quota: 0, route: 500, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 22, galaxy: 4, star: 2, name: "Twisters", speed: 40, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 23, galaxy: 4, star: 3, name: "Sideways Snail", speed: 40, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 24, galaxy: 4, star: 4, name: "Zero G", speed: 40, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 25, galaxy: 5, star: 0, name: "Under Construction", speed: 45, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 26, galaxy: 5, star: 1, name: "Barricades", speed: 45, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 27, galaxy: 5, star: 2, name: "Tramponus", speed: 45, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 28, galaxy: 5, star: 3, name: "Twisterific", speed: 45, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 29, galaxy: 5, star: 4, name: "Slug Invasion!", speed: 45, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 30, galaxy: 6, star: 0, name: "Danger Ramps!", speed: 50, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 31, galaxy: 6, star: 1, name: "Skinny route", speed: 50, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 32, galaxy: 6, star: 2, name: "Poorly Funded", speed: 55, salt: 20, trash: 60, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 33, galaxy: 6, star: 3, name: "Path Bends", speed: 50, salt: 20, trash: 20, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 34, galaxy: 6, star: 4, name: "Rocket Snail", speed: 50, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 35, galaxy: 7, star: 0, name: "Turret Blockers", speed: 50, salt: 20, trash: 60, slug: 0, parcels: 30, quota: 5, route: 600, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 36, galaxy: 7, star: 1, name: "Explosive", speed: 50, salt: 20, trash: 60, slug: 0, parcels: 30, quota: 5, route: 600, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 37, galaxy: 7, star: 2, name: "Jump Over!", speed: 50, salt: 20, trash: 60, slug: 0, parcels: 30, quota: 5, route: 600, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 38, galaxy: 7, star: 3, name: "Airborne Snail", speed: 50, salt: 20, trash: 40, slug: 0, parcels: 30, quota: 5, route: 600, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 39, galaxy: 7, star: 4, name: "Sodium Squared", speed: 50, salt: 100, trash: 20, slug: 0, parcels: 30, quota: 5, route: 600, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 40, galaxy: 8, star: 0, name: "Asteroids", speed: 55, salt: 20, trash: 100, slug: 0, parcels: 50, quota: 1, route: 500, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 41, galaxy: 8, star: 1, name: "Corkscrews!", speed: 30, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 42, galaxy: 8, star: 2, name: "60 Gph!", speed: 60, salt: 20, trash: 60, slug: 0, parcels: 30, quota: 5, route: 600, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 43, galaxy: 8, star: 3, name: "Air Mail!", speed: 60, salt: 20, trash: 60, slug: 0, parcels: 20, quota: 5, route: 600, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 44, galaxy: 8, star: 4, name: "Mactabilis", speed: 60, salt: 20, trash: 60, slug: 0, parcels: 30, quota: 5, route: 500, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 45, galaxy: 9, star: 0, name: "Snail Captain!", speed: 60, salt: 20, trash: 60, slug: 0, parcels: 50, quota: 5, route: 600, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 46, galaxy: 9, star: 1, name: "70 Gph!", speed: 70, salt: 20, trash: 60, slug: 0, parcels: 45, quota: 5, route: 600, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 47, galaxy: 9, star: 2, name: "Tramponus Durus", speed: 70, salt: 30, trash: 60, slug: 0, parcels: 40, quota: 5, route: 600, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 48, galaxy: 9, star: 3, name: "80 Gph!", speed: 80, salt: 20, trash: 30, slug: 0, parcels: 40, quota: 5, route: 600, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 49, galaxy: 9, star: 4, name: "90 Gph!", speed: 90, salt: 20, trash: 30, slug: 0, parcels: 40, quota: 5, route: 600, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
-        ArcadeLevel(id: 50, galaxy: 10, star: 0, name: "100 Gph!", speed: 100, salt: 30, trash: 30, slug: 0, parcels: 40, quota: 5, route: 600, background: "SpaceBlue", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 0, source: 1, galaxy: 0, star: 0, name: "Snail Mail 101", speed: 20, salt: 10, trash: 10, slug: 0, parcels: 15, quota: 0, route: 500, background: "SpacePurple", fringe: SIMD3(128, 24, 200)),
+        ArcadeLevel(id: 1, source: 2, galaxy: 0, star: 1, name: "Jump Pod", speed: 20, salt: 10, trash: 10, slug: 0, parcels: 20, quota: 1, route: 500, background: "SpacePurple", fringe: SIMD3(128, 24, 200)),
+        ArcadeLevel(id: 2, source: 3, galaxy: 0, star: 2, name: "Loopy", speed: 20, salt: 10, trash: 0, slug: 10, parcels: 25, quota: 1, route: 500, background: "SpacePurple", fringe: SIMD3(128, 24, 200)),
+        ArcadeLevel(id: 3, source: 4, galaxy: 0, star: 3, name: "Jumper!", speed: 20, salt: 10, trash: 15, slug: 0, parcels: 15, quota: 1, route: 500, background: "SpacePurple", fringe: SIMD3(128, 24, 200)),
+        ArcadeLevel(id: 4, source: 5, galaxy: 0, star: 4, name: "Hills and Valleys", speed: 20, salt: 10, trash: 10, slug: 0, parcels: 20, quota: 0, route: 500, background: "SpacePurple", fringe: SIMD3(128, 24, 200)),
+        ArcadeLevel(id: 5, source: 6, galaxy: 1, star: 0, name: "Keep Still!", speed: 25, salt: 10, trash: 10, slug: 0, parcels: 20, quota: 1, route: 500, background: "SpaceBlueswhorl", fringe: SIMD3(128, 24, 200)),
+        ArcadeLevel(id: 6, source: 7, galaxy: 1, star: 1, name: "To Infinity!", speed: 25, salt: 10, trash: 10, slug: 0, parcels: 15, quota: 0, route: 500, background: "SpaceBlueswhorl", fringe: SIMD3(128, 24, 200)),
+        ArcadeLevel(id: 7, source: 8, galaxy: 1, star: 2, name: "Zigzag Away!", speed: 25, salt: 10, trash: 10, slug: 0, parcels: 20, quota: 0, route: 500, background: "SpaceBlueswhorl", fringe: SIMD3(128, 24, 200)),
+        ArcadeLevel(id: 8, source: 9, galaxy: 1, star: 3, name: "Slugfest!", speed: 25, salt: 10, trash: 10, slug: 0, parcels: 20, quota: 0, route: 500, background: "SpaceBlueswhorl", fringe: SIMD3(128, 24, 200)),
+        ArcadeLevel(id: 9, source: 10, galaxy: 1, star: 4, name: "Turrets", speed: 25, salt: 10, trash: 20, slug: 0, parcels: 25, quota: 0, route: 1000, background: "SpaceBlueswhorl", fringe: SIMD3(128, 24, 200)),
+        ArcadeLevel(id: 10, source: 11, galaxy: 2, star: 0, name: "30 Gph!", speed: 30, salt: 10, trash: 20, slug: 0, parcels: 45, quota: 25, route: 1000, background: "SpaceRed", fringe: SIMD3(128, 24, 200)),
+        ArcadeLevel(id: 11, source: 12, galaxy: 2, star: 1, name: "Slug Attack!", speed: 30, salt: 10, trash: 30, slug: 0, parcels: 35, quota: 20, route: 200, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 12, source: 13, galaxy: 2, star: 2, name: "Loopsville", speed: 30, salt: 10, trash: 30, slug: 0, parcels: 40, quota: 20, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 13, source: 14, galaxy: 2, star: 3, name: "Jump Junction", speed: 30, salt: 10, trash: 30, slug: 0, parcels: 35, quota: 20, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 14, source: 15, galaxy: 2, star: 4, name: "Curvature", speed: 30, salt: 10, trash: 30, slug: 0, parcels: 35, quota: 20, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 15, source: 16, galaxy: 3, star: 0, name: "Flying Slugs", speed: 35, salt: 10, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceGreenwarp", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 16, source: 17, galaxy: 3, star: 1, name: "Sodium Chloride", speed: 30, salt: 70, trash: 30, slug: 0, parcels: 35, quota: 10, route: 500, background: "SpaceGreenwarp", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 17, source: 18, galaxy: 3, star: 2, name: "Distorted Route", speed: 35, salt: 20, trash: 30, slug: 0, parcels: 40, quota: 10, route: 500, background: "SpaceGreenwarp", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 18, source: 19, galaxy: 3, star: 3, name: "Slug Half Pipe", speed: 35, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceGreenwarp", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 19, source: 20, galaxy: 3, star: 4, name: "40 Gph", speed: 40, salt: 20, trash: 30, slug: 0, parcels: 40, quota: 10, route: 500, background: "SpaceGreenwarp", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 20, source: 21, galaxy: 4, star: 0, name: "Return of the Slugs!", speed: 40, salt: 20, trash: 30, slug: 0, parcels: 40, quota: 0, route: 500, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 21, source: 22, galaxy: 4, star: 1, name: "Twisters", speed: 40, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 22, source: 23, galaxy: 4, star: 2, name: "Sideways Snail", speed: 40, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 23, source: 24, galaxy: 4, star: 3, name: "Zero G", speed: 40, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 24, source: 25, galaxy: 4, star: 4, name: "Under Construction", speed: 45, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 25, source: 26, galaxy: 5, star: 0, name: "Barricades", speed: 45, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 26, source: 27, galaxy: 5, star: 1, name: "Tramponus", speed: 45, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 27, source: 28, galaxy: 5, star: 2, name: "Twisterific", speed: 45, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 28, source: 29, galaxy: 5, star: 3, name: "Slug Invasion!", speed: 45, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 29, source: 30, galaxy: 5, star: 4, name: "Danger Ramps!", speed: 50, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceRed", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 30, source: 31, galaxy: 6, star: 0, name: "Skinny route", speed: 50, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 31, source: 32, galaxy: 6, star: 1, name: "Poorly Funded", speed: 55, salt: 20, trash: 60, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 32, source: 33, galaxy: 6, star: 2, name: "Path Bends", speed: 50, salt: 20, trash: 20, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 33, source: 34, galaxy: 6, star: 3, name: "Rocket Snail", speed: 50, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 34, source: 35, galaxy: 6, star: 4, name: "Turret Blockers", speed: 50, salt: 20, trash: 60, slug: 0, parcels: 30, quota: 5, route: 600, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 35, source: 36, galaxy: 7, star: 0, name: "Explosive", speed: 50, salt: 20, trash: 60, slug: 0, parcels: 30, quota: 5, route: 600, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 36, source: 37, galaxy: 7, star: 1, name: "Jump Over!", speed: 50, salt: 20, trash: 60, slug: 0, parcels: 30, quota: 5, route: 600, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 37, source: 38, galaxy: 7, star: 2, name: "Airborne Snail", speed: 50, salt: 20, trash: 40, slug: 0, parcels: 30, quota: 5, route: 600, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 38, source: 39, galaxy: 7, star: 3, name: "Sodium Squared", speed: 50, salt: 100, trash: 20, slug: 0, parcels: 30, quota: 5, route: 600, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 39, source: 40, galaxy: 7, star: 4, name: "Asteroids", speed: 55, salt: 20, trash: 100, slug: 0, parcels: 50, quota: 1, route: 500, background: "SpacePurple", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 40, source: 41, galaxy: 8, star: 0, name: "Corkscrews!", speed: 30, salt: 20, trash: 30, slug: 0, parcels: 30, quota: 10, route: 500, background: "SpaceGreenwarp", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 41, source: 42, galaxy: 8, star: 1, name: "60 Gph!", speed: 60, salt: 20, trash: 60, slug: 0, parcels: 30, quota: 5, route: 600, background: "SpaceGreenwarp", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 42, source: 43, galaxy: 8, star: 2, name: "Air Mail!", speed: 60, salt: 20, trash: 60, slug: 0, parcels: 20, quota: 5, route: 600, background: "SpaceGreenwarp", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 43, source: 44, galaxy: 8, star: 3, name: "Mactabilis", speed: 60, salt: 20, trash: 60, slug: 0, parcels: 30, quota: 5, route: 500, background: "SpaceGreenwarp", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 44, source: 45, galaxy: 8, star: 4, name: "Snail Captain!", speed: 60, salt: 20, trash: 60, slug: 0, parcels: 50, quota: 5, route: 600, background: "SpaceGreenwarp", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 45, source: 46, galaxy: 9, star: 0, name: "70 Gph!", speed: 70, salt: 20, trash: 60, slug: 0, parcels: 45, quota: 5, route: 600, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 46, source: 47, galaxy: 9, star: 1, name: "Tramponus Durus", speed: 70, salt: 30, trash: 60, slug: 0, parcels: 40, quota: 5, route: 600, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 47, source: 48, galaxy: 9, star: 2, name: "80 Gph!", speed: 80, salt: 20, trash: 30, slug: 0, parcels: 40, quota: 5, route: 600, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 48, source: 49, galaxy: 9, star: 3, name: "90 Gph!", speed: 90, salt: 20, trash: 30, slug: 0, parcels: 40, quota: 5, route: 600, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
+        ArcadeLevel(id: 49, source: 50, galaxy: 9, star: 4, name: "100 Gph!", speed: 100, salt: 30, trash: 30, slug: 0, parcels: 40, quota: 5, route: 600, background: "SpaceBlueswhorl", fringe: SIMD3(222, 255, 10)),
     ]
 
     /// Real challenge-mode tuning from the shipped `Challenge000.txt`: a random
@@ -109,14 +109,21 @@ enum LevelCatalog {
     /// The `GalaxyText:` briefing a run shows before it starts — the snail's log
     /// entry or an IPS notice, straight from the level file (`TrackData.briefing`).
     /// The free modes the retail build invented for its menu carry none.
-    /// The stars the map actually shows: the original ships a 51st arcade level
-    /// (`Arcade050.txt`) that no galaxy lists, so it never appears on the map.
-    static var reachableStars: Int { arcade.filter { $0.galaxy < galaxies.count }.count }
+    /// The map's fifty stars, ten galaxies of five, played in file order:
+    /// `Arcade001.txt` ('Snail Mail 101') through `Arcade050.txt` ('100 Gph!').
+    /// `Arcade000.txt` sits outside them — it is the developer's `'Test'` level,
+    /// the only arcade script with no `Track:` line, so the map never shows it.
+    static var reachableStars: Int { arcade.count }
+
+    /// The campaign star a level index plays, clamped to the map.
+    static func star(_ level: Int) -> ArcadeLevel {
+        arcade[max(0, min(level, arcade.count - 1))]
+    }
 
     static func briefing(mode: GameMode, level: Int) -> String? {
         let key: String
         switch mode {
-        case .arcade: key = "arcade\(level)"
+        case .arcade: key = "arcade\(star(level).source)"
         case .tutorial: key = "tutorial"
         case .challenge: key = "challenge"
         case .speedRun: return nil

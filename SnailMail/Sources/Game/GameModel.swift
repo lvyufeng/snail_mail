@@ -239,7 +239,7 @@ struct LevelConfig {
             // each star plays with its own speed, hazards, parcel count and
             // route. The start screen's `Select Speed` / `Select Difficulty`
             // knobs scale the level's own numbers the way the original's did.
-            let star = LevelCatalog.arcade[max(0, min(level, LevelCatalog.arcade.count - 1))]
+            let star = LevelCatalog.star(level)
             let tuning = GameSettings.shared
             return LevelConfig(
                 name: star.name,
@@ -406,7 +406,7 @@ enum TrackBuilder {
     static func build(_ config: LevelConfig, mode: GameMode, level: Int) -> [RoadSegment] {
         let routeKey: String?
         switch mode {
-        case .arcade:    routeKey = "arcade\(level)"
+        case .arcade:    routeKey = "arcade\(LevelCatalog.star(level).source)"
         case .tutorial:  routeKey = "tutorial"
         case .challenge: routeKey = "challenge"
         default:         routeKey = nil
