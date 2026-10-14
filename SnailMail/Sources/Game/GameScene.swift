@@ -590,6 +590,30 @@ final class GameScene: SKScene {
         }
     }
 
+    /// The blast of a yellow ring: every enemy in the stretch of road around
+    /// the snail is destroyed and scores as garbage, matching the tutorial's
+    /// "Yellow Rings blow up my enemies".
+    @discardableResult
+    private func detonateBlast() -> Int {
+        guard !segments.isEmpty else { return 0 }
+        let base = segmentIndex(at: positionZ + playerZ)
+        var cleared = 0
+        for d in 0...3 {
+            let seg = segments[((base + d) % segments.count + segments.count) % segments.count]
+            let victims = seg.sprites.filter { $0.kind == .enemy }
+            guard !victims.isEmpty else { continue }
+            for v in victims {
+                seg.sprites.removeAll { $0.kind == .enemy && $0.offset == v.offset }
+                cleared += 1
+            }
+        }
+        if cleared > 0 {
+            state.sheet.garbage += 200 * cleared
+            spawnBurst(at: playerPoint())
+        }
+        return cleared
+    }
+
     private func handleCollisions() {
         let playerSegIndex = segmentIndex(at: positionZ + playerZ)
         let window = [playerSegIndex - 1, playerSegIndex, playerSegIndex + 1, playerSegIndex + 2]
@@ -621,12 +645,19 @@ final class GameScene: SKScene {
                         state.weaponLevel += 1
                         Sound.shared.play(.upgrade)
                     } else {
-                        // Already at rockets; a spare ring pays out in points.
+                        // Already at rockets. The original promises that once
+                        // you have grabbed enough rings "I will become
+                        // invincible", so a ring past the top of the ladder
+                        // buys a spell of invulnerability and a bonus.
+                        invincibleUntil = max(invincibleUntil, elapsed + 4)
                         state.sheet.bonus += 200
-                        Sound.shared.play(.collect)
+                        Sound.shared.play(.upgrade)
                     }
                     toRemove.append((seg, spec))
                 case .ringExplode:
+                    // The yellow ring reaches out and pops every enemy around
+                    // it, exactly as the tutorial describes.
+                    detonateBlast()
                     state.sheet.ring += 200
                     toRemove.append((seg, spec))
                 case .ringSlow:
@@ -643,6 +674,12 @@ final class GameScene: SKScene {
                     damage(12, seg: seg)
                     toRemove.append((seg, spec))
                 case .enemy:
+                    guard elapsed >= invincibleUntil else {
+                        // Invincible: plough straight through the pest.
+                        state.sheet.garbage += 200
+                        toRemove.append((seg, spec))
+                        continue
+                    }
                     // The highway pest shoves the snail toward the edge of the
                     // road as well as denting the meter.
                     damage(14, seg: seg)
