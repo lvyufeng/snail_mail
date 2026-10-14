@@ -95,12 +95,17 @@ enum Sprites {
     }
 
     /// The heavy rock billboards the retail build scatters across the highway.
-    /// Four meshes ship, so pick one at random per rock to keep a field of them
-    /// from looking stamped.
-    private static func garbagePath() -> String {
+    /// Four faces ship, and a rock wears the one its pool slot was given, so a
+    /// field of them still reads as a field rather than as one stamp. The face
+    /// comes from the scene's own seeded stream rather than a system draw,
+    /// which would repaint every rock of a course between one run and the next.
+    private static func garbagePath(_ face: Int) -> String {
         let faces = ["a", "b", "c", "d"]
-        return "Art/Sprites/garbage\(faces.randomElement() ?? "a").png"
+        return "Art/Sprites/garbage\(faces[face & 3]).png"
     }
+
+    /// How many faces a rock is drawn from.
+    static let rockFaces = 4
 
     // MARK: - Turbo the snail (seen from behind as it races away)
 
@@ -299,8 +304,9 @@ enum Sprites {
 
     // MARK: - Entities
 
-    static func makeEntity(_ kind: EntityKind, fringe: UIColor, tier: Int = 0) -> SKNode {
-        let body = makeEntityBody(kind, fringe: fringe, tier: tier)
+    static func makeEntity(_ kind: EntityKind, fringe: UIColor, tier: Int = 0,
+                           face: Int = 0) -> SKNode {
+        let body = makeEntityBody(kind, fringe: fringe, tier: tier, face: face)
         guard groundKinds.contains(kind) else { return body }
         // A soft contact shadow so road objects read as sitting on the track
         // instead of floating. It scales with the sprite, so it stays correct
@@ -329,8 +335,9 @@ enum Sprites {
         .barrier, .enemy, .ramp, .trampoline, .jetpack
     ]
 
-    private static func makeEntityBody(_ kind: EntityKind, fringe: UIColor, tier: Int) -> SKNode {
-        if let retail = makeRetailEntity(kind, tier: tier) { return retail }
+    private static func makeEntityBody(_ kind: EntityKind, fringe: UIColor, tier: Int,
+                                       face: Int) -> SKNode {
+        if let retail = makeRetailEntity(kind, tier: tier, face: face) { return retail }
         switch kind {
         case .parcel:      return makeParcel()
         case .salt:        return makeSalt()
@@ -368,7 +375,7 @@ enum Sprites {
     /// rasterises each model to its own projected bounds, which makes the lift
     /// `0.5 + pmin / span` of the model's projected bottom `pmin` and height
     /// `span`; the values below are that fraction for each mesh.
-    private static func makeRetailEntity(_ kind: EntityKind, tier: Int) -> SKNode? {
+    private static func makeRetailEntity(_ kind: EntityKind, tier: Int, face: Int) -> SKNode? {
         let w = entityBaseWidth(kind)
         switch kind {
         case .parcel:
@@ -379,9 +386,9 @@ enum Sprites {
         case .heart:
             return retail("Art/Sprites/health.png", width: w)
         case .asteroid:
-            return retail(garbagePath(), width: w)
+            return retail(garbagePath(face), width: w)
         case .enemy:
-            return retail(garbagePath(), width: w)
+            return retail(garbagePath(face), width: w)
         case .slug:
             return retail("Art/Sprites/slug000.png", width: w)
         case .turret:

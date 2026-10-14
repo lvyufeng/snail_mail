@@ -81,12 +81,20 @@ struct CourseRandom: RandomNumberGenerator {
     /// The stream a fresh scene draws from: `-seed N` when the launch arguments
     /// pin one, and a system draw otherwise.
     static func launched() -> CourseRandom {
+        CourseRandom(seed: launchedSeed())
+    }
+
+    /// The seed `launched()` opens that stream with. A scene that draws
+    /// something more than once — the backdrop is rebuilt on every resize —
+    /// keeps this and opens a fresh stream from it, so the second pass lands
+    /// exactly where the first one did.
+    static func launchedSeed() -> UInt64 {
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "-seed"), i + 1 < args.count,
            let seed = UInt64(args[i + 1]) {
-            return CourseRandom(seed: seed)
+            return seed
         }
-        return CourseRandom(seed: UInt64.random(in: .min ... .max))
+        return UInt64.random(in: .min ... .max)
     }
 }
 

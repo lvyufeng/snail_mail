@@ -106,6 +106,11 @@ final class GameScene: SKScene {
     /// stops the clock after N frames so two captures of a running race show
     /// the same instant of the same course.
     private var sceneRandom = CourseRandom.launched()
+    /// The seed the backdrop is laid out from. `didChangeSize` rebuilds it, so
+    /// it opens a fresh stream from this rather than carrying on the scene's
+    /// own, which would scatter the stars a little differently every time the
+    /// view was resized.
+    private let sceneSeed = CourseRandom.launchedSeed()
     private var framesToFreeze = -1
     private var framesRun = 0
     /// `-turret N`: the tier of the pillar the debug hook keeps parked ahead.
@@ -393,18 +398,19 @@ final class GameScene: SKScene {
 
         // Drifting stars.
         starLayers.removeAll()
+        var starRandom = CourseRandom(seed: sceneSeed)
         for _ in 0..<2 {
             let layer = SKNode()
             for _ in 0..<60 {
                 let star = SKShapeNode(circleOfRadius: CGFloat.random(in: 0.8...2.4,
-                                                                     using: &sceneRandom))
+                                                                     using: &starRandom))
                 star.fillColor = UIColor(white: 1, alpha: CGFloat.random(in: 0.3...0.95,
-                                                                        using: &sceneRandom))
+                                                                        using: &starRandom))
                 star.strokeColor = .clear
                 star.position = CGPoint(x: CGFloat.random(in: 0...size.width,
-                                                          using: &sceneRandom),
+                                                          using: &starRandom),
                                         y: CGFloat.random(in: size.height * 0.45...size.height,
-                                                          using: &sceneRandom))
+                                                          using: &starRandom))
                 layer.addChild(star)
             }
             starLayers.append(layer)
@@ -1744,7 +1750,11 @@ final class GameScene: SKScene {
             entityUse[key] = idx + 1
             return arr[idx]
         }
-        let node = Sprites.makeEntity(key.kind, fringe: fringe, tier: key.tier)
+        // A rock's face is drawn for the pool slot it fills. The stream is the
+        // scene's seeded one, so the field a course grows is the same field on
+        // every run of it.
+        let face = Int(truncatingIfNeeded: sceneRandom.next()) & (Sprites.rockFaces - 1)
+        let node = Sprites.makeEntity(key.kind, fringe: fringe, tier: key.tier, face: face)
         node.zPosition = 6
         entityLayer.addChild(node)
         arr.append(node)
