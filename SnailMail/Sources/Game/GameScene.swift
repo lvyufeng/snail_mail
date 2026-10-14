@@ -265,7 +265,7 @@ final class GameScene: SKScene {
             state.sheet.ring = 600
             state.sheet.slug = 1200
             state.sheet.garbage = 800
-            finish(won: true)
+            finish(won: true, handedOver: true)
         }
         if ProcessInfo.processInfo.arguments.contains("-pittest") {
             startRace()
@@ -603,7 +603,7 @@ final class GameScene: SKScene {
 
         if positionZ >= trackLength {
             positionZ = trackLength
-            finish(won: state.quotaMet)
+            finish(won: state.quotaMet, handedOver: true)
             renderRoad()
             return
         }
@@ -1697,13 +1697,20 @@ final class GameScene: SKScene {
     /// `signOff` names the line the snail leaves on, for a loss whose cause the
     /// caller knows better than the generic `Dying` set — dying to a slug uses
     /// the retail's own `Slugged` set.
-    private func finish(won: Bool, signOff: Sound.Voice? = nil) {
+    ///
+    /// `handedOver` says whether the run ended at the post office, where the
+    /// mail on board is handed in. A run that ended early — the postal meter
+    /// drained, a plunge off the road — delivers nothing, so its results screen
+    /// reports no packages handed over.
+    private func finish(won: Bool, signOff: Sound.Voice? = nil, handedOver: Bool = false) {
         guard state.phase == .running else { return }
-        // Hand the mail over: everything on board is delivered at the post
-        // office, which is what the "Parcel Deliver" gauge measures.
-        state.delivered = state.parcels
-        if won {
+        // Everything still on board is delivered at the post office, which is
+        // what the "Parcel Deliver" gauge measures, and is scored there.
+        if handedOver {
+            state.delivered = state.parcels
             if state.quota > 0 { state.sheet.parcelDeliver += state.delivered * 500 }
+        }
+        if won {
             state.sheet.bonus += 1000
             // A full quota with the postal meter untouched is the original's
             // "PERFECT SCORE!  >50,000 Bonus Points", worth the flat 50,000 the
