@@ -690,7 +690,12 @@ enum Sprites {
 
     /// The retail `Barrier` texture — eight pixels of dark-to-bright blue the
     /// build tiles over a rail — stretched into a strip a drawn bar can wear.
-    private static let barrierGradient: SKTexture? = {
+    ///
+    /// The rail the levels stand at the road edge wears the same strip: the
+    /// build's fence is a quad that maps this texture's height over the rail's
+    /// own height and its width along the road, where every column is the same
+    /// colour, so the gradient runs up the rail and nothing repeats down it.
+    static let barrierGradient: SKTexture? = {
         guard RetailAssets.installed,
               let img = RetailAssets.image("Art/Objects/barrier_barrier.png") else { return nil }
         let strip = CGSize(width: img.size.width, height: 32)

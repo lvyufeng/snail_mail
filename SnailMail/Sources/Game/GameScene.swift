@@ -189,6 +189,20 @@ final class GameScene: SKScene {
     private let detailMinHeight: CGFloat = 4
     private var wallLeftPool: [SKShapeNode] = []
     private var wallRightPool: [SKShapeNode] = []
+    /// The roadside rails a fence row stands up, one shape per rail drawn this
+    /// frame. A rail is a quad that runs along the road rather than a billboard
+    /// facing the camera, because that is what the build's `Barrier` object is:
+    /// two 0.6-unit-tall, 9-unit-wide faces tiled with its own blue gradient.
+    private var railPool: [SKShapeNode] = []
+    private var railUse = 0
+    /// When the rails stand. The `-norails` screenshot hook clears it, which
+    /// leaves the fence posts of the procedural fallback standing instead.
+    private var railsStand = true
+    /// The strip that rail wears, and its height in the units the road is nine
+    /// across. Both are nil/zero without the retail art, which leaves the
+    /// fence posts of the procedural fallback standing.
+    private lazy var railTexture: SKTexture? = railsStand ? Sprites.barrierGradient : nil
+    private let railHeightUnits: CGFloat = 0.6
     /// Entities are pooled per kind. A turret also pools per size tier, because
     /// the build ships eight pillar meshes and one course can raise all of them.
     private struct EntityKey: Hashable {
@@ -245,6 +259,10 @@ final class GameScene: SKScene {
            let frames = Int(args[i + 1]) {
             framesToFreeze = frames
         }
+        // `-norails` runs the course with the fence posts of the procedural
+        // fallback in place of the blue rails, so a screenshot pair can show
+        // what the rails cover.
+        if args.contains("-norails") { railsStand = false }
         guard let i = args.firstIndex(of: "-weapon"), i + 1 < args.count,
               let level = Int(args[i + 1]) else { return }
         state.weaponLevel = max(1, min(level, state.maxWeaponLevel))
@@ -1520,6 +1538,8 @@ final class GameScene: SKScene {
     }
 
     private func renderRoad() {
+        for i in 0..<railUse where i < railPool.count { railPool[i].isHidden = true }
+        railUse = 0
         for i in 0..<drawDistance {
             if i < roadPool.count { roadPool[i].isHidden = true }
             if i < roadPoolB.count { roadPoolB[i].isHidden = true }
@@ -1565,6 +1585,7 @@ final class GameScene: SKScene {
             }
 
             drawSegment(seg, n: n)
+            drawRails(seg, n: n)
             if seg.p1.screenY >= snailRow && seg.p2.screenY <= snailRow {
                 let span = max(0.0001, seg.p1.screenY - seg.p2.screenY)
                 let t = (seg.p1.screenY - snailRow) / span
@@ -1802,6 +1823,81 @@ final class GameScene: SKScene {
 
     private let checkCols = 6
 
+    /// The blue rails the highway wears.
+    ///
+    /// `Objects/Barrier` is not a prop but a length of guard rail: two faces
+    /// 0.6 units tall, 4.5 either side of its origin — the highway's own half
+    /// width — running 58 units along the road. Every row of every piece marks
+    /// where it stands with an `@` in the outer two columns, and the tutorial
+    /// says what it is for: "The blue barriers prevent me from falling off the
+    /// sides of the highway." So both sides are railed for the whole course,
+    /// and every other barrier cell in the grid stands the same rail a lane
+    /// further in — the rails of a bridge run its edges, a chicane's pair pinch
+    /// it in, and the pieces of a fence row leave the lanes between them to
+    /// thread.
+    private func drawRails(_ seg: RoadSegment, n: Int) {
+        guard let rail = railTexture, !seg.airborne else { return }
+        let y1 = fy(seg.p1.screenY), y2 = fy(seg.p2.screenY)
+        let h1 = railHeight(at: seg.p1.screenW), h2 = railHeight(at: seg.p2.screenW)
+        // Past this the rail is under a point tall, and the road carrying it is
+        // a few wide: a shape there is invisible either way, so the horizon is
+        // spared the nodes.
+        guard h2 > 1 else { return }
+        for side in [CGFloat(-1), 1] {
+            standRail(rail, n: n,
+                      seg.p1.screenX + side * seg.p1.screenW, y1, h1,
+                      seg.p2.screenX + side * seg.p2.screenW, y2, h2)
+        }
+        for spec in seg.sprites where spec.kind == .barrier {
+            standRail(rail, n: n,
+                      seg.p1.screenX + spec.offset * seg.p1.screenW, y1, h1,
+                      seg.p2.screenX + spec.offset * seg.p2.screenW, y2, h2)
+        }
+    }
+
+    /// How tall a rail stands at a row whose half-highway measures `halfRoad`
+    /// points, in the points the canvas is drawn in.
+    ///
+    /// `halfRoad` is half the nine units the road is across, so a model unit
+    /// laid across it is `2 * halfRoad / roadModelWidth` points. A unit stood
+    /// on end is the same: everything the course stands up — the fringe wall,
+    /// a pillar, the snail — is drawn from its own width, so the road's own
+    /// scale is what puts it on screen.
+    private func railHeight(at halfRoad: CGFloat) -> CGFloat {
+        halfRoad * 2 / roadModelWidth * railHeightUnits
+    }
+
+    /// One length of rail, from `x1`/`y1` to `x2`/`y2` and standing `h` points
+    /// above the road at each end.
+    private func standRail(_ rail: SKTexture, n: Int,
+                           _ x1: CGFloat, _ y1: CGFloat, _ h1: CGFloat,
+                           _ x2: CGFloat, _ y2: CGFloat, _ h2: CGFloat) {
+        let node = obtainRail()
+        node.path = quad(x1, y1, x1, y1 + h1, x2, y2 + h2, x2, y2)
+        node.fillTexture = rail
+        node.zPosition = -CGFloat(n) + 0.2
+        node.isHidden = false
+    }
+
+    private func obtainRail() -> SKShapeNode {
+        if railUse < railPool.count {
+            let node = railPool[railUse]
+            railUse += 1
+            return node
+        }
+        let node = SKShapeNode()
+        // White, so the gradient texture arrives unmultiplied.
+        node.fillColor = .white
+        node.strokeColor = .clear
+        node.lineWidth = 0
+        node.isAntialiased = false
+        node.isHidden = true
+        railPool.append(node)
+        roadLayer.addChild(node)
+        railUse += 1
+        return node
+    }
+
     private func renderEntities(baseSegment: RoadSegment) {
         let baseIndex = baseSegment.index
         for n in 1..<drawDistance {
@@ -1810,6 +1906,10 @@ final class GameScene: SKScene {
             let p = seg.p1
             guard p.scale > 0, !p.screenW.isNaN else { continue }
             for spec in seg.sprites {
+                // A fence is drawn as the rail `drawRails` stands along the
+                // road, not as a billboard; without the retail art the fallen
+                // back post is the only fence there is.
+                if spec.kind == .barrier && railTexture != nil { continue }
                 let node = obtainEntity(EntityKey(kind: spec.kind, tier: spec.tier))
                 let ex = p.screenX + spec.offset * p.screenW
                 let ey = fy(p.screenY)
