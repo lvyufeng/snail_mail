@@ -22,6 +22,7 @@
 		AA0000000000000000000081 /* RetailFont.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000081 /* RetailFont.swift */; };
 		AA0000000000000000000071 /* Sound.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000071 /* Sound.swift */; };
 		AA0000000000000000000072 /* LevelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000072 /* LevelCatalog.swift */; };
+		AA0000000000000000000083 /* GalaxyMapLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000083 /* GalaxyMapLayout.swift */; };
 		AA0000000000000000000073 /* LevelSelectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000073 /* LevelSelectView.swift */; };
 		AA0000000000000000000074 /* TrackData.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000074 /* TrackData.swift */; };
 		AA0000000000000000000075 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000075 /* AppRouter.swift */; };
@@ -49,6 +50,7 @@
 		BB0000000000000000000081 /* RetailFont.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetailFont.swift; sourceTree = "<group>"; };
 		BB0000000000000000000071 /* Sound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sound.swift; sourceTree = "<group>"; };
 		BB0000000000000000000072 /* LevelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelCatalog.swift; sourceTree = "<group>"; };
+		BB0000000000000000000083 /* GalaxyMapLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GalaxyMapLayout.swift; sourceTree = "<group>"; };
 		BB0000000000000000000073 /* LevelSelectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelSelectView.swift; sourceTree = "<group>"; };
 		BB0000000000000000000074 /* TrackData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackData.swift; sourceTree = "<group>"; };
 		BB0000000000000000000075 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
@@ -106,6 +108,7 @@
 				BB0000000000000000000078 /* GameSettings.swift */,
 				BB0000000000000000000079 /* HighScores.swift */,
 				BB0000000000000000000072 /* LevelCatalog.swift */,
+				BB0000000000000000000083 /* GalaxyMapLayout.swift */,
 				BB0000000000000000000074 /* TrackData.swift */,
 				BB0000000000000000000003 /* GameScene.swift */,
 				BB0000000000000000000005 /* Sprites.swift */,
@@ -245,6 +248,7 @@
 				AA0000000000000000000081 /* RetailFont.swift in Sources */,
 				AA0000000000000000000071 /* Sound.swift in Sources */,
 				AA0000000000000000000072 /* LevelCatalog.swift in Sources */,
+				AA0000000000000000000083 /* GalaxyMapLayout.swift in Sources */,
 				AA0000000000000000000073 /* LevelSelectView.swift in Sources */,
 				AA0000000000000000000074 /* TrackData.swift in Sources */,
 				AA0000000000000000000075 /* AppRouter.swift in Sources */,

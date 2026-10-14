@@ -7,6 +7,9 @@ struct LevelSelectView: View {
     @State private var selectedGalaxy = 0
 
     var body: some View {
+        // The scroll view hands its content an unspecified width, so the
+        // column has to be told how wide the screen actually is — otherwise it
+        // takes its `maxWidth` cap and the map hangs off both edges.
         ZStack {
             RetailBackdrop(stem: "starmapbg")
 
@@ -14,16 +17,15 @@ struct LevelSelectView: View {
                 VStack(spacing: 14) {
                     header
                     StarMapCanvas(selected: $selectedGalaxy)
-                        .frame(height: 268)
-                        .padding(.horizontal, 6)
+                        .aspectRatio(GalaxyMapLayout.design.width / GalaxyMapLayout.design.height,
+                                     contentMode: .fit)
+                        .frame(maxWidth: mapColumn)
 
                     ForEach(0..<LevelCatalog.galaxies.count, id: \.self) { galaxy in
                         GalaxyPanel(galaxy: galaxy, expanded: galaxy == selectedGalaxy)
                     }
                 }
-                .frame(maxWidth: 460)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 18)
+                .frame(width: mapColumn)
                 .padding(.bottom, 40)
             }
         }
@@ -34,6 +36,13 @@ struct LevelSelectView: View {
             Sound.shared.start()
             Sound.shared.playMusic(.menu)
         }
+    }
+
+    /// The scroll view proposes no width to its content, so the column has to
+    /// be capped by hand; otherwise the map takes its full `maxWidth` and hangs
+    /// off both edges of the phone.
+    private var mapColumn: CGFloat {
+        min(460, max(280, UIScreen.main.bounds.width - 36))
     }
 
     private var header: some View {
@@ -61,66 +70,165 @@ struct LevelSelectView: View {
     }
 }
 
-/// The galaxy map itself: the ten galaxies laid out along the drifting scroll
-/// the retail `starmap` screen draws them on, joined by the build's own star
-/// lines and spotted with its galaxy portraits. Tapping a galaxy opens it below.
+/// The galaxy map itself, laid out from the coordinates the retail executable
+/// ships (`GalaxyMapLayout`). The build draws the ten portraits at their native
+/// 256x256 over a starmap band, threads one continuous line through all fifty
+/// stars and marks each level star on top; tapping a star plays it.
 private struct StarMapCanvas: View {
     @Binding var selected: Int
+    @EnvironmentObject private var router: AppRouter
+
+    /// Levels the player has already posted a score for, so the map can flag
+    /// them the way the retail build does.
+    private var cleared: Set<Int> {
+        let names = Set(HighScores.shared.postal.map(\.level))
+        return Set(LevelCatalog.arcade.filter { names.contains($0.name) }.map(\.id))
+    }
+
+    /// The star the cursor sits on: the first one the player has not posted a
+    /// score for. The build keeps a single `LevelSelect` ring for exactly one
+    /// level at a time — the one the arrows point at — and parks it here when
+    /// the map opens, so this also reads as "how far you have got".
+    private var frontier: Int {
+        (0..<LevelCatalog.arcade.count).first { !cleared.contains($0) }
+            ?? LevelCatalog.arcade.count - 1
+    }
 
     var body: some View {
         GeometryReader { geo in
-            let w = geo.size.width, h = geo.size.height
+            let scale = min(geo.size.width / GalaxyMapLayout.design.width,
+                            geo.size.height / GalaxyMapLayout.design.height)
+            let size = CGSize(width: GalaxyMapLayout.design.width * scale,
+                              height: GalaxyMapLayout.design.height * scale)
+            let x0 = (geo.size.width - size.width) / 2
+            let y0 = (geo.size.height - size.height) / 2
 
-            ZStack {
-                // The navigation lines between one galaxy and the next, drawn
-                // as the retail `line` sprite stretched end to end.
-                Path { path in
-                    for g in 0..<9 {
-                        path.move(to: point(g, w, h))
-                        path.addLine(to: point(g + 1, w, h))
-                    }
+            ZStack(alignment: .topLeading) {
+                mapBorder
+                    .frame(width: size.width, height: size.height)
+                    .position(x: x0 + size.width / 2, y: y0 + size.height / 2)
+
+                routeLine(scale: scale, x0: x0, y0: y0)
+
+                ForEach(0..<GalaxyMapLayout.galaxyCentres.count, id: \.self) { g in
+                    galaxyNode(g, scale: scale)
+                        .position(at(GalaxyMapLayout.point(galaxy: g), scale, x0, y0))
                 }
-                .stroke(Palette.cyan.opacity(0.35), lineWidth: 1.5)
 
-                ForEach(0..<10, id: \.self) { g in
-                    galaxyNode(g)
-                        .position(point(g, w, h))
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.2)) { selected = g }
-                            // Moving the star-map cursor: the retail build keeps
-                            // a pair of servo samples for exactly this.
-                            Sound.shared.play(.servo)
-                        }
+                ForEach(0..<LevelCatalog.arcade.count, id: \.self) { i in
+                    starNode(i, scale: scale)
+                        .position(at(starPoint(i), scale, x0, y0))
                 }
             }
+            .frame(width: size.width, height: size.height)
+            .position(x: geo.size.width / 2, y: geo.size.height / 2)
         }
     }
 
-    private func point(_ g: Int, _ w: CGFloat, _ h: CGFloat) -> CGPoint {
-        let f = CGFloat(g) / 9
-        return CGPoint(x: w * (0.10 + 0.80 * f),
-                       y: h * (0.5 + 0.30 * sin(f * .pi * 2 + 0.4)))
+    /// The map's star `i` in level order, galaxy-major: `route[g * 5 + s]`.
+    private func starPoint(_ i: Int) -> CGPoint {
+        let level = LevelCatalog.star(i)
+        return GalaxyMapLayout.point(galaxy: level.galaxy, star: level.star)
+    }
+
+    private func at(_ p: CGPoint, _ scale: CGFloat, _ x0: CGFloat, _ y0: CGFloat) -> CGPoint {
+        CGPoint(x: x0 + p.x * scale, y: y0 + p.y * scale)
+    }
+
+    /// The single line the map threads through every star, in level order. The
+    /// build stretches one four-unit `LineStar` sprite between each pair of
+    /// neighbouring stars, at alpha 0.8 for the legs up to the cursor and 0.2
+    /// for the rest, so the map reads as a bright trail with a faint tail.
+    @ViewBuilder
+    private func routeLine(scale: CGFloat, x0: CGFloat, y0: CGFloat) -> some View {
+        let pts = (0..<LevelCatalog.arcade.count).map { starPoint($0) }
+        let line = Color(red: 239 / 255, green: 239 / 255, blue: 239 / 255)
+
+        Path { path in
+            guard let first = pts.first else { return }
+            path.move(to: at(first, scale, x0, y0))
+            for p in pts.dropFirst() { path.addLine(to: at(p, scale, x0, y0)) }
+        }
+        .stroke(line.opacity(0.2),
+                style: StrokeStyle(lineWidth: 4 * scale, lineCap: .round, lineJoin: .round))
+
+        Path { path in
+            guard pts.count > 1 else { return }
+            path.move(to: at(pts[0], scale, x0, y0))
+            for i in 1...max(min(frontier, pts.count - 1), 1) {
+                path.addLine(to: at(pts[i], scale, x0, y0))
+            }
+        }
+        .stroke(line.opacity(0.8),
+                style: StrokeStyle(lineWidth: 4 * scale, lineCap: .round, lineJoin: .round))
     }
 
     @ViewBuilder
-    private func galaxyNode(_ g: Int) -> some View {
+    private var mapBorder: some View {
+        if let img = RetailAssets.image("Art/Galaxy/borderspacemap.png") {
+            Image(uiImage: img).resizable()
+        } else {
+            RoundedRectangle(cornerRadius: 2)
+                .stroke(Palette.cyan.opacity(0.4), lineWidth: 2)
+        }
+    }
+
+    /// The build marks every level on the map with the same white `LevelStar`
+    /// sprite at its native 32 units, and parks the 64-unit `LevelSelect` ring
+    /// on the single level the cursor points at.
+    @ViewBuilder
+    private func starNode(_ i: Int, scale: CGFloat) -> some View {
+        let level = LevelCatalog.star(i)
+        ZStack {
+            if let star = RetailAssets.image("Art/Galaxy/levelstar.png") {
+                Image(uiImage: star).resizable().scaledToFit().frame(width: 32 * scale)
+            } else {
+                StarBadge(color: .white).frame(width: 20 * scale)
+            }
+            if i == frontier, let ring = RetailAssets.image("Art/Galaxy/levelselect.png") {
+                Image(uiImage: ring).resizable().scaledToFit().frame(width: 64 * scale)
+            }
+        }
+        .frame(width: 64 * scale, height: 64 * scale)
+        .contentShape(Rectangle())
+        .onTapGesture { open(level) }
+    }
+
+    @ViewBuilder
+    private func galaxyNode(_ g: Int, scale: CGFloat) -> some View {
         let isSelected = g == selected
         ZStack {
             if let img = RetailAssets.image(String(format: "Art/Galaxy/galaxy%03d.png", g)) {
                 Image(uiImage: img)
                     .resizable()
                     .scaledToFit()
-                    .frame(width: isSelected ? 92 : 66)
+                    .frame(width: 256 * scale)
             } else {
                 StarBadge(color: isSelected ? Palette.gold : Palette.ink.opacity(0.75))
-                    .frame(width: isSelected ? 34 : 24)
+                    .frame(width: 40 * scale)
             }
             if isSelected, let ring = RetailAssets.image("Art/Galaxy/galaxyselect.png") {
-                Image(uiImage: ring).resizable().scaledToFit().frame(width: 108)
+                Image(uiImage: ring).resizable().scaledToFit().frame(width: 128 * scale)
             }
         }
-        .frame(width: 110, height: 110)
+        .frame(width: 256 * scale, height: 256 * scale)
         .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.2)) { selected = g }
+            // Moving the star-map cursor: the retail build keeps a pair of
+            // servo samples for exactly this.
+            Sound.shared.play(.servo)
+        }
+    }
+
+    private func open(_ level: ArcadeLevel) {
+        withAnimation(.easeInOut(duration: 0.2)) { selected = level.galaxy }
+        Sound.shared.play(.select)
+        if LevelCatalog.briefing(mode: .arcade, level: level.id) != nil {
+            router.push(.briefing(mode: .arcade, level: level.id))
+        } else {
+            router.push(.game(mode: .arcade, level: level.id))
+        }
     }
 }
 
