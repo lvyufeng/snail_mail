@@ -185,7 +185,7 @@ struct LevelConfig {
                 salt: 0,
                 trash: 0,
                 parcels: 14,
-                quota: 0,
+                quota: 10,
                 length: 170,
                 background: "SpaceBlue",
                 fringe: SIMD3(88, 225, 255),
@@ -199,8 +199,8 @@ struct LevelConfig {
                 speed: 48,
                 salt: 22,
                 trash: 34,
-                parcels: 0,
-                quota: 0,
+                parcels: 20,
+                quota: 12,
                 length: 260,
                 background: "SpaceGreen",
                 fringe: SIMD3(128, 235, 140),
@@ -214,8 +214,8 @@ struct LevelConfig {
                 speed: 82,
                 salt: 14,
                 trash: 26,
-                parcels: 0,
-                quota: 0,
+                parcels: 24,
+                quota: 16,
                 length: 340,
                 background: "SpaceRed",
                 fringe: SIMD3(255, 150, 70),
@@ -229,8 +229,8 @@ struct LevelConfig {
                 speed: 60,
                 salt: 12,
                 trash: 52,
-                parcels: 0,
-                quota: 0,
+                parcels: 40,
+                quota: 24,
                 length: 4000,
                 background: "SpacePurple",
                 fringe: SIMD3(190, 80, 240),
@@ -244,8 +244,8 @@ struct LevelConfig {
                 speed: 74,
                 salt: 22,
                 trash: 70,
-                parcels: 0,
-                quota: 0,
+                parcels: 60,
+                quota: 36,
                 length: 6000,
                 background: "SpacePurple",
                 fringe: SIMD3(255, 90, 120),
@@ -265,16 +265,19 @@ struct RaceState: Equatable {
     var trackLength: Double = 1
     var postalMeter: Double = 100         // health
     var maxMeter: Double = 100
-    var parcels: Int = 0
-    var quota: Int = 0
+    var parcels: Int = 0                  // parcels picked up this run
+    var quota: Int = 0                    // parcels the level asks for
+    var delivered: Int = 0                // parcels handed in at the post office
     var weaponLevel: Int = 1
-    var maxWeaponLevel: Int = 4
+    var maxWeaponLevel: Int = 3
     /// How far the player has climbed the ♠♣♥♦ ladder (0...4).
     var suitStep: Int = 0
     var invincible: Bool = false
-    var score: Int = 0
+    var sheet = ScoreSheet()
     var elapsed: Double = 0
     var phase: GamePhase = .ready
+
+    var score: Int { sheet.total }
 
     var progress: Double {
         guard trackLength > 0 else { return 0 }
@@ -286,7 +289,35 @@ struct RaceState: Equatable {
         return max(0, min(1, postalMeter / maxMeter))
     }
 
-    var quotaMet: Bool { parcels >= quota }
+    /// The "Parcel Collect" gauge: how much of the quota is on board.
+    var collectFraction: Double {
+        guard quota > 0 else { return 1 }
+        return max(0, min(1, Double(parcels) / Double(quota)))
+    }
+
+    /// The "Parcel Deliver" gauge: how much of the quota has been handed over.
+    var deliverFraction: Double {
+        guard quota > 0 else { return 1 }
+        return max(0, min(1, Double(delivered) / Double(quota)))
+    }
+
+    var quotaMet: Bool { quota <= 0 || parcels >= quota }
+
+    /// A full quota handed over without losing a sliver of the postal meter.
+    var perfect: Bool { quota > 0 && delivered >= quota && postalMeter >= maxMeter }
+}
+
+/// The score breakdown the original prints on its results screen: six separate
+/// tallies that add up to the level score.
+struct ScoreSheet: Equatable {
+    var bonus = 0          // pickup and perfect-clear bonuses
+    var parcelDeliver = 0  // points for handing the quota in
+    var parcelCollect = 0  // points for picking parcels up
+    var ring = 0           // points for rings
+    var slug = 0           // points for downing slugs
+    var garbage = 0        // points for blasting trash
+
+    var total: Int { bonus + parcelDeliver + parcelCollect + ring + slug + garbage }
 }
 
 // MARK: - Track building

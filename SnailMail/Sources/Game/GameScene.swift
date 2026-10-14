@@ -131,6 +131,11 @@ final class GameScene: SKScene {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-forcefinish") {
             startRace()
+            state.parcels = state.quota
+            state.sheet.parcelCollect = state.quota * 100
+            state.sheet.ring = 600
+            state.sheet.slug = 1200
+            state.sheet.garbage = 800
             finish(won: true)
         }
         #endif
@@ -416,7 +421,10 @@ final class GameScene: SKScene {
 
     private func destroy(_ spec: EntitySpec, in seg: RoadSegment) {
         seg.sprites.removeAll { $0.kind == spec.kind && $0.offset == spec.offset }
-        state.score += 25
+        switch spec.kind {
+        case .slug: state.sheet.slug += 400
+        default:    state.sheet.garbage += 200
+        }
         spawnBurst(atSegment: seg.index)
     }
 
@@ -431,12 +439,12 @@ final class GameScene: SKScene {
                 switch spec.kind {
                 case .parcel:
                     state.parcels += 1
-                    state.score += 10
+                    state.sheet.parcelCollect += 100
                     Sound.shared.play(.collect)
                     toRemove.append((seg, spec))
                 case .heart:
                     state.postalMeter = min(state.maxMeter, state.postalMeter + 25)
-                    state.score += 5
+                    state.sheet.bonus += 100
                     Sound.shared.play(.collect)
                     toRemove.append((seg, spec))
                 case .ringUpgrade:
@@ -444,7 +452,7 @@ final class GameScene: SKScene {
                     Sound.shared.play(.upgrade)
                     toRemove.append((seg, spec))
                 case .ringExplode:
-                    state.score += 40
+                    state.sheet.ring += 200
                     toRemove.append((seg, spec))
                 case .ringSlow:
                     currentSpeed *= 0.6
@@ -454,13 +462,13 @@ final class GameScene: SKScene {
                     if suit.rawValue == state.suitStep {
                         // Correct next rung: climb the ladder.
                         state.suitStep += 1
-                        state.score += 30
+                        state.sheet.bonus += 300
                         state.postalMeter = min(state.maxMeter, state.postalMeter + 6)
                         Sound.shared.play(.upgrade)
                         if state.suitStep >= Suit.allCases.count {
                             // Full ♠♣♥♦ climb pays out the top weapon tier.
                             state.weaponLevel = state.maxWeaponLevel
-                            state.score += 150
+                            state.sheet.bonus += 1500
                         }
                         toRemove.append((seg, spec))
                     } else if suit.rawValue > state.suitStep {
@@ -768,8 +776,19 @@ final class GameScene: SKScene {
 
     private func finish(won: Bool) {
         guard state.phase == .running else { return }
+        // Hand the mail over: everything on board is delivered at the post
+        // office, which is what the "Parcel Deliver" gauge measures.
+        state.delivered = state.parcels
+        if won {
+            if state.quota > 0 { state.sheet.parcelDeliver += state.delivered * 500 }
+            state.sheet.bonus += 1000
+            // A full quota with the postal meter untouched is the original's
+            // "PERFECT SCORE!".
+            if state.quota > 0 && state.postalMeter >= state.maxMeter {
+                state.sheet.bonus += 5000
+            }
+        }
         state.phase = .finished(won: won)
-        if won { state.score += 500 + state.parcels * 5 }
         Sound.shared.play(won ? .win : .lose)
         publish()
         onFinish?(won)

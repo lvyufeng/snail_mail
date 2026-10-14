@@ -12,15 +12,27 @@ struct ResultOverlay: View {
 
             NeonPanel(border: won ? Palette.good : Palette.danger) {
                 VStack(spacing: 18) {
-                    Text(won ? "MAIL DELIVERED!" : "GONE POSTAL")
+                    Text(headline)
                         .font(.system(size: 30, weight: .black, design: .rounded))
                         .foregroundStyle(won ? Palette.good : Palette.danger)
                         .multilineTextAlignment(.center)
                         .shadow(color: (won ? Palette.good : Palette.danger).opacity(0.6), radius: 10)
 
-                    VStack(spacing: 8) {
+                    VStack(spacing: 6) {
+                        StatRow(label: "Parcel Collect", value: "\(state.sheet.parcelCollect)")
+                        StatRow(label: "Parcel Deliver", value: "\(state.sheet.parcelDeliver)")
+                        StatRow(label: "Ring", value: "\(state.sheet.ring)")
+                        StatRow(label: "Slug", value: "\(state.sheet.slug)")
+                        StatRow(label: "Garbage", value: "\(state.sheet.garbage)")
+                        StatRow(label: "Bonus", value: "\(state.sheet.bonus)")
+
+                        Rectangle()
+                            .fill(Palette.ink.opacity(0.18))
+                            .frame(height: 1)
+                            .padding(.vertical, 2)
+
                         StatRow(label: "Parcels",
-                                value: state.quota > 0 ? "\(state.parcels) / \(state.quota)" : "\(state.parcels)")
+                                value: state.quota > 0 ? "\(state.delivered) / \(state.quota)" : "\(state.parcels)")
                         StatRow(label: "Score", value: "\(state.score)")
                         StatRow(label: "Time", value: String(format: "%.1fs", state.elapsed))
                     }
@@ -38,6 +50,11 @@ struct ResultOverlay: View {
             }
             .padding(.horizontal, 24)
         }
+    }
+
+    private var headline: String {
+        if !won { return "GONE POSTAL" }
+        return state.perfect ? "PERFECT SCORE!" : "LEVEL COMPLETE!"
     }
 }
 

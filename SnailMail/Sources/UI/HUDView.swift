@@ -71,6 +71,8 @@ struct HUDView: View {
 
             Spacer()
 
+            ParcelGauges(collect: state.collectFraction, deliver: state.deliverFraction)
+
             RouteProgress(progress: state.progress)
 
             if state.phase == .ready {
@@ -206,5 +208,47 @@ private struct RouteProgress: View {
         .frame(height: 8)
         .padding(.horizontal, 40)
         .padding(.bottom, 14)
+    }
+}
+
+/// The two parcel gauges the original prints on its HUD — "Parcel Collect" for
+/// how much of the quota is on board and "Parcel Deliver" for how much has been
+/// handed over at the post office.
+private struct ParcelGauges: View {
+    let collect: Double
+    let deliver: Double
+
+    var body: some View {
+        VStack(spacing: 5) {
+            gauge(label: "PARCEL COLLECT", fraction: collect, tint: Palette.gold)
+            gauge(label: "PARCEL DELIVER", fraction: deliver, tint: Palette.good)
+        }
+        .padding(.horizontal, 40)
+        .padding(.bottom, 6)
+    }
+
+    private func gauge(label: String, fraction: Double, tint: Color) -> some View {
+        let clamped = min(1, max(0, fraction))
+        return HStack(spacing: 8) {
+            Text(label)
+                .font(.system(size: 9, weight: .heavy, design: .rounded))
+                .foregroundStyle(Palette.ink.opacity(0.85))
+                .frame(width: 96, alignment: .leading)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(.black.opacity(0.45))
+                    Capsule()
+                        .fill(LinearGradient(colors: [tint, tint.opacity(0.6)],
+                                             startPoint: .leading, endPoint: .trailing))
+                        .frame(width: max(4, geo.size.width * clamped))
+                }
+                .overlay(Capsule().stroke(Palette.ink.opacity(0.4), lineWidth: 1))
+            }
+            .frame(height: 9)
+            Text("\(Int((clamped * 100).rounded()))%")
+                .font(.system(size: 10, weight: .heavy, design: .monospaced))
+                .foregroundStyle(tint)
+                .frame(width: 34, alignment: .trailing)
+        }
     }
 }
