@@ -199,7 +199,7 @@ def parse_slides(txt):
 
 
 def parse_segment(txt):
-    """Return (grid, paths, jetpack_off, signs) for one segment.
+    """Return (grid, paths, jetpack_off, signs, parcels) for one segment.
 
     `grid` is the rows, `paths` the `Path=` families the piece names, in the
     order the file writes them, and `jetpack_off` whether any row is tagged
@@ -215,14 +215,20 @@ def parse_segment(txt):
 
     `signs` is the list of roadside signs the piece hangs with a
     `3DModel=<name>.x (x,y,z)` tag, each as `(row, model, x)` where `row`
-    counts the rows that lay road, the way the reader numbers the slices.
-    A row tagged `Ring=<effect>` is folded so each of its orientation glyphs
-    becomes the token naming that ring's effect (see `RING`). `Parcel=` rows
-    carry a single parcel's 3D position as metadata on an otherwise blank row;
-    the parcels the player actually grabs are the `$` cells in the grid, so
-    the metadata row is left blank rather than expanded into a band of parcels.
+    counts the rows that lay road, the way the reader numbers the slices.  A
+    row tagged `Ring=<effect>` is folded so each of its orientation glyphs
+    becomes the token naming that ring's effect (see `RING`).
+
+    `parcels` is the list of parcels the piece hangs with a
+    `Parcel=<set>,(x,y,z)` tag, each as `(row, x)`.  A parcel is not drawn as
+    a glyph in the grid, so without this table the `Parcel=` rows are invisible
+    and their parcels are simply missing: `Hump.txt` hangs one over the crest a
+    snail flies across, `Cage2.txt` one inside its cage, and every
+    `Loop the Loop*.txt` a trail of five up the loop.  Only `x` — the lateral
+    placement — has a meaning the flat grid can carry, so the parcels keep
+    their rows and the `y`/`z` offset is dropped rather than invented.
     """
-    rows, paths, jetpack_off, signs = [], [], False, []
+    rows, paths, jetpack_off, signs, parcels = [], [], False, [], []
     laid = 0
     for line in txt.splitlines():
         m = re.match(r"^@(.{8})@(.*)$", line)
@@ -240,12 +246,16 @@ def parse_segment(txt):
                 sign = re.search(r"3DModel\s*=\s*(\w+)\.x\s*\(\s*([-\d.]+)", attr)
                 if sign:
                     signs.append((laid, sign.group(1).lower(), float(sign.group(2))))
+                parcel = re.search(
+                    r"Parcel\s*=\s*\d+\s*,\s*\(\s*([-\d.]+)\s*,[^)]*\)", attr)
+                if parcel:
+                    parcels.append((laid, float(parcel.group(1))))
                 laid += 1
             rows.append(row)
         p = re.search(r"Path=(\S+)", line)
         if p and p.group(1) not in paths:
             paths.append(p.group(1))
-    return "".join(rows), paths, jetpack_off, signs
+    return "".join(rows), paths, jetpack_off, signs, parcels
 
 
 def swift_string(s):
@@ -287,11 +297,11 @@ def main():
     intro_slides = parse_slides(intro["intro.txt"]) if "intro.txt" in intro else []
     credits_slides = parse_slides(intro["credits.txt"]) if "credits.txt" in intro else []
 
-    grids, paths, jetpacks_off, sign_map = {}, {}, set(), {}
+    grids, paths, jetpacks_off, sign_map, parcel_map = {}, {}, set(), {}, {}
     for key in sorted(need):
         if key not in segments:
             continue
-        grid, seg_paths, jetpack_off, signs = parse_segment(segments[key])
+        grid, seg_paths, jetpack_off, signs, parcels = parse_segment(segments[key])
         grids[key] = grid
         if seg_paths:
             paths[key] = seg_paths
@@ -299,6 +309,8 @@ def main():
             jetpacks_off.add(key)
         if signs:
             sign_map[key] = signs
+        if parcels:
+            parcel_map[key] = parcels
 
     def encode(route):
         first, segs, last = route
@@ -375,6 +387,23 @@ def main():
         body = ", ".join(
             "Sign(row: %d, model: %s, x: %s)" % (r, swift_string(m), x)
             for r, m, x in sign_map[k])
+        lines.append(f"        {swift_string(k)}: [{body}],")
+    lines += ["    ]", "",
+              "    /// A parcel a piece hangs in mid-air with a",
+              "    /// `Parcel=<set>,(x, y, z)` tag.  These are the parcels that",
+              "    /// are *not* drawn as `$` cells — one over the crest of a hump,",
+              "    /// one inside a cage, five up a loop — so a piece that tags one",
+              "    /// carries more pickups than its grid shows.  `row` numbers the",
+              "    /// rows that lay road, the way `Sign` does, and `x` is the",
+              "    /// lateral placement in the engine's own units (the road is 9",
+              "    /// wide, so `x / 4.5` is where it sits across the road).",
+              "    struct Parcel {",
+              "        let row: Int",
+              "        let x: Double",
+              "    }",
+              "    static let parcel: [String: [Parcel]] = ["]
+    for k in sorted(parcel_map):
+        body = ", ".join("Parcel(row: %d, x: %s)" % (r, x) for r, x in parcel_map[k])
         lines.append(f"        {swift_string(k)}: [{body}],")
     lines += ["    ]", "",
               "    /// The tutorial's scripted lines, in the order its level file",

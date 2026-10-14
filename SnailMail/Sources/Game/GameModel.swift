@@ -539,6 +539,8 @@ enum TrackBuilder {
             var script: Int
             /// The roadside signs the piece hangs off this row.
             var signs: [TrackData.Sign] = []
+            /// The mid-air parcels the piece tags on this row.
+            var parcels: [TrackData.Parcel] = []
         }
         var slices: [Slice] = []
         slices.reserveCapacity(max(64, config.rows + 32))
@@ -575,12 +577,19 @@ enum TrackBuilder {
             for sign in TrackData.sign[name] ?? [] {
                 signsByRow[sign.row, default: []].append(sign)
             }
+            // The same for the parcels a piece hangs in mid-air rather than
+            // drawing as a `$` cell.
+            var parcelsByRow: [Int: [TrackData.Parcel]] = [:]
+            for parcel in TrackData.parcel[name] ?? [] {
+                parcelsByRow[parcel.row, default: []].append(parcel)
+            }
             for (n, row) in rows.enumerated() {
                 slices.append(Slice(cells: row, family: family,
                                     along: CGFloat(n) / span, step: 1 / span,
                                     flip: flip, angle: angle,
                                     jetpackOff: jetpackOff, script: scriptIndex,
-                                    signs: signsByRow[n] ?? []))
+                                    signs: signsByRow[n] ?? [],
+                                    parcels: parcelsByRow[n] ?? []))
             }
         }
 
@@ -796,6 +805,15 @@ enum TrackBuilder {
                                           offset: max(-0.95, min(0.95, CGFloat(sign.x) / 4.5)),
                                           depth: 0.5,
                                           width: CGFloat(kind.widthFraction)))
+            }
+            // The parcels a piece hangs in mid-air. They keep the row they
+            // were tagged on, which is the row the retail build builds their
+            // offset from, so a loop's trail of five climbs the loop rather
+            // than lying along its foot.
+            for parcel in slices[i].parcels {
+                sprites.append(EntitySpec(kind: .parcel,
+                                          offset: max(-0.95, min(0.95, CGFloat(parcel.x) / 4.5)),
+                                          depth: 0.5))
             }
             seg.sprites = sprites
 

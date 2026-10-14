@@ -230,6 +230,30 @@ enum TrackData {
         "register.txt": [Sign(row: 62, model: "signbang", x: 1.0), Sign(row: 63, model: "signconstruction", x: 4.0)],
     ]
 
+    /// A parcel a piece hangs in mid-air with a
+    /// `Parcel=<set>,(x, y, z)` tag.  These are the parcels that
+    /// are *not* drawn as `$` cells — one over the crest of a hump,
+    /// one inside a cage, five up a loop — so a piece that tags one
+    /// carries more pickups than its grid shows.  `row` numbers the
+    /// rows that lay road, the way `Sign` does, and `x` is the
+    /// lateral placement in the engine's own units (the road is 9
+    /// wide, so `x / 4.5` is where it sits across the road).
+    struct Parcel {
+        let row: Int
+        let x: Double
+    }
+    static let parcel: [String: [Parcel]] = [
+        "cage2.txt": [Parcel(row: 41, x: 0.0)],
+        "hump.txt": [Parcel(row: 23, x: 0.0)],
+        "loop the loop.txt": [Parcel(row: 10, x: 0.0), Parcel(row: 11, x: 0.0), Parcel(row: 12, x: 0.0), Parcel(row: 13, x: 0.0), Parcel(row: 14, x: 0.0)],
+        "loop the loop2.txt": [Parcel(row: 10, x: 0.0), Parcel(row: 11, x: 0.0), Parcel(row: 12, x: 0.0), Parcel(row: 13, x: 0.0), Parcel(row: 14, x: 0.0)],
+        "loop the loop4.txt": [Parcel(row: 10, x: 0.0), Parcel(row: 11, x: 0.0), Parcel(row: 12, x: 0.0), Parcel(row: 13, x: 0.0), Parcel(row: 14, x: 0.0)],
+        "loop the loopt2.txt": [Parcel(row: 10, x: 0.0), Parcel(row: 11, x: 0.0), Parcel(row: 12, x: 0.0), Parcel(row: 13, x: 0.0)],
+        "loop the loopt3.txt": [Parcel(row: 10, x: 0.0), Parcel(row: 11, x: 0.0), Parcel(row: 12, x: 0.0), Parcel(row: 13, x: 0.0)],
+        "loop the loopt4.txt": [Parcel(row: 10, x: 0.0), Parcel(row: 11, x: 0.0), Parcel(row: 12, x: 0.0), Parcel(row: 13, x: 0.0)],
+        "loopbow.txt": [Parcel(row: 10, x: 0.0), Parcel(row: 11, x: 0.0), Parcel(row: 12, x: 0.0), Parcel(row: 13, x: 0.0), Parcel(row: 14, x: 0.0)],
+    ]
+
     /// The tutorial's scripted lines, in the order its level file
     /// lists them.  Entry `n` belongs to the piece the pool lays at
     /// index `n`; an empty string leaves the previous line on
