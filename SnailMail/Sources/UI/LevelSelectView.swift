@@ -19,7 +19,7 @@ struct LevelSelectView: View {
                                                startPoint: .top, endPoint: .bottom)
                             )
                             .shadow(color: .black.opacity(0.8), radius: 6, y: 3)
-                        Text("战役 · \(LevelCatalog.arcade.count) stars across \(LevelCatalog.galaxies.count) galaxies")
+                        Text("战役 · \(LevelCatalog.reachableStars) stars across \(LevelCatalog.galaxies.count) galaxies")
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
                             .foregroundStyle(Palette.ink.opacity(0.8))
                     }
@@ -67,7 +67,15 @@ private struct GalaxyPanel: View {
 
                 ForEach(stars) { level in
                     Button {
-                        router.push(.game(mode: .arcade, level: level.id))
+                        Sound.shared.play(.select)
+                        // The original prints the level's GalaxyText briefing
+                        // before the route starts; skip straight in where a
+                        // level carries none.
+                        if LevelCatalog.briefing(mode: .arcade, level: level.id) != nil {
+                            router.push(.briefing(mode: .arcade, level: level.id))
+                        } else {
+                            router.push(.game(mode: .arcade, level: level.id))
+                        }
                     } label: {
                         StarRow(level: level)
                     }

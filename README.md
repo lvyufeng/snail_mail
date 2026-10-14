@@ -14,10 +14,15 @@ The one thing that *does* come from the retail data file is the campaign's
 balance data. `SnailMail.dat` stores its scripts behind a byte-wise XOR with a
 256-byte repeating key, and once peeled back it is a plain 601-entry archive:
 per-level speed, hazard probabilities, parcel counts, route length, backdrop and
-fringe colour for the 51 arcade levels, plus the tutorial and challenge tuning.
+fringe colour for the arcade levels, plus the tutorial and challenge tuning.
 Those numbers (and the level/galaxy names that go with them) are what the
 campaign screen and `LevelConfig` now use. No textures, audio or other assets
 are extracted — only the small configuration scripts.
+
+The same scripts carry the words the original prints around a race: each level's
+`GalaxyText:` briefing (Turbo's log entry, or an "IPS WARNING" notice about the
+gaps and ramps ahead) and the opening-crawl and credits text, all of which the
+remake shows on its own screens.
 
 The soundtrack is generated at runtime with `AVAudioEngine` (a looping
 chiptune plus shoot / collect / hit / boost effects), so there are no bundled
@@ -25,17 +30,21 @@ audio files either — the app bundle contains no images or sounds at all.
 
 ## Screenshots
 
-| Menu | Tutorial | Practice |
-| --- | --- | --- |
-| ![menu](docs/screenshots/menu.png) | ![tutorial](docs/screenshots/tutorial.png) | ![practice](docs/screenshots/practice.png) |
+| Menu | Tutorial | Time Trial | Challenge |
+| --- | --- | --- | --- |
+| ![menu](docs/screenshots/menu.png) | ![tutorial](docs/screenshots/tutorial.png) | ![speed](docs/screenshots/speed.png) | ![challenge](docs/screenshots/challenge.png) |
 
-| Speed | Challenge | Pro Challenge |
+| Galaxy map | Briefing | Results |
 | --- | --- | --- |
-| ![speed](docs/screenshots/speed.png) | ![challenge](docs/screenshots/challenge.png) | ![pro](docs/screenshots/pro.png) |
+| ![galaxy](docs/screenshots/galaxy.png) | ![briefing](docs/screenshots/briefing.png) | ![results](docs/screenshots/results.png) |
 
-| Galaxy map | | |
+| Help | Options | High Scores |
 | --- | --- | --- |
-| ![galaxy](docs/screenshots/galaxy.png) | | |
+| ![help](docs/screenshots/help.png) | ![options](docs/screenshots/options.png) | ![highscores](docs/screenshots/highscores.png) |
+
+| Intro | Credits |
+| --- | --- |
+| ![intro](docs/screenshots/intro.png) | ![credits](docs/screenshots/credits.png) |
 
 ## Gameplay
 
@@ -53,8 +62,7 @@ audio files either — the app bundle contains no images or sounds at all.
 
 ## Modes
 
-The original mobile build shipped four modes, and this remake keeps them,
-with an extra mobile-only Pro Challenge:
+The 2005 PC build shipped four modes, and this remake keeps exactly those:
 
 - **教学 Tutorial** — guided, damage-free. On-screen prompts walk through
   steering, firing, collecting parcels, grabbing upgrade rings and delivering
@@ -64,15 +72,25 @@ with an extra mobile-only Pro Challenge:
   played from a galaxy map. Every star uses its own tuning from the retail data
   file, so the early teaching levels are gentle and "40 Gph" through "100 Gph"
   ramp the speed, salt, garbage and slug density right up.
-- **练习 Practice** — free driving at a relaxed pace; hazards are seeded but
-  do no damage, so you can learn the road.
 - **时速 Time Trial** — a shorter route at high speed; reach the post office
   and the clock is the score.
 - **挑战 Challenge** — a long, densely seeded survival highway. The retail
   level file marks it `Random:yes`, so its 51-piece pool is drawn as a shuffled
   deck and laid out differently every run.
-- **挑战+ Pro Challenge** — the mobile Pro mode: the fastest speed and the
-  heaviest hazard density.
+
+The later mobile port's *Practice* and *Pro Challenge* are not part of this
+build, so they are left out.
+
+### Around a race
+
+Picking a star on the galaxy map shows that level's **briefing** first — the
+`GalaxyText:` paragraph the retail build prints before a route, "CLICK TO
+CONTINUE" and away. The menu also carries the original's side screens: **Help**,
+**Options** (music and sound-effect levels), **High Scores** (the Postal and
+Challenge tables, with the original's "Enter your name here!" prompt when a run
+makes the board), the **Intro** crawl and the **Credits**. Postal runs are tuned
+by the start screen's **Select Speed** and **Select Difficulty** rows, which
+scale each level's own numbers.
 
 ## Track data
 
@@ -139,10 +157,14 @@ docs/
 
 ## Status
 
-Playable portrait remake with the original's four modes plus Pro Challenge,
-procedural art, procedural audio and a guided tutorial. Next steps: a 50-level
-Postal campaign with per-planet progression, richer enemy behaviour and saved
-high scores.
+Playable portrait remake of the retail four modes — Tutorial, Postal (the
+ten-galaxy / 50-star campaign), Time Trial and Challenge — with procedural art,
+procedural audio and a guided tutorial. Around a race it keeps the original's
+side screens: the per-level `GalaxyText:` briefing before each star, Help,
+Options, saved Postal and Challenge high-score boards (with the "Enter your name
+here!" prompt) and the intro crawl and credits. A perfect run pays the original's
+50,000-point bonus. Next steps: richer enemy behaviour and the retail voice-over
+cues.
 
 ---
 Snail Mail is a trademark of its respective owners. This is an independent,

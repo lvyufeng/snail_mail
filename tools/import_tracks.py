@@ -155,7 +155,47 @@ def parse_level(txt):
     return (os.path.basename(first.group(1)) if first else "Start.txt",
             segs,
             os.path.basename(last.group(1)) if last else "Finish.txt",
-            script)
+            script,
+            parse_briefing(txt))
+
+
+def parse_briefing(txt):
+    """The `GalaxyText:` blurb a level file carries.
+
+    The retail build prints this paragraph, the snail's own log entry or an
+    IPS (Intergalactic Postal Service) notice, over the route before a race
+    starts; its "IPS WARNING" lines warn about gaps, ramps and corkscrews. The
+    block sits in braces and wraps across lines, so the wrapped lines are
+    joined back into one paragraph.
+    """
+    m = re.search(r"GalaxyText\s*:\s*\{(.*?)\}", txt, flags=re.S)
+    if not m:
+        return ""
+    lines = [ln.strip() for ln in m.group(1).splitlines()]
+    return "\n".join(ln for ln in lines if ln)
+
+
+def parse_slides(txt):
+    """Split an intro/credits script into the text screens it shows.
+
+    The script marks a picture insert as `*texturename.tga(Width,Height)`; only
+    the words are kept, since no artwork is bundled. A blank line separates one
+    screen from the next.
+    """
+    body = txt.split("Text Start:", 1)[-1].split("Text End:", 1)[0]
+    body = re.sub(r"^\s*Duration\s*:.*$", "", body, flags=re.M)
+    body = re.sub(r"\*[^\s]*\.tga\s*\([^)]*\)", "", body)
+    slides, current = [], []
+    for line in body.splitlines():
+        line = line.strip()
+        if line:
+            current.append(line)
+        elif current:
+            slides.append("\n".join(current))
+            current = []
+    if current:
+        slides.append("\n".join(current))
+    return slides
 
 
 def parse_segment(txt):
@@ -216,7 +256,7 @@ def main():
     segments = by_folder(files, "segments", ".txt")
 
     # Level routes: arcade0..arcade50, tutorial and challenge.
-    routes, need, random_keys, scripts = {}, set(), set(), {}
+    routes, need, random_keys, scripts, briefings = {}, set(), set(), {}, {}
     for key, name in ([(f"arcade{i}", f"arcade{i:03d}.txt") for i in range(51)]
                       + [("tutorial", "tutorial.txt"), ("challenge", "challenge000.txt")]):
         if name not in levels:
@@ -224,11 +264,19 @@ def main():
             continue
         if re.search(r"Random:\s*yes", levels[name], re.I):
             random_keys.add(key)
-        first, segs, last, script = parse_level(levels[name])
+        first, segs, last, script, briefing = parse_level(levels[name])
         routes[key] = (first, segs, last)
         scripts[key] = script
+        if briefing:
+            briefings[key] = briefing
         need.update([first.lower(), last.lower()])
         need.update(n.lower() for n, _ in segs)
+
+    # The opening crawl and the credits are their own scripts (`INTRO/*.txt`),
+    # each a sequence of text screens separated by blank lines.
+    intro = by_folder(files, "intro", ".txt")
+    intro_slides = parse_slides(intro["intro.txt"]) if "intro.txt" in intro else []
+    credits_slides = parse_slides(intro["credits.txt"]) if "credits.txt" in intro else []
 
     grids, paths, jetpacks_off, sign_map = {}, {}, set(), {}
     for key in sorted(need):
@@ -323,6 +371,26 @@ def main():
               "    /// bundled here, so the icons are spelled out as words.",
               "    static let tutorialScript: [String] = ["]
     lines += [f"        {swift_string(t)}," for t in scripts.get("tutorial", [])]
+    lines += ["    ]", "",
+              "    /// The `GalaxyText:` blurb every campaign level file carries: the",
+              "    /// snail's log entry or an IPS (Intergalactic Postal Service) notice,",
+              "    /// shown over the route before it starts. The prose is the retail",
+              "    /// build's own, keyed the same way as `route`.",
+              "    static let briefing: [String: String] = ["]
+    for k in sorted(briefings, key=lambda s: (s.rstrip("0123456789"),
+                                              int(s[len(s.rstrip("0123456789")):] or 0))):
+        lines.append(f"        {swift_string(k)}: {swift_string(briefings[k])},")
+    lines += ["    ]", "",
+              "    /// The opening crawl (`INTRO/Intro.txt`), one string per text",
+              "    /// screen. Picture inserts the retail script named here are",
+              "    /// dropped, so the remake narrates the story in words alone.",
+              "    static let introSlides: [String] = ["]
+    lines += [f"        {swift_string(s)}," for s in intro_slides]
+    lines += ["    ]", "",
+              "    /// The credits screen (`INTRO/Credits.txt`), one string per",
+              "    /// text screen.",
+              "    static let creditsSlides: [String] = ["]
+    lines += [f"        {swift_string(s)}," for s in credits_slides]
     lines += ["    ]", "",
               "    /// Ordered segment list for each level.  Level keys are `arcade0`-",
               "    /// `arcade50`, plus `tutorial` and `challenge`.  Each entry names a",

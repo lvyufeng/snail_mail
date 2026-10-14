@@ -3,16 +3,15 @@ import CoreGraphics
 
 // MARK: - Game modes
 
-/// The original modes: 教学 Tutorial, 战役 Postal (its level files are the
-/// `Arcade*.txt` campaign), 练习 Practice, 时速 Time Trial, 挑战 Challenge,
-/// plus the mobile-only 挑战+ (Pro Challenge).
+/// The 2005 PC build's four modes: 教学 Tutorial, 战役 Postal (its level files
+/// are the `Arcade*.txt` campaign), 时速 Time Trial and 挑战 Challenge. The
+/// later mobile port's Practice and Pro Challenge are not part of this build,
+/// so the remake leaves them out.
 enum GameMode: String, CaseIterable, Identifiable {
     case arcade
     case tutorial
-    case practice
     case speedRun
     case challenge
-    case proChallenge
 
     var id: String { rawValue }
 
@@ -20,10 +19,8 @@ enum GameMode: String, CaseIterable, Identifiable {
         switch self {
         case .arcade: "Postal"
         case .tutorial: "Tutorial"
-        case .practice: "Practice"
         case .speedRun: "Time Trial"
         case .challenge: "Challenge"
-        case .proChallenge: "Pro"
         }
     }
 
@@ -32,10 +29,8 @@ enum GameMode: String, CaseIterable, Identifiable {
         switch self {
         case .arcade: "战役"
         case .tutorial: "教学"
-        case .practice: "练习"
         case .speedRun: "时速"
         case .challenge: "挑战"
-        case .proChallenge: "挑战+"
         }
     }
 
@@ -43,10 +38,8 @@ enum GameMode: String, CaseIterable, Identifiable {
         switch self {
         case .arcade: "The original galaxy campaign, star by star"
         case .tutorial: "Learn to steer, fire and deliver"
-        case .practice: "Free drive, hazards do no damage"
         case .speedRun: "Finish the route, fastest wins"
         case .challenge: "Endless hazard gauntlet"
-        case .proChallenge: "Mobile Pro Challenge: triple the danger"
         }
     }
 }
@@ -236,21 +229,24 @@ struct LevelConfig {
     var rows: Int                 // the original `Length:` budget, in track rows
     var background: String
     var fringe: SIMD3<Double>    // RGB 0...255
-    var damageEnabled: Bool       // false in Tutorial / Practice
+    var damageEnabled: Bool       // false in Tutorial
     var guided: Bool              // shows step-by-step Tutorial hints
 
     static func forMode(_ mode: GameMode, level: Int) -> LevelConfig {
         switch mode {
         case .arcade:
             // The campaign levels come straight from the original data file, so
-            // each star plays with its own speed, hazards, parcel count and route.
+            // each star plays with its own speed, hazards, parcel count and
+            // route. The start screen's `Select Speed` / `Select Difficulty`
+            // knobs scale the level's own numbers the way the original's did.
             let star = LevelCatalog.arcade[max(0, min(level, LevelCatalog.arcade.count - 1))]
+            let tuning = GameSettings.shared
             return LevelConfig(
                 name: star.name,
                 mode: .arcade,
-                speed: CGFloat(star.speed),
-                salt: CGFloat(star.salt),
-                trash: CGFloat(star.trash),
+                speed: CGFloat(star.speed) * CGFloat(tuning.speedScale),
+                salt: min(100, CGFloat(star.salt) * CGFloat(tuning.difficultyScale)),
+                trash: min(100, CGFloat(star.trash) * CGFloat(tuning.difficultyScale)),
                 slug: CGFloat(star.slug),
                 parcels: star.parcels,
                 quota: star.quota,
@@ -278,23 +274,6 @@ struct LevelConfig {
                 fringe: t.fringe,
                 damageEnabled: false,
                 guided: true
-            )
-        case .practice:
-            return LevelConfig(
-                name: "Practice",
-                mode: .practice,
-                speed: 48,
-                salt: 22,
-                trash: 34,
-                slug: 12,
-                parcels: 20,
-                quota: 12,
-                length: 260,
-                rows: 0,
-                background: "SpaceGreen",
-                fringe: SIMD3(128, 235, 140),
-                damageEnabled: false,
-                guided: false
             )
         case .speedRun:
             return LevelConfig(
@@ -328,23 +307,6 @@ struct LevelConfig {
                 rows: c.route,
                 background: c.background,
                 fringe: c.fringe,
-                damageEnabled: true,
-                guided: false
-            )
-        case .proChallenge:
-            return LevelConfig(
-                name: "Pro Challenge",
-                mode: .proChallenge,
-                speed: 74,
-                salt: 22,
-                trash: 70,
-                slug: 24,
-                parcels: 60,
-                quota: 36,
-                length: 6000,
-                rows: 0,
-                background: "SpacePurple",
-                fringe: SIMD3(255, 90, 120),
                 damageEnabled: true,
                 guided: false
             )

@@ -105,4 +105,23 @@ enum LevelCatalog {
     static let tutorial = (speed: 10, salt: 0, trash: 0, parcels: 3, quota: 0,
                            route: 700, background: "SpaceRed",
                            fringe: SIMD3(128.0, 255.0, 128.0))
+
+    /// The `GalaxyText:` briefing a run shows before it starts — the snail's log
+    /// entry or an IPS notice, straight from the level file (`TrackData.briefing`).
+    /// The free modes the retail build invented for its menu carry none.
+    /// The stars the map actually shows: the original ships a 51st arcade level
+    /// (`Arcade050.txt`) that no galaxy lists, so it never appears on the map.
+    static var reachableStars: Int { arcade.filter { $0.galaxy < galaxies.count }.count }
+
+    static func briefing(mode: GameMode, level: Int) -> String? {
+        let key: String
+        switch mode {
+        case .arcade: key = "arcade\(level)"
+        case .tutorial: key = "tutorial"
+        case .challenge: key = "challenge"
+        case .speedRun: return nil
+        }
+        let text = TrackData.briefing[key]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (text?.isEmpty ?? true) ? nil : text
+    }
 }

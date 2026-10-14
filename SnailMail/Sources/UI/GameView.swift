@@ -41,6 +41,7 @@ struct GameView: View {
 
                 if case .finished(let won) = model.state.phase {
                     ResultOverlay(won: won, state: model.state,
+                                  mode: mode, levelName: levelName,
                                   onReplay: { model.restart() },
                                   onMenu: onMenu)
                 }
@@ -51,6 +52,14 @@ struct GameView: View {
             }
         }
         .statusBarHidden()
+    }
+
+    /// The name the results screen files a high score under.
+    private var levelName: String {
+        guard mode == .arcade,
+              let star = LevelCatalog.arcade.first(where: { $0.id == level })
+        else { return mode.title }
+        return star.name
     }
 }
 

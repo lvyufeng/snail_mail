@@ -10,8 +10,20 @@ struct ContentView: View {
                     switch route {
                     case .galaxy:
                         LevelSelectView()
+                    case .briefing(let mode, let level):
+                        BriefingView(mode: mode, level: level)
                     case .game(let mode, let level):
                         GameView(mode: mode, level: level, onMenu: { router.pop() })
+                    case .help:
+                        HelpView()
+                    case .options:
+                        OptionsView()
+                    case .highScores:
+                        HighScoresView()
+                    case .intro:
+                        IntroView()
+                    case .credits:
+                        CreditsView()
                     }
                 }
         }

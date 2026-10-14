@@ -1379,9 +1379,10 @@ final class GameScene: SKScene {
             if state.quota > 0 { state.sheet.parcelDeliver += state.delivered * 500 }
             state.sheet.bonus += 1000
             // A full quota with the postal meter untouched is the original's
-            // "PERFECT SCORE!".
+            // "PERFECT SCORE!  >50,000 Bonus Points", worth the flat 50,000 the
+            // retail build's results screen advertises.
             if state.quota > 0 && state.postalMeter >= state.maxMeter {
-                state.sheet.bonus += 5000
+                state.sheet.bonus += 50000
             }
         }
         state.phase = .finished(won: won)

@@ -23,6 +23,10 @@
 		AA0000000000000000000073 /* LevelSelectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000073 /* LevelSelectView.swift */; };
 		AA0000000000000000000074 /* TrackData.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000074 /* TrackData.swift */; };
 		AA0000000000000000000075 /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000075 /* AppRouter.swift */; };
+		AA0000000000000000000076 /* BriefingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000076 /* BriefingView.swift */; };
+		AA0000000000000000000077 /* InfoScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000077 /* InfoScreens.swift */; };
+		AA0000000000000000000078 /* GameSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000078 /* GameSettings.swift */; };
+		AA0000000000000000000079 /* HighScores.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000079 /* HighScores.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -43,6 +47,10 @@
 		BB0000000000000000000073 /* LevelSelectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelSelectView.swift; sourceTree = "<group>"; };
 		BB0000000000000000000074 /* TrackData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackData.swift; sourceTree = "<group>"; };
 		BB0000000000000000000075 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
+		BB0000000000000000000076 /* BriefingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BriefingView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000077 /* InfoScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfoScreens.swift; sourceTree = "<group>"; };
+		BB0000000000000000000078 /* GameSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSettings.swift; sourceTree = "<group>"; };
+		BB0000000000000000000079 /* HighScores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HighScores.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -89,6 +97,8 @@
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000004 /* GameModel.swift */,
+				BB0000000000000000000078 /* GameSettings.swift */,
+				BB0000000000000000000079 /* HighScores.swift */,
 				BB0000000000000000000072 /* LevelCatalog.swift */,
 				BB0000000000000000000074 /* TrackData.swift */,
 				BB0000000000000000000003 /* GameScene.swift */,
@@ -102,6 +112,8 @@
 			isa = PBXGroup;
 			children = (
 				BB0000000000000000000007 /* MenuView.swift */,
+				BB0000000000000000000076 /* BriefingView.swift */,
+				BB0000000000000000000077 /* InfoScreens.swift */,
 				BB0000000000000000000073 /* LevelSelectView.swift */,
 				BB0000000000000000000006 /* GameView.swift */,
 				BB0000000000000000000009 /* HUDView.swift */,
@@ -203,6 +215,10 @@
 				AA0000000000000000000073 /* LevelSelectView.swift in Sources */,
 				AA0000000000000000000074 /* TrackData.swift in Sources */,
 				AA0000000000000000000075 /* AppRouter.swift in Sources */,
+				AA0000000000000000000076 /* BriefingView.swift in Sources */,
+				AA0000000000000000000077 /* InfoScreens.swift in Sources */,
+				AA0000000000000000000078 /* GameSettings.swift in Sources */,
+				AA0000000000000000000079 /* HighScores.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

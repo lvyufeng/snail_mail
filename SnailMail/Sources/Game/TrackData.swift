@@ -258,6 +258,94 @@ enum TrackData {
         "Excellent. Time to\nhit the Post Office.",
     ]
 
+    /// The `GalaxyText:` blurb every campaign level file carries: the
+    /// snail's log entry or an IPS (Intergalactic Postal Service) notice,
+    /// shown over the route before it starts. The prose is the retail
+    /// build's own, keyed the same way as `route`.
+    static let briefing: [String: String] = [
+        "arcade0": "Use 7,8,9,0 to\nchange unlocked\nlevels",
+        "arcade1": "My first route with\nIPS (Intergalatic\nPostal Service) I'm\nsuper pumped!",
+        "arcade2": "IPS reports there is\na jump pod on this\nlevel! If I don't\nland on it I'll fall!",
+        "arcade3": "This route supposedly\nhas loops in it.\nSounds like fun!",
+        "arcade4": "IPS WARNING:\nLarge gaps are present\nin this highway. Use\ncaution not to fall\nthrough the gaps.",
+        "arcade5": "This route is all\nhills and valleys!\nTime for this Snail\nto get on the road\nagain!",
+        "arcade6": "IPS NOTES\nOn the narrow pieces\nof highway, Snails\nwill be much safer\nif they don't steer\nleft or right.",
+        "arcade7": "IPS warns that this\nroute has a huge\ngap at the end. I\nneed to grab the\njetpack!",
+        "arcade8": "Wow, I'm looking\nat my map and this\nroute has all sorts\nof zigzags in it.",
+        "arcade9": "This route is crawling\nwith Slugs! I'd better\nbe careful if I want\nto survive this!",
+        "arcade10": "Whoa, this route has\na lot of turrets on\nit. Looks like\nthose pesky Slugs\nare trying to stop me.",
+        "arcade11": "Awesome! The speed\nlimit in this\nsector is 30\nGigamiles per hour\nTime for some fun!",
+        "arcade12": "Rumor has it that\nSlugs have set up\nbarricades on this\nroute. I better be\ncareful!",
+        "arcade13": "According to my\nmap, this route\nis full of loopy\nroads. Sounds like\nfun!",
+        "arcade14": "Some of my friends over\nat IPS have warned me that\nthis route is full of holes.\nNo biggie. I'll use the ramps.",
+        "arcade15": "It's really hard to read\nthe map, but it looks like\nall the roads here are\ncurved...",
+        "arcade16": "IPS reports there are huge\ngaps in this route. The only\nway to cross these gaps is\nto grab the jetpack. There's\nalso a warning about Slug\nhordes...",
+        "arcade17": "Oh No! This whole\narea is covered in\nSalt! My foot is\ngoing to be aching\nafter this!",
+        "arcade18": "Man. Just reading\nthis map is making\nme dizzy... This is\nnot a good sign...",
+        "arcade19": "Wow, this route is Slug\nCity! I'd better power\nup my weapons if I want\nto get out of here\nalive!",
+        "arcade20": "Hey! The speed limit\nhere is 40 Gigamiles\nper hour! Time to kick\nit up a notch!",
+        "arcade21": "Looks like this route is\ncrawling with Slugs. No\nproblem. This is a job for\nTurbo!",
+        "arcade22": "This route is all twisted!\nTime for some high speed\nturning!",
+        "arcade23": "I've been told the gravity\nin this sector is a bit\nwonky. Well, I guess it's\ntime for some off-the-wall\npackage delivery!",
+        "arcade24": "Ok. I think this route is\ntilted to the right... wait!\nleft... no... Upside down?",
+        "arcade25": "Ok I'm really starting\nto dislike this galaxy.\nAll my IPS map says for\nthis route is \"Under\nConstruction\"...",
+        "arcade26": "The Slugs have set up\na bunch of Turrets to\nslow me down. But they\nwon't stop me, I'm Turbo\nthe Snail!",
+        "arcade27": "According to IPS...\nThis route was destroyed\nin 3004 by very hungry\nSpace Hippos. Due to lack\nof funding the missing pieces\nof the highway were replaced\nwith...trampolines?",
+        "arcade28": "More twisting roads...\nWho designed these\nhighways anyway?",
+        "arcade29": "Slugs on this route, too!\nNo prob, I'll grab some\nweapons and take care\nof those pesky Slugs.",
+        "arcade30": "IPS Notes:\nAvoid the small ramps!\nThey will send a Snail\ninto obvilion.",
+        "arcade31": "According to my map, the\nRepublic cut funding to\nthis route.  In order to\nfinish the route, they\nbuilt it narrow in some\nspots to save on\nbuilding materials.",
+        "arcade32": "My map says this route\nresorted to skinny\nhighway paths and\ntrampolines to save on\ncost. Haven't these\npeople heard of Road\nTax?",
+        "arcade33": "Twisty routes?\nHere we go again!",
+        "arcade34": "Looks like there are\nlarge gaps in this\nroute. Time for some\nmore Turbo Jetpack\naction!",
+        "arcade35": "Large Turrets block my\npath on this route. I need\nto follow the paths around\nthem!",
+        "arcade36": "Man, this route is packed\nwith Slugs! If I don't\ngrab the explosive rings,\nI'm done for!",
+        "arcade37": "IPS reports that there\nare waaaay too many\nSlugs on this route.\nIn order to avoid the\nSlugs, I'm going to\nhave to jump over them!",
+        "arcade38": "IPS WARNING:\nA huge gap exists on this\nroute. Please make sure\nto use the jetpack.",
+        "arcade39": "Salt! Everywhere!\nI'm going to need\nShell Insurance...",
+        "arcade40": "Asteroids are all\nover the place!\nThis doesn't look\nlike fun....",
+        "arcade41": "IPS WARNING:\nCorkscrews are confusing.\nIf they start on the left\nside of the track you must\nsteer the mouse to the right.\nVice versa if on the right.",
+        "arcade42": "Woohoo! 60 Gigamiles\nper hour! This route\nis going to be\nsuper speedy!",
+        "arcade43": "When you need fast\ndelivery, don't use\nground shipping.\nUse Air Mail!",
+        "arcade44": "IPS Warning:\nAttention all Postal\nWorkers, Mactabilis\nis one of the most\ndangerous routes in\nthe galaxy. Use\nextreme caution.",
+        "arcade45": "Awesome, more flytime!\nI wonder if there's\nan inflight movie?",
+        "arcade46": "70 Gigamiles per hour!\nThese routes are getting\nfaster and faster!",
+        "arcade47": "Apparently, the people\nhere appreciate jump\npods more than highway.",
+        "arcade48": "8o Gigamiles per hour?\nThis is almost too fast.",
+        "arcade49": "Holy Shellshock! 90\nGigamiles per hour!\nI don't know if I'll\nsurvive...",
+        "arcade50": "Excellent! My last route!\nAnd the speed is....\n100 Gigamiles per hour?\nI'm going to need a\nvacation after this!",
+    ]
+
+    /// The opening crawl (`INTRO/Intro.txt`), one string per text
+    /// screen. Picture inserts the retail script named here are
+    /// dropped, so the remake narrates the story in words alone.
+    static let introSlides: [String] = [
+        "A long time ago\nin a galaxy\nfar, far away...",
+        "SNAIL\nMAIL",
+        "Episode I\nA New Recruit",
+        "There is turmoil\nwithin the Republic.\nThe SLUG PIRATES have\nestablished trade\nbarriers all along the\nIntergalactic Highway\nbarring all package\ndelivery.",
+        "Fearful of the Slugs'\nwrath, the Galaxy\nPostal Service has\ngone on strike.",
+        "Meanwhile, on planet\nEarth a young snail\nnamed TURBO has come\nof age and is ready\nto join the ranks of\nSNAIL MAIL, the\nfastest delivery\nservice in the\nknown universe.",
+        "Now Turbo will have to\nbrave great dangers to\ncollect, protect, and\ndeliver the packages\nthat we rely upon...",
+    ]
+
+    /// The credits screen (`INTRO/Credits.txt`), one string per
+    /// text screen.
+    static let creditsSlides: [String] = [
+        "Credits",
+        "Programming\nRichard Evans\nAlpha72 Games",
+        "Game and Level Design\nAndrew Lum",
+        "Sound and Music\nDaniel Bernstein",
+        "Graphics\nIsrael Evans",
+        "Technical Director\nAndrew Megowan",
+        "Voicework\nDano!",
+        "Focus Tester\nAdrienne Rawlinson",
+        "Original Game Design\nRichard Evans",
+        "Published by",
+        "Sandlot Games",
+        "Play In Our Neighborhood!",
+    ]
+
     /// Ordered segment list for each level.  Level keys are `arcade0`-
     /// `arcade50`, plus `tutorial` and `challenge`.  Each entry names a
     /// grid the same way `grid` is keyed, and may carry an `@<angle>`

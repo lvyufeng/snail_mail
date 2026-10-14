@@ -20,7 +20,26 @@ final class Sound {
 
     private(set) var muted = false
 
-    private init() {}
+    /// User-facing volume levels, 0...1, scaling the engine's own balanced
+    /// defaults. The Options screen's "Music Volume" / "Sounds Volume" rows
+    /// drive these, and they persist between launches.
+    private(set) var musicLevel: Double
+    private(set) var sfxLevel: Double
+
+    private static let baseMusic: Float = 0.32
+    private static let baseSfx: Float = 0.9
+
+    private enum Key {
+        static let music = "audio.musicLevel"
+        static let sfx = "audio.sfxLevel"
+    }
+
+    private init(defaults: UserDefaults = .standard) {
+        let storedMusic = defaults.object(forKey: Key.music) as? Double
+        let storedSfx = defaults.object(forKey: Key.sfx) as? Double
+        musicLevel = storedMusic ?? 1
+        sfxLevel = storedSfx ?? 1
+    }
 
     /// Starts the engine and the looping background track. Safe to call on every
     /// appearance; it only boots once. Fails silently on machines without audio.
@@ -35,8 +54,7 @@ final class Sound {
         engine.connect(sfxNode, to: engine.mainMixerNode, format: format)
         engine.connect(musicNode, to: engine.mainMixerNode, format: format)
         engine.mainMixerNode.outputVolume = 0.7
-        sfxNode.volume = 0.9
-        musicNode.volume = 0.32
+        applyVolumes()
 
         buildEffects()
         music = buildMusic()
@@ -47,8 +65,24 @@ final class Sound {
 
     func setMuted(_ value: Bool) {
         muted = value
-        musicNode.volume = value ? 0 : 0.32
-        sfxNode.volume = value ? 0 : 0.9
+        applyVolumes()
+    }
+
+    func setMusicLevel(_ value: Double) {
+        musicLevel = max(0, min(1, value))
+        UserDefaults.standard.set(musicLevel, forKey: Key.music)
+        applyVolumes()
+    }
+
+    func setSfxLevel(_ value: Double) {
+        sfxLevel = max(0, min(1, value))
+        UserDefaults.standard.set(sfxLevel, forKey: Key.sfx)
+        applyVolumes()
+    }
+
+    private func applyVolumes() {
+        musicNode.volume = muted ? 0 : Self.baseMusic * Float(musicLevel)
+        sfxNode.volume = muted ? 0 : Self.baseSfx * Float(sfxLevel)
     }
 
     func play(_ effect: Effect) {
