@@ -176,14 +176,14 @@ final class GameScene: SKScene {
     private let fxLayer = SKNode()
     private var snail = SKNode()
     private var starLayers: [SKNode] = []
-    /// The retail backdrop: the strip of tiles that slides past the camera,
-    /// how tall one of them is, how fast the level asks it to travel and how
-    /// far along the scroll has got. `update` carries it, so the sky moves on
+    /// The retail backdrop: the level's own space art laid over the scene, how
+    /// tall that copy is drawn, the rate its script asks it to drift at and how
+    /// long the race has been running. `update` carries it, so the sky moves on
     /// the race's own clock.
     private var skyTiles: SKNode?
     private var skyTileHeight: CGFloat = 0
-    private var skyScrollSpeed: CGFloat = 0
-    private var skyScroll: CGFloat = 0
+    private var skyDistort: CGFloat = 0
+    private var skyClock: CGFloat = 0
     private var fogNode = SKNode()
 
     private var roadPool: [SKShapeNode] = []      // tan cells (procedural fallback)
@@ -406,8 +406,8 @@ final class GameScene: SKScene {
         childNode(withName: "sky")?.removeFromParent()
         skyTiles = nil
         skyTileHeight = 0
-        skyScrollSpeed = 0
-        skyScroll = 0
+        skyDistort = 0
+        skyClock = 0
         let sky = SKNode()
         sky.name = "sky"
         sky.zPosition = -100
@@ -504,32 +504,32 @@ final class GameScene: SKScene {
     /// The level's fog colour — the tint its `BACKGROUNDS/*.txt` script names.
     private var fogColour: UIColor { UIColor(hex: backgroundHex(for: config.background)) }
 
-    /// Fills the sky with the level's own space texture, tiled to cover a screen
-    /// that is taller than the 512x256 art, and scrolls the whole stack past the
-    /// camera. The scroll rate comes straight from the script's `Distort:`
-    /// value, so the purple routes stream past fastest and the green warp slowest,
-    /// exactly as the retail build does it.
+    /// Lays the level's own 512x256 space art over the scene — one copy, scaled
+    /// to fill, which is what the retail build does.
+    ///
+    /// The art carries its own top-to-bottom gradient: a near-black ceiling that
+    /// opens into the bright heart of the nebula. Retail frames of the purple
+    /// route put the dark end above the camera and the bright end down behind
+    /// the highway, with the horizon row landing on the art's own midtones, and
+    /// a single fill-scaled copy reproduces that exactly. Tiling the art, as an
+    /// earlier pass did, repeats the gradient down the screen and washes the
+    /// whole sky out to the average of the nebula.
     private func buildRetailSky(into sky: SKNode, texture: SKTexture) {
         let art = texture.size()
         guard art.width > 0, art.height > 0 else { return }
-        let tileW = size.width
-        let tileH = tileW * art.height / art.width
+        // Fill: the taller side sets the scale, the excess of the other is
+        // cropped. The nebula is soft, so the crop costs nothing.
+        let scale = max(size.width / art.width, size.height / art.height)
         let list = SKNode()
-        let count = Int(ceil(size.height / tileH)) + 3
-        for i in 0..<count {
-            let tile = SKSpriteNode(texture: texture)
-            tile.size = CGSize(width: tileW, height: tileH)
-            tile.position = CGPoint(x: size.width / 2, y: CGFloat(i) * tileH - tileH)
-            list.addChild(tile)
-        }
+        let tile = SKSpriteNode(texture: texture)
+        tile.size = CGSize(width: art.width * scale, height: art.height * scale)
+        tile.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        list.addChild(tile)
         sky.addChild(list)
 
-        // Distort runs 0 (still) up to 20 (the purple nebula). Scale it into a
-        // comfortable scroll: the fastest sky crosses one tile in a few seconds.
-        let distort = RetailAssets.backgroundDistort(config.background)
         skyTiles = list
-        skyTileHeight = tileH
-        skyScrollSpeed = distort > 0 ? tileH / max(1.6, tileH / (distort * 12)) : 0
+        skyTileHeight = tile.size.height
+        skyDistort = RetailAssets.backgroundDistort(config.background)
     }
 
     private func preparePools() {
@@ -840,19 +840,30 @@ final class GameScene: SKScene {
         }
     }
 
-    /// Carry the retail backdrop past the camera at the rate its level script
-    /// asks for. The tiles wrap rather than travel, so the strip only ever
-    /// shows one tile's worth of offset and the sky can scroll forever.
+    /// Let the retail backdrop breathe at the rate its level script asks for.
+    ///
+    /// The backdrop does not stream past the camera. Frame-to-frame comparisons
+    /// of the retail captures land on a zero shift — holding the previous
+    /// frame's sky against its successor matches best with no offset at all —
+    /// so the sky stays put while the highway runs underneath it. The script's
+    /// `Distort:` only puts a slow lateral swing into the nebula, and a level
+    /// that asks for `Distort: 0` gets a backdrop that never moves.
+    ///
+    /// A swing rather than a one-way drift, so the copy never has to wrap and
+    /// show a seam: the fastest sky takes a minute to cross and recross a
+    /// twentieth of the screen, slower than a frame gap can resolve, which is
+    /// why the retail captures read as still.
     ///
     /// Driven here rather than by an `SKAction`, which would run on the view's
     /// own clock: the original's sky is part of the world, so it has to hold
     /// still while a paused race does, and a frozen capture has to land on the
     /// same offset twice.
     private func scrollSky(fdt: CGFloat) {
-        guard let tiles = skyTiles, skyTileHeight > 0, skyScrollSpeed > 0 else { return }
-        skyScroll += skyScrollSpeed * fdt
-        if skyScroll >= skyTileHeight { skyScroll -= skyTileHeight }
-        tiles.position.y = -skyScroll
+        guard let tiles = skyTiles, skyTileHeight > 0, skyDistort > 0 else { return }
+        skyClock += fdt
+        let period = 1200 / Double(skyDistort)   // seconds for a full there-and-back
+        let amplitude = size.width * skyDistort / 400
+        tiles.position.x = amplitude * CGFloat(sin(skyClock / period * 2 * Double.pi))
     }
 
     // MARK: - Shooting & collisions
