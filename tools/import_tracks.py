@@ -297,6 +297,20 @@ def main():
     levels = by_folder(files, "levels", ".txt")
     segments = by_folder(files, "segments", ".txt")
 
+    # The background scripts.  Each one tints its picture with a `Fog:(r,g,b)`
+    # colour — the same colour the sky behind the highway takes — and streams
+    # it past at its own `Distort:` rate, so both numbers have to be read out
+    # of the file rather than kept as a second copy in the app.
+    backgrounds = {}
+    for name, text in by_folder(files, "backgrounds", ".txt").items():
+        fog = re.search(r"Fog:\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)", text)
+        if not fog:
+            continue
+        dist = re.search(r"Distort:\s*([-\d.]+)", text)
+        backgrounds[name[:-4]] = (int(fog.group(1)), int(fog.group(2)),
+                                  int(fog.group(3)),
+                                  float(dist.group(1)) if dist else 0.0)
+
     # Level routes: arcade0..arcade50, tutorial and challenge.
     routes, need, random_keys, scripts, briefings = {}, set(), set(), {}, {}
     voicesMap = {}
@@ -384,6 +398,26 @@ def main():
         "    static let grid: [String: String] = [",
     ]
     lines += [f"        {swift_string(k)}: {swift_string(grids[k])}," for k in sorted(grids)]
+    lines += ["    ]", "",
+              "    /// One `BACKGROUNDS/*.TXT` script: the fog colour a level's",
+              "    /// backdrop is tinted with, and the rate its picture streams",
+              "    /// past at.",
+              "    struct Background {",
+              "        /// The `Fog:(r,g,b)` of the script, which is also the colour",
+              "        /// the sky behind the highway takes.",
+              "        let fogR: Int, fogG: Int, fogB: Int",
+              "        /// The script's `Distort:` rate; a higher number streams the",
+              "        /// backdrop past faster.",
+              "        let distort: Double",
+              "    }",
+              "",
+              "    /// Background scripts keyed the way `grid` is — lower-cased file",
+              "    /// name without its suffix, so `SpacePurple` is `\"spacepurple\"`.",
+              "    static let background: [String: Background] = ["]
+    for k in sorted(backgrounds):
+        r, g, b, distort = backgrounds[k]
+        lines.append(f"        {swift_string(k)}: Background(fogR: {r}, fogG: {g},"
+                     f" fogB: {b}, distort: {distort}),")
     lines += ["    ]", "",
               "    /// The `Path=` shape names of a segment, where it declares any,",
               "    /// in the order the file writes them.  A piece can name more",

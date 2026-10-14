@@ -231,15 +231,7 @@ enum RetailAssets {
     /// `Distort:` line in the retail `BACKGROUNDS/*.txt`. A higher number means
     /// the sky streams past faster.
     static func backgroundDistort(_ name: String) -> CGFloat {
-        switch name {
-        case "SpacePurple":   20
-        case "SpaceRed":      10
-        case "SpaceBlueswhorl": 10
-        case "SpaceGreenwarp":  5
-        case "Starmap":        2
-        case "Splash":       0.3
-        default:               0
-        }
+        CGFloat(TrackData.background[name.lowercased()]?.distort ?? 0)
     }
 
     /// A full-screen menu backdrop. The retail art ships as two tiles that

@@ -281,16 +281,13 @@ final class GameScene: SKScene {
 
     private func backgroundHex(for name: String) -> String {
         // Every level names a `BACKGROUNDS/*.txt` script, and each of those
-        // declares the fog colour its backdrop is tinted with. Using that
-        // colour for the sky keeps the four retail backdrops distinct — the
-        // blue whirl, the green warp, and the purple and red ones — instead of
-        // painting every route the same invented gradient.
-        switch name {
-        case "SpaceBlueswhorl": "#000080"   // Fog:(0,0,128)
-        case "SpaceGreenwarp":  "#008000"   // Fog:(0,128,0)
-        case "SpaceRed":        "#800080"   // Fog:(128,0,128)
-        default:                "#800080"   // SpacePurple.txt, Fog:(128,0,128)
-        }
+        // declares the fog colour its backdrop is tinted with, so the sky is
+        // read from the script's own `Fog:(r,g,b)` — the blue whirl, the green
+        // warp, the purple and the red — rather than painted an invented
+        // gradient. The scripts that ship without one all fog to the same
+        // purple, so that is the fallback.
+        guard let bg = TrackData.background[name.lowercased()] else { return "#800080" }
+        return String(format: "#%02X%02X%02X", bg.fogR, bg.fogG, bg.fogB)
     }
 
     // MARK: - Lifecycle

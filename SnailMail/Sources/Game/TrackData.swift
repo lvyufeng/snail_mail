@@ -145,6 +145,31 @@ enum TrackData {
         "zigzag.txt": "@@@@@@@@................ ......  .____.  .____.  .____.   ____    ____    ....     ...     ...  pppPPPpp                    #                             #                                      #                      ###     ...     __1     ...     2__     ...  |||PPPppppp         #                                          #                                         #                      ###     ...     1__     ...     ___     ...     __2|||  ...pppppPPP                      #                              #                              #                              ###     ...     ...     ...    ....    ....    ....   ......  ......  ...... ________________________________@@@@@@@@",
     ]
 
+    /// One `BACKGROUNDS/*.TXT` script: the fog colour a level's
+    /// backdrop is tinted with, and the rate its picture streams
+    /// past at.
+    struct Background {
+        /// The `Fog:(r,g,b)` of the script, which is also the colour
+        /// the sky behind the highway takes.
+        let fogR: Int, fogG: Int, fogB: Int
+        /// The script's `Distort:` rate; a higher number streams the
+        /// backdrop past faster.
+        let distort: Double
+    }
+
+    /// Background scripts keyed the way `grid` is — lower-cased file
+    /// name without its suffix, so `SpacePurple` is `"spacepurple"`.
+    static let background: [String: Background] = [
+        "help": Background(fogR: 128, fogG: 0, fogB: 128, distort: 0.0),
+        "menubg": Background(fogR: 128, fogG: 0, fogB: 128, distort: 0.0),
+        "spaceblueswhorl": Background(fogR: 0, fogG: 0, fogB: 128, distort: 10.0),
+        "spacegreenwarp": Background(fogR: 0, fogG: 128, fogB: 0, distort: 5.0),
+        "spacepurple": Background(fogR: 128, fogG: 0, fogB: 128, distort: 20.0),
+        "spacered": Background(fogR: 128, fogG: 0, fogB: 128, distort: 10.0),
+        "splash": Background(fogR: 128, fogG: 0, fogB: 128, distort: 0.3),
+        "starmap": Background(fogR: 128, fogG: 0, fogB: 128, distort: 2.0),
+    ]
+
     /// The `Path=` shape names of a segment, where it declares any,
     /// in the order the file writes them.  A piece can name more
     /// than one — `Under Over.txt` tags its branches `Hump` and
