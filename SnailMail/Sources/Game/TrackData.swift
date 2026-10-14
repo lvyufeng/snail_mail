@@ -256,4 +256,11 @@ enum TrackData {
         "challenge": ["start", "parceltest", "snake", "sweep", "messy", "simple jump 1", "danger ramps", "big jump", "wibble", "pit", "bridge", "hill", "forest", "cage", "grill", "valley", "supertramp", "fences", "ledge", "ditch", "dodge dip", "dodge", "loop the loop", "worm@360", "island", "loopbow", "gate house", "under over", "screw", "dark island", "crowded house", "halfpipe", "keep still", "stepping stones", "zigzag", "zigzag jump", "trampoline", "twister", "outer loop", "loop the loopt2", "tight ropes", "forest2", "coliseum", "duel carriageway", "trampoline jump", "double slalom", "explosive", "jump over2", "twister2", "turnover", "outer loop3", "finish"],
         "tutorial": ["start", "tutorial 0", "tutorial 0", "tutorial 1", "tutorial 9", "tutorial 3", "tutorial 13", "tutorial 8", "tutorial 10", "tutorial 2", "tutorial 4", "tutorial 4", "tutorial 4", "tutorial 4", "tutorial 2", "tutorial 7", "tutorial 11", "tutorial 6", "tutorial 4", "tutorial 4", "tutorial 4", "tutorial 4", "tutorial 2", "tutorial 0", "finish"],
     ]
+
+    /// Routes whose level file sets `Random:yes`.  Their segment pool
+    /// is shuffled instead of played in order, so the challenge
+    /// gauntlet never lays out the same way twice.
+    static let random: Set<String> = [
+        "challenge",
+    ]
 }

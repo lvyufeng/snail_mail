@@ -170,12 +170,14 @@ def main():
     segments = by_folder(files, "segments", ".txt")
 
     # Level routes: arcade0..arcade50, tutorial and challenge.
-    routes, need = {}, set()
+    routes, need, random_keys = {}, set(), set()
     for key, name in ([(f"arcade{i}", f"arcade{i:03d}.txt") for i in range(51)]
                       + [("tutorial", "tutorial.txt"), ("challenge", "challenge000.txt")]):
         if name not in levels:
             print("warning: missing level %s" % name, file=sys.stderr)
             continue
+        if re.search(r"Random:\s*yes", levels[name], re.I):
+            random_keys.add(key)
         first, segs, last = parse_level(levels[name])
         routes[key] = (first, segs, last)
         need.update([first.lower(), last.lower()])
@@ -240,6 +242,12 @@ def main():
                                             int(s[len(s.rstrip("0123456789")):] or 0))):
         body = ", ".join(swift_string(x) for x in encoded[k])
         lines.append(f"        {swift_string(k)}: [{body}],")
+    lines += ["    ]", "",
+              "    /// Routes whose level file sets `Random:yes`.  Their segment pool",
+              "    /// is shuffled instead of played in order, so the challenge",
+              "    /// gauntlet never lays out the same way twice.",
+              "    static let random: Set<String> = ["]
+    lines += [f"        {swift_string(k)}," for k in sorted(random_keys)]
     lines += ["    ]", "}", ""]
 
     with open(args.out, "w") as fh:

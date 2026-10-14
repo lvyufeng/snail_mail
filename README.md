@@ -59,15 +59,18 @@ with an extra mobile-only Pro Challenge:
 - **教学 Tutorial** — guided, damage-free. On-screen prompts walk through
   steering, firing, collecting parcels, grabbing upgrade rings and delivering
   to the post office.
-- **战役 Arcade** — the original campaign: ten galaxies of five stars each,
+- **战役 Postal** — the original campaign (its level files are the
+  `Arcade*.txt` set): ten galaxies of five stars each,
   played from a galaxy map. Every star uses its own tuning from the retail data
   file, so the early teaching levels are gentle and "40 Gph" through "100 Gph"
   ramp the speed, salt, garbage and slug density right up.
 - **练习 Practice** — free driving at a relaxed pace; hazards are seeded but
   do no damage, so you can learn the road.
-- **时速 Speed** — a shorter route at high speed; reach the post office and
-  the clock is the score.
-- **挑战 Challenge** — a long, densely seeded survival highway.
+- **时速 Time Trial** — a shorter route at high speed; reach the post office
+  and the clock is the score.
+- **挑战 Challenge** — a long, densely seeded survival highway. The retail
+  level file marks it `Random:yes`, so its 51-piece pool is drawn as a shuffled
+  deck and laid out differently every run.
 - **挑战+ Pro Challenge** — the mobile Pro mode: the fastest speed and the
   heaviest hazard density.
 

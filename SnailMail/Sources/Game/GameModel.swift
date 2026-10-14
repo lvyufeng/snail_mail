@@ -3,8 +3,9 @@ import CoreGraphics
 
 // MARK: - Game modes
 
-/// The original modes: 教学 Tutorial, 练习 Practice, 时速 Speed, 挑战
-/// Challenge, plus the mobile-only 挑战+ (Pro Challenge).
+/// The original modes: 教学 Tutorial, 战役 Postal (its level files are the
+/// `Arcade*.txt` campaign), 练习 Practice, 时速 Time Trial, 挑战 Challenge,
+/// plus the mobile-only 挑战+ (Pro Challenge).
 enum GameMode: String, CaseIterable, Identifiable {
     case arcade
     case tutorial
@@ -17,10 +18,10 @@ enum GameMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .arcade: "Arcade"
+        case .arcade: "Postal"
         case .tutorial: "Tutorial"
         case .practice: "Practice"
-        case .speedRun: "Speed"
+        case .speedRun: "Time Trial"
         case .challenge: "Challenge"
         case .proChallenge: "Pro"
         }
@@ -424,20 +425,34 @@ enum TrackBuilder {
         "ToadPair0": (2.2, 1, 0.8), "ToadPair1": (2.2, 1, 0.8),
     ]
 
-    /// How far the snail rolls in the screen plane over one of the flight
-    /// families: a full turn for a loop or a screw, a half turn at the crown
-    /// of an inversion. Returns the angle at `along` (0...1 through the piece).
-    private static func roll(_ family: String, _ along: CGFloat) -> CGFloat {
+    /// The turn a flight family banks through when the level file names no
+    /// `Angle=` of its own, in degrees: a full turn for a loop or a screw, a
+    /// half turn at the crown of an inversion, nothing for a worm.
+    private static func defaultTurn(_ family: String) -> CGFloat {
         switch family {
         case "LoopTheLoop", "LoopTheLoop2", "LoopTheLoopT2", "LoopTheLoopT3",
              "LoopTheLoopT4", "LoopTheLoopW", "LooptheLoop4", "LoopBow",
              "LoopOut", "LoopOut3", "SCREW":
-            return 2 * .pi * along
+            return 360
         case "Invert":
-            return .pi * sin(.pi * along)
+            return 180
         default:
             return 0
         }
+    }
+
+    /// How far the snail rolls in the screen plane over one of the flight
+    /// families. The level's `Angle=` override wins, so the `Worm.txt
+    /// Angle=360` of the challenge gauntlet twists the worm a whole turn while
+    /// a plain worm stays flat. A whole number of turns is run evenly so the
+    /// snail comes out the right way up; a partial or reversing turn eases out
+    /// and back, which is what an `Invert` and a banked `Wibble` want.
+    private static func roll(_ family: String, _ along: CGFloat, _ angle: CGFloat?) -> CGFloat {
+        let degrees = angle ?? defaultTurn(family)
+        let total = degrees * .pi / 180
+        guard total != 0 else { return 0 }
+        let whole = abs(total.truncatingRemainder(dividingBy: 2 * .pi)) < 0.01
+        return total * (whole ? along : sin(.pi * along))
     }
 
     /// Rebuild a campaign course from the retail segment grids.
@@ -459,20 +474,26 @@ enum TrackBuilder {
             var along: CGFloat
             var step: CGFloat
             var flip: CGFloat
+            /// The level's `Angle=` override for this piece, in degrees.
+            var angle: CGFloat?
         }
         var slices: [Slice] = []
         slices.reserveCapacity(max(64, config.rows + 32))
         var familyCount: [String: Int] = [:]
 
         func appendSegment(_ entry: String) {
-            let name = String(entry.split(separator: "@", maxSplits: 1)[0])
+            let parts = entry.split(separator: "@", maxSplits: 1)
+            let name = String(parts[0])
+            let angle = parts.count > 1 ? CGFloat(Double(parts[1]) ?? 0) : nil
             guard let raw = TrackData.grid[name] else { return }
             let family = TrackData.path[name] ?? ""
             // A pool that repeats the same bend should bank the other way the
             // second time round, the way the original's signed angles do.
             let seen = familyCount[family, default: 0]
             familyCount[family] = seen + 1
-            let flip: CGFloat = seen % 2 == 0 ? 1 : -1
+            // A signed `Angle=` also decides which way the piece banks.
+            let flip: CGFloat = angle.map { $0 < 0 ? -1 : 1 }
+                ?? (seen % 2 == 0 ? 1 : -1)
             let chars = Array(raw)
             var rows: [[Character]] = []
             var i = 0
@@ -486,17 +507,31 @@ enum TrackBuilder {
             for (n, row) in rows.enumerated() {
                 slices.append(Slice(cells: row, family: family,
                                     along: CGFloat(n) / span, step: 1 / span,
-                                    flip: flip))
+                                    flip: flip, angle: angle))
             }
         }
 
         let budget = max(24, config.rows)
+        var rng = SystemRandomNumberGenerator()
         appendSegment(route[0])
         if !pool.isEmpty {
-            var n = 0
-            while slices.count < budget - 8 && n < 2000 {
-                appendSegment(pool[n % pool.count])
-                n += 1
+            if TrackData.random.contains(key) {
+                // The challenge gauntlet is `Random:yes` in the retail level
+                // file: its pool is drawn as a shuffled deck, reshuffled every
+                // time it runs out, so no two runs lay out the same way.
+                var deck: [String] = []
+                var drawn = 0
+                while slices.count < budget - 8 && drawn < 2000 {
+                    if deck.isEmpty { deck = pool.shuffled(using: &rng) }
+                    appendSegment(deck.removeFirst())
+                    drawn += 1
+                }
+            } else {
+                var n = 0
+                while slices.count < budget - 8 && n < 2000 {
+                    appendSegment(pool[n % pool.count])
+                    n += 1
+                }
             }
         }
         appendSegment(route[route.count - 1])
@@ -674,8 +709,8 @@ enum TrackBuilder {
             // slice records the angle at its near and far end so the renderer can
             // interpolate it with the same fraction it uses for the road height.
             let nextAlong = min(1, slices[i].along + slices[i].step)
-            seg.roll = TrackBuilder.roll(family, slices[i].along)
-            seg.rollEnd = TrackBuilder.roll(family, nextAlong)
+            seg.roll = TrackBuilder.roll(family, slices[i].along, slices[i].angle)
+            seg.rollEnd = TrackBuilder.roll(family, nextAlong, slices[i].angle)
 
             seg.p1.world = Vec3(x: 0, y: worldY, z: CGFloat(i) * segmentLength)
             worldY = y
@@ -687,7 +722,6 @@ enum TrackBuilder {
         // route only carries parcel and pickup cells on the segments that name
         // them. Fill in what the grids leave out so the quota is reachable and
         // the blaster can still climb to the rockets.
-        var rng = SystemRandomNumberGenerator()
         func topUp(_ kind: EntityKind, to target: Int, minGap: Int) {
             var needed = target - segments.reduce(0) {
                 $0 + $1.sprites.filter { $0.kind == kind }.count
