@@ -153,6 +153,10 @@ enum Sprites {
         body.name = "snailframes"
         let root = SKNode()
         root.addChild(body)
+        if let gear = SnailGear(matching: body) {
+            gear.name = "snailgear"
+            root.addChild(gear)
+        }
         if let flame = makeFlame() {
             flame.name = "flame"
             // Just below Turbo's own middle, where the trimmed billboard put it.
@@ -162,6 +166,17 @@ enum Sprites {
             root.addChild(flame)
         }
         return root
+    }
+
+    /// Drives the weapon, jetpack and invincibility bubble the retail build
+    /// bolts onto Turbo. A snail drawn procedurally has no gear node, so this
+    /// does nothing there rather than half-drawing the add-ons.
+    static func setSnailGear(_ node: SKNode, weapon: Int, jetpack: Bool,
+                             invincible: Bool, dt: CGFloat) {
+        guard let gear = node.childNode(withName: "snailgear") as? SnailGear else { return }
+        gear.update(weapon: weapon, jetpack: jetpack, invincible: invincible, dt: dt)
+        // The pack burns its own plume, so the drawn flame stands down for it.
+        node.childNode(withName: "flame")?.isHidden = jetpack
     }
 
     // MARK: - Turbo's animation
@@ -909,6 +924,124 @@ final class SnailFrames: SKSpriteNode {
             return Int((step * (count - 1)).rounded())
         }
         return Int((clock / spec.seconds) * count)
+    }
+}
+
+/// The retail build's add-on meshes for Turbo: the weapon riding his shell, the
+/// jetpack when he is carrying one, and the bubble the invincibility power-up
+/// wraps him in.
+///
+/// `tools/bake_meshes.py` rasterises each of them inside Turbo's own animation
+/// window, so this node only has to copy the pose sprite's frame and lay the
+/// parts over him. There is no offset arithmetic here on purpose: the pieces
+/// are already in his space, and any hand-tuned placement would drift the
+/// moment the framing changed.
+final class SnailGear: SKNode {
+
+    /// The parts of each rung of the weapon ladder, keyed by the tier that
+    /// shows them. A rung whose art the installer did not ship is simply
+    /// absent, and the tier below keeps its place.
+    private var tiers: [Int: [SKSpriteNode]] = [:]
+    private var pack: SKSpriteNode?
+    private var plume: LoopingSprite?
+    private var bubble: LoopingSprite?
+
+    /// Nil when none of the gear's art is in the bundle.
+    init?(matching frames: SKSpriteNode) {
+        super.init()
+        let size = frames.size
+        guard size.width > 0, size.height > 0 else { return nil }
+
+        func part(_ name: String, depth: CGFloat) -> SKSpriteNode? {
+            guard let tex = RetailAssets.texture("Art/Baked/\(name).png") else { return nil }
+            // `color:` has to be opaque white or the tint at full blend factor
+            // multiplies the texture away and the part renders as nothing.
+            let node = SKSpriteNode(texture: tex, color: .white, size: size)
+            node.position = frames.position
+            node.zPosition = depth
+            return node
+        }
+
+        // The ladder as the build's own `X/_ANIMATION.TXT` groups it: one
+        // blaster barrel on the shell top with a pod either side, then the pair
+        // of lasers that replaces the pods, then the rocket launcher on its own.
+        let rungs: [(Int, [String])] = [
+            (1, ["snail-blaster-top", "snail-blaster-left", "snail-blaster-right"]),
+            (2, ["snail-laser-left", "snail-laser-right"]),
+            (3, ["snail-rocket"]),
+        ]
+        for (tier, names) in rungs {
+            let parts = names.compactMap { part($0, depth: 1) }
+            guard !parts.isEmpty else { continue }
+            for node in parts { addChild(node) }
+            tiers[tier] = parts
+        }
+
+        // The pack straps to his back, so it and its plume sit behind him while
+        // the weapon and the bubble close over the top.
+        pack = part("snail-jetpack", depth: -3)
+        plume = LoopingSprite(matching: frames, depth: -4, seconds: 0.25,
+                              names: (0...2).map { "snail-jetpack-thrust-\(Self.frame($0))" })
+        bubble = LoopingSprite(matching: frames, depth: 2, seconds: 0.5,
+                               names: (0...3).map { "snail-aura-\(Self.frame($0))" })
+        if let pack { addChild(pack) }
+        if let plume { addChild(plume) }
+        if let bubble { addChild(bubble) }
+
+        guard !tiers.isEmpty || pack != nil || plume != nil || bubble != nil else { return nil }
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    private static func frame(_ n: Int) -> String { String(format: "%03d", n) }
+
+    /// Show the weapon the ladder has reached, and the pack and bubble while
+    /// they are live. Anything not asked for is hidden rather than removed, so
+    /// a run that cycles through the tiers pays for the textures once.
+    func update(weapon: Int, jetpack: Bool, invincible: Bool, dt: CGFloat) {
+        let rungs = tiers.keys.sorted()
+        let wanted = min(max(weapon, 1), 3)
+        let tier = rungs.last(where: { $0 <= wanted }) ?? rungs.first
+        for (rung, parts) in tiers {
+            let showing = rung == tier
+            for node in parts { node.isHidden = !showing }
+        }
+        pack?.isHidden = !jetpack
+        plume?.isHidden = !jetpack
+        if jetpack { plume?.tick(dt) }
+        bubble?.isHidden = !invincible
+        if invincible { bubble?.tick(dt) }
+    }
+}
+
+/// A billboard that cycles through baked frames drawn inside Turbo's own
+/// window, so a looping plume or bubble keeps its place on him the way his own
+/// clips do.
+final class LoopingSprite: SKSpriteNode {
+    private let frames: [SKTexture]
+    private let seconds: CGFloat
+    private var clock: CGFloat = 0
+
+    /// Nil unless at least two of the named frames are in the bundle — a single
+    /// frame is not an animation, and the caller is better off hiding the part.
+    init?(matching frames: SKSpriteNode, depth: CGFloat, seconds: CGFloat, names: [String]) {
+        let loaded = names.compactMap { RetailAssets.texture("Art/Baked/\($0).png") }
+        guard loaded.count > 1, let first = loaded.first else { return nil }
+        self.frames = loaded
+        self.seconds = seconds
+        super.init(texture: first, color: .white, size: frames.size)
+        position = frames.position
+        zPosition = depth
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    func tick(_ dt: CGFloat) {
+        clock += dt
+        let step = seconds / CGFloat(frames.count)
+        guard step > 0 else { return }
+        let index = Int(clock / step) % frames.count
+        if texture !== frames[index] { texture = frames[index] }
     }
 }
 

@@ -1382,6 +1382,8 @@ final class GameScene: SKScene {
             snail.setScale(snailScale)
             Sprites.setBoost(snail, on: elapsed < boostUntil || jetpackActive
                              || currentSpeed > baseTargetSpeed * 1.05)
+            Sprites.setSnailGear(snail, weapon: state.weaponLevel, jetpack: jetpackActive,
+                                 invincible: invincible, dt: frameDelta)
             // Blink while the post-hit invulnerability is active.
             snail.alpha = elapsed < invincibleUntil ? 0.45 + 0.55 * abs(sin(elapsed * 22)) : 1
             Sprites.setSnailClip(snail, snailClip(), dt: frameDelta)

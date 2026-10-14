@@ -268,6 +268,73 @@ SNAIL_FRAME = (0.034, 0.165, 1.76)
 SNAIL_SIZE = 384
 
 
+# The gear the retail build bolts onto Turbo, in the order the build's own
+# `X/_ANIMATION.TXT` lists it. Each mesh is modelled in Turbo's own space
+# already — the blaster sits on his shell top, the jetpack hangs off his sides —
+# so rendering it through the same camera and the same `SNAIL_FRAME` window as
+# his poses puts it exactly where the original's 3D pipeline drew it, and the
+# app can lay the result straight over his billboard.
+#
+#   tier      the weapon the pickup ladder climbs through
+#   jetpack   the pack, and the plume it burns
+#   aura      the shell of light the invincibility power-up wraps him in
+TURBO_GEAR = [
+    ("snail-blaster-top", "blastertop-base-000.x"),
+    ("snail-blaster-left", "blasterleft-base-000.x"),
+    ("snail-blaster-right", "blasterright-base-000.x"),
+    ("snail-laser-left", "laserleft-base-000.x"),
+    ("snail-laser-right", "laserright-base-000.x"),
+    ("snail-rocket", "rocketlauncher-base-000.x"),
+    ("snail-jetpack", "jetpack-base-000.x"),
+]
+
+# Gear that cycles rather than holds still, as `(output stem, model stem, frame
+# numbers, texture override)`. The plume and the aura loop for as long as they
+# are on screen, so the app plays them the same way it plays Turbo's clips.
+TURBO_GEAR_CLIPS = [
+    ("snail-jetpack-thrust", "jetpackthrust-base", [0, 1, 2], None),
+    ("snail-aura", "invincible-base", [0, 1, 2, 3], None),
+]
+
+
+def bake_gear(x_dir, tex_dir, out_dir, size=SNAIL_SIZE, log=print):
+    """Rasterise the meshes the build straps onto Turbo.
+
+    They share Turbo's own window and unit zoom, so every piece lands on the
+    same canvas his poses use and overlays him without a scrap of guesswork
+    about where a weapon or a jetpack belongs.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    written = 0
+    for name, model in TURBO_GEAR:
+        src = os.path.join(x_dir, model)
+        if not os.path.exists(src):
+            log("bake: missing %s" % model)
+            continue
+        try:
+            img = render(src, tex_dir, size=size, yaw=0.0, pitch=-0.34,
+                         zoom=1.0, frame=SNAIL_FRAME)
+            img.save(os.path.join(out_dir, name + ".png"))
+            written += 1
+        except Exception as exc:                      # noqa: BLE001
+            log("bake: %s failed: %s" % (model, exc))
+    for stem, model, nums, tc in TURBO_GEAR_CLIPS:
+        for n in nums:
+            src = os.path.join(x_dir, "%s-%03d.x" % (model, n))
+            if not os.path.exists(src):
+                log("bake: %s-%03d.x missing, skipping" % (model, n))
+                continue
+            dst = os.path.join(out_dir, "%s-%03d.png" % (stem, n))
+            try:
+                img = render(src, tex_dir, size=size, yaw=0.0, pitch=-0.34,
+                             zoom=1.0, frame=SNAIL_FRAME, tex_override=tc)
+                img.save(dst)
+                written += 1
+            except Exception as exc:                  # noqa: BLE001
+                log("bake: %s-%03d.x failed: %s" % (model, n, exc))
+    return written
+
+
 def bake_all(x_dir, tex_dir, out_dir, size=256, log=print):
     os.makedirs(out_dir, exist_ok=True)
     written = 0
@@ -284,6 +351,7 @@ def bake_all(x_dir, tex_dir, out_dir, size=256, log=print):
         except Exception as exc:                      # noqa: BLE001
             log("bake: %s failed: %s" % (model, exc))
     written += bake_clips(x_dir, tex_dir, out_dir, log=log)
+    written += bake_gear(x_dir, tex_dir, out_dir, log=log)
     return written
 
 
