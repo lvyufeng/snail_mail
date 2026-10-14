@@ -76,4 +76,15 @@ final class AppRouter: ObservableObject {
         return []
         #endif
     }
+
+    /// True when one of the debug screenshot hooks above is driving the launch.
+    /// Those runs want the screen they asked for, not the loader in front of
+    /// it, so the splash stands down for them.
+    static var skipsSplash: Bool {
+        #if DEBUG
+        return !debugLaunchPath().isEmpty
+        #else
+        return false
+        #endif
+    }
 }

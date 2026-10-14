@@ -29,6 +29,7 @@
 		AA0000000000000000000077 /* InfoScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000077 /* InfoScreens.swift */; };
 		AA0000000000000000000078 /* GameSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000078 /* GameSettings.swift */; };
 		AA0000000000000000000079 /* HighScores.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000079 /* HighScores.swift */; };
+		AA0000000000000000000082 /* SplashView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000082 /* SplashView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -55,6 +56,7 @@
 		BB0000000000000000000077 /* InfoScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InfoScreens.swift; sourceTree = "<group>"; };
 		BB0000000000000000000078 /* GameSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GameSettings.swift; sourceTree = "<group>"; };
 		BB0000000000000000000079 /* HighScores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HighScores.swift; sourceTree = "<group>"; };
+		BB0000000000000000000082 /* SplashView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SplashView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -116,6 +118,7 @@
 		DD0000000000000000000004 /* UI */ = {
 			isa = PBXGroup;
 			children = (
+				BB0000000000000000000082 /* SplashView.swift */,
 				BB0000000000000000000007 /* MenuView.swift */,
 				BB0000000000000000000076 /* BriefingView.swift */,
 				BB0000000000000000000077 /* InfoScreens.swift */,
@@ -249,6 +252,7 @@
 				AA0000000000000000000077 /* InfoScreens.swift in Sources */,
 				AA0000000000000000000078 /* GameSettings.swift in Sources */,
 				AA0000000000000000000079 /* HighScores.swift in Sources */,
+				AA0000000000000000000082 /* SplashView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -314,6 +318,7 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SnailMail/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarHidden = YES;
@@ -342,6 +347,7 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SnailMail/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UIStatusBarHidden = YES;

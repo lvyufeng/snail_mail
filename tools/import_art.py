@@ -115,6 +115,39 @@ def ogg_to_m4a(data, path):
         return done.returncode == 0 and os.path.exists(path)
 
 
+def write_splash_logo(out):
+    """Lift the SNAIL MAIL lockup off the installer's loading screen.
+
+    `SPRITES/LOADING.TGA` is the build's whole loading screen: the title art
+    behind a progress bar, with the game's logo painted across the middle of
+    it. The remake wants the lockup by itself, so key it out on the one thing
+    the backdrop never is — its green channel stays under the purple-to-red
+    ramp the screen is drawn in, while the lettering over it is white and
+    cyan. Returns the path written, or None when the loader was not imported.
+    """
+    from PIL import Image
+    import numpy as np
+
+    src = os.path.join(out, "Art", "Sprites", "loading.png")
+    if not os.path.exists(src):
+        return None
+    rgb = np.asarray(Image.open(src).convert("RGB")).astype(np.float64)
+    red, green, blue = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    key = np.maximum(green - 52, (blue - red) - 24)
+    alpha = np.clip((key - 6) / 26, 0, 1)
+    alpha[215:, :] = 0                       # the loader's own bar and label
+    ys, xs = np.where(alpha > 0.15)
+    if not len(xs):
+        return None
+    cut = Image.fromarray(np.dstack([rgb, alpha * 255]).astype(np.uint8))
+    cut = cut.crop((int(xs.min()), int(ys.min()),
+                    int(xs.max()) + 1, int(ys.max()) + 1))
+    dest = os.path.join(out, "Art", "Baked", "splashlogo.png")
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    cut.save(dest, optimize=True)
+    return dest
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -167,6 +200,12 @@ def main():
     if os.path.exists(strip):
         face = os.path.join(args.out, "Art", "Objects", "SnailMailRetail.ttf")
         print("wrote %d glyphs to %s" % (mf.build(strip, face), face))
+
+    # The loading screen's own title lockup, lifted off the backdrop so the
+    # launch splash can wear it on any screen.
+    logo = write_splash_logo(args.out)
+    if logo:
+        print("wrote splash logo to %s" % logo)
 
 
 if __name__ == "__main__":

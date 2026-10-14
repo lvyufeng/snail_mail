@@ -53,6 +53,13 @@ effect cues at runtime. The shipped repository contains no images or sounds.
 | --- | --- |
 | ![intro](docs/screenshots/intro.png) | ![credits](docs/screenshots/credits.png) |
 
+The app opens on the 2005 build's loading screen — its SNAIL MAIL lockup over
+the title backdrop, with a gold bar filling underneath. A tap skips it.
+
+| Loading |
+| --- |
+| ![loading](docs/screenshots/loading.png) |
+
 ## Gameplay
 
 - Steer the snail horizontally by dragging anywhere on the screen.

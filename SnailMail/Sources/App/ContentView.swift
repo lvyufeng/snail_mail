@@ -2,30 +2,43 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var router = AppRouter()
+    /// The launch splash covers the menu until it finishes or is tapped past.
+    /// Debug launches open straight on their own screen instead.
+    @State private var showSplash = !AppRouter.skipsSplash
 
     var body: some View {
-        NavigationStack(path: $router.path) {
-            MenuView()
-                .navigationDestination(for: AppRoute.self) { route in
-                    switch route {
-                    case .galaxy:
-                        LevelSelectView()
-                    case .briefing(let mode, let level):
-                        BriefingView(mode: mode, level: level)
-                    case .game(let mode, let level):
-                        GameView(mode: mode, level: level, onMenu: { router.pop() })
-                    case .help:
-                        HelpView()
-                    case .options:
-                        OptionsView()
-                    case .highScores:
-                        HighScoresView()
-                    case .intro:
-                        IntroView()
-                    case .credits:
-                        CreditsView()
+        ZStack {
+            NavigationStack(path: $router.path) {
+                MenuView()
+                    .navigationDestination(for: AppRoute.self) { route in
+                        switch route {
+                        case .galaxy:
+                            LevelSelectView()
+                        case .briefing(let mode, let level):
+                            BriefingView(mode: mode, level: level)
+                        case .game(let mode, let level):
+                            GameView(mode: mode, level: level, onMenu: { router.pop() })
+                        case .help:
+                            HelpView()
+                        case .options:
+                            OptionsView()
+                        case .highScores:
+                            HighScoresView()
+                        case .intro:
+                            IntroView()
+                        case .credits:
+                            CreditsView()
+                        }
                     }
+            }
+
+            if showSplash {
+                SplashView {
+                    withAnimation(.easeOut(duration: 0.4)) { showSplash = false }
                 }
+                .transition(.opacity)
+                .zIndex(1)
+            }
         }
         .environmentObject(router)
     }
