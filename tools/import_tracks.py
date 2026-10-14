@@ -199,11 +199,20 @@ def parse_slides(txt):
 
 
 def parse_segment(txt):
-    """Return (grid, path, jetpack_off, signs) for one segment.
+    """Return (grid, paths, jetpack_off, signs) for one segment.
 
-    `grid` is the rows, `path` its `Path=` family, and `jetpack_off` whether
-    any row is tagged `JetPack=Off` — the piece that switches off a jetpack the
-    player picked up earlier (see `Jetpack.txt` and `JetpackOff.txt`).
+    `grid` is the rows, `paths` the `Path=` families the piece names, in the
+    order the file writes them, and `jetpack_off` whether any row is tagged
+    `JetPack=Off` — the piece that switches off a jetpack the player picked up
+    earlier (see `Jetpack.txt` and `JetpackOff.txt`).
+
+    A piece may name more than one path. `Twister.txt` marks the left half of
+    its split road `Path=TwisterA` and the right half `Path=TwisterB`, and
+    `Under Over.txt` marks its two branches `Path=Hump` and `Path=Dump` — the
+    hump and the dip of the crossing. Keeping only the last tag loses the
+    manoeuvre the piece is named for, so every tag is kept in order and the
+    reader picks the first one it can play (see `TrackBuilder.pathFamily`).
+
     `signs` is the list of roadside signs the piece hangs with a
     `3DModel=<name>.x (x,y,z)` tag, each as `(row, model, x)` where `row`
     counts the rows that lay road, the way the reader numbers the slices.
@@ -213,7 +222,7 @@ def parse_segment(txt):
     the parcels the player actually grabs are the `$` cells in the grid, so
     the metadata row is left blank rather than expanded into a band of parcels.
     """
-    rows, path, jetpack_off, signs = [], "", False, []
+    rows, paths, jetpack_off, signs = [], [], False, []
     laid = 0
     for line in txt.splitlines():
         m = re.match(r"^@(.{8})@(.*)$", line)
@@ -234,9 +243,9 @@ def parse_segment(txt):
                 laid += 1
             rows.append(row)
         p = re.search(r"Path=(\S+)", line)
-        if p:
-            path = p.group(1)
-    return "".join(rows), path, jetpack_off, signs
+        if p and p.group(1) not in paths:
+            paths.append(p.group(1))
+    return "".join(rows), paths, jetpack_off, signs
 
 
 def swift_string(s):
@@ -282,10 +291,10 @@ def main():
     for key in sorted(need):
         if key not in segments:
             continue
-        grid, path, jetpack_off, signs = parse_segment(segments[key])
+        grid, seg_paths, jetpack_off, signs = parse_segment(segments[key])
         grids[key] = grid
-        if path:
-            paths[key] = path
+        if seg_paths:
+            paths[key] = seg_paths
         if jetpack_off:
             jetpacks_off.add(key)
         if signs:
@@ -332,9 +341,14 @@ def main():
     ]
     lines += [f"        {swift_string(k)}: {swift_string(grids[k])}," for k in sorted(grids)]
     lines += ["    ]", "",
-              "    /// The `Path=` shape name of a segment, where it declares one.",
-              "    static let path: [String: String] = ["]
-    lines += [f"        {swift_string(k)}: {swift_string(paths[k])}," for k in sorted(paths)]
+              "    /// The `Path=` shape names of a segment, where it declares any,",
+              "    /// in the order the file writes them.  A piece can name more",
+              "    /// than one — `Under Over.txt` tags its branches `Hump` and",
+              "    /// `Dump` — and the first name is the piece's own manoeuvre, so",
+              "    /// the reader plays the first one it has a profile for.",
+              "    static let path: [String: [String]] = ["]
+    lines += [f"        {swift_string(k)}: [{', '.join(swift_string(v) for v in paths[k])}],"
+              for k in sorted(paths)]
     lines += ["    ]", "",
               "    /// Segments that switch the jetpack back off.  A level hands one",
               "    /// out on a `Jetpack` piece and takes it back with a `JetPackOff`",

@@ -483,6 +483,21 @@ enum TrackBuilder {
         }
     }
 
+    /// The family a piece's road follows when it names more than one `Path=`.
+    /// The first name is the piece's own manoeuvre — `Under Over.txt` tags its
+    /// branches `Hump`, `Dump` and `P2`, and the hump is what the piece is
+    /// named for — so the first name that has a profile wins. Pieces whose
+    /// names are all bare markers (`zigzag.txt` names `P0`/`P1`/`P2`) keep
+    /// their first name, which is all the road needs to tell them apart.
+    private static func pathFamily(_ name: String) -> String {
+        let names = TrackData.path[name] ?? []
+        for candidate in names
+        where lift[candidate] != nil || weave[candidate] != nil || vertical[candidate] != nil {
+            return candidate
+        }
+        return names.first ?? ""
+    }
+
     /// How far the snail rolls in the screen plane over one of the flight
     /// families. The level's `Angle=` override wins, so the `Worm.txt
     /// Angle=360` of the challenge gauntlet twists the worm a whole turn while
@@ -534,7 +549,7 @@ enum TrackBuilder {
             let name = String(parts[0])
             let angle = parts.count > 1 ? CGFloat(Double(parts[1]) ?? 0) : nil
             guard let raw = TrackData.grid[name] else { return }
-            let family = TrackData.path[name] ?? ""
+            let family = pathFamily(name)
             let jetpackOff = TrackData.jetpackOff.contains(name)
             // A pool that repeats the same bend should bank the other way the
             // second time round, the way the original's signed angles do.
