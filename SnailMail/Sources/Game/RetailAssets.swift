@@ -254,6 +254,34 @@ enum RetailAssets {
         return tex
     }
 
+    /// One roadside wall, ready to fill a shape with.
+    ///
+    /// The walls that flank the highway are the retail `OBJECTS/UNIVERSE/
+    /// FRINGE.TGA` — a 4x4 white texture whose alpha climbs from nearly clear at
+    /// the top to almost solid at the road edge — tinted with the level's own
+    /// `Fringe:(r,g,b)` colour. SpriteKit shapes fill with an image rather than
+    /// a colour, so the file is read here and the tint baked in; the alpha
+    /// profile is the retail file's, which is what makes the wall glow at its
+    /// base and dissolve into the sky above.
+    static func fringeWall(_ colour: UIColor) -> UIImage? {
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        guard colour.getRed(&r, green: &g, blue: &b, alpha: &a),
+              let src = image("Art/Objects/fringe.png") else { return nil }
+        let key = String(format: "%02X%02X%02X", Int(r * 255), Int(g * 255), Int(b * 255))
+        if let hit = fringeWalls[key] { return hit }
+        // Paint the tint through the retail texture's own alpha: fill the tile
+        // with the colour, then keep only the pixels the fringe art covers.
+        let img = UIGraphicsImageRenderer(size: src.size).image { ctx in
+            colour.setFill()
+            ctx.fill(CGRect(origin: .zero, size: src.size))
+            src.draw(at: .zero, blendMode: .destinationIn, alpha: 1)
+        }
+        fringeWalls[key] = img
+        return img
+    }
+
+    private static var fringeWalls: [String: UIImage] = [:]
+
     /// The two retail tiles for a backdrop joined into one image, or nil when
     /// the art is not in the bundle. SpriteKit wants the texture; SwiftUI wants
     /// the image itself, so this is the shared stitcher.

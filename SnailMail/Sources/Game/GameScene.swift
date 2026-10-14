@@ -65,6 +65,10 @@ final class GameScene: SKScene {
     private var segments: [RoadSegment] = []
     private var trackLength: CGFloat = 1
     private var fringe: UIColor
+    /// The roadside wall's fill — the retail fringe gradient tinted with
+    /// `fringe`, or nil on a checkout without the retail art, where the walls
+    /// stay flat.
+    private var fringeWall: SKTexture?
     /// The two tones the road checkerboard alternates between, taken from the
     /// retail surface the level's `Track:` script selects.
     private var roadTan: UIColor
@@ -181,12 +185,18 @@ final class GameScene: SKScene {
         self.level = level
         self.config = LevelConfig.forMode(mode, level: level)
         self.playerZ = cameraHeight * (1.0 / tan((100.0 / 2.0) * .pi / 180.0))
-        self.fringe = UIColor(
+        let tint = UIColor(
             red: config.fringe.x / 255,
             green: config.fringe.y / 255,
             blue: config.fringe.z / 255,
             alpha: 1
         )
+        self.fringe = tint
+        if let wall = RetailAssets.fringeWall(tint) {
+            let tex = SKTexture(image: wall)
+            tex.filteringMode = .linear
+            self.fringeWall = tex
+        }
         let palette = RetailAssets.roadColours(track: config.track)
         self.roadOrange = palette.dark
         self.roadTan = palette.light
@@ -1551,7 +1561,9 @@ final class GameScene: SKScene {
     }
 
     private func drawFringe(_ seg: RoadSegment, n: Int) {
-        // Fringe walls on both sides, tinted with the level's fringe colour.
+        // The walls on both sides of the highway, tinted with the level's
+        // `Fringe:` colour and filled with the retail gradient, so each wall is
+        // solid where it meets the road and fades out as it rises.
         let lh1 = seg.p1.screenW * wallRatio
         let lh2 = seg.p2.screenW * wallRatio
         let lx1 = seg.p1.screenX - seg.p1.screenW
@@ -1560,11 +1572,13 @@ final class GameScene: SKScene {
         let rx2 = seg.p2.screenX + seg.p2.screenW
 
         wallLeftPool[n].isHidden = false
-        wallLeftPool[n].fillColor = fringe
+        wallLeftPool[n].fillColor = fringeWall == nil ? fringe : .white
+        wallLeftPool[n].fillTexture = fringeWall
         wallLeftPool[n].path = quad(lx1, fy(seg.p1.screenY), lx1, fy(seg.p1.screenY - lh1),
                                     lx2, fy(seg.p2.screenY - lh2), lx2, fy(seg.p2.screenY))
         wallRightPool[n].isHidden = false
-        wallRightPool[n].fillColor = fringe
+        wallRightPool[n].fillColor = fringeWall == nil ? fringe : .white
+        wallRightPool[n].fillTexture = fringeWall
         wallRightPool[n].path = quad(rx1, fy(seg.p1.screenY), rx1, fy(seg.p1.screenY - lh1),
                                      rx2, fy(seg.p2.screenY - lh2), rx2, fy(seg.p2.screenY))
     }
