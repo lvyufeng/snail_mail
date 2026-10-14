@@ -147,6 +147,10 @@ final class GameScene: SKScene {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-forcefinish") {
             startRace()
+            // Faithful to a real finish: the player has driven to the end of the
+            // route, which is the state REPLAY has to recover from.
+            positionZ = trackLength
+            state.distance = Double(positionZ)
             state.parcels = state.quota
             state.sheet.parcelCollect = state.quota * 100
             state.sheet.ring = 600
@@ -308,6 +312,8 @@ final class GameScene: SKScene {
         invincibleUntil = 0
         fallTimer = -1
         fallOffset = 0
+        fireCooldown = 0
+        clearBullets()
         snail.setScale(snailBaseScale)
         snail.zRotation = 0
         snail.alpha = 1
@@ -327,6 +333,15 @@ final class GameScene: SKScene {
         state.elapsed = 0
         elapsed = 0
         publish()
+    }
+
+    /// Replay: a brand new run, not a resumed one. Without the track reset the
+    /// camera would still be parked on the finish line, so the race would
+    /// re-finish on the very next frame and the results screen would look like
+    /// it swallowed the tap.
+    func restartRace() {
+        resetTrack()
+        startRace()
     }
 
     func togglePause() {

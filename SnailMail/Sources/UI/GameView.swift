@@ -75,6 +75,6 @@ final class GameViewModel: ObservableObject {
     }
 
     func restart() {
-        scene.startRace()
+        scene.restartRace()
     }
 }
