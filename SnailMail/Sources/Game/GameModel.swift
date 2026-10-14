@@ -116,6 +116,9 @@ struct EntitySpec {
     let offset: CGFloat
     /// Extra depth within the segment, 0...1.
     let depth: CGFloat
+    /// How much of the road the entity covers, as a fraction of the full width.
+    /// Zero means "use the kind's own footprint" (see `GameScene`).
+    var width: CGFloat = 0
 }
 
 /// One slice of road. The list of these forms the whole course, exactly like
@@ -147,6 +150,7 @@ struct LevelConfig {
     var parcels: Int
     var quota: Int
     var length: Int               // approximate number of segments
+    var rows: Int                 // the original `Length:` budget, in track rows
     var background: String
     var fringe: SIMD3<Double>    // RGB 0...255
     var damageEnabled: Bool       // false in Tutorial / Practice
@@ -168,6 +172,7 @@ struct LevelConfig {
                 parcels: star.parcels,
                 quota: star.quota,
                 length: star.segments,
+                rows: star.route,
                 background: star.background,
                 fringe: star.fringe,
                 damageEnabled: true,
@@ -185,6 +190,7 @@ struct LevelConfig {
                 parcels: t.parcels,
                 quota: t.quota,
                 length: Int(Double(t.route) * 0.4),
+                rows: t.route,
                 background: t.background,
                 fringe: t.fringe,
                 damageEnabled: false,
@@ -201,6 +207,7 @@ struct LevelConfig {
                 parcels: 20,
                 quota: 12,
                 length: 260,
+                rows: 0,
                 background: "SpaceGreen",
                 fringe: SIMD3(128, 235, 140),
                 damageEnabled: false,
@@ -217,6 +224,7 @@ struct LevelConfig {
                 parcels: 24,
                 quota: 16,
                 length: 340,
+                rows: 0,
                 background: "SpaceRed",
                 fringe: SIMD3(255, 150, 70),
                 damageEnabled: true,
@@ -234,6 +242,7 @@ struct LevelConfig {
                 parcels: c.parcels,
                 quota: c.quota,
                 length: Int(Double(c.route) * 0.4),
+                rows: c.route,
                 background: c.background,
                 fringe: c.fringe,
                 damageEnabled: true,
@@ -250,6 +259,7 @@ struct LevelConfig {
                 parcels: 60,
                 quota: 36,
                 length: 6000,
+                rows: 0,
                 background: "SpacePurple",
                 fringe: SIMD3(255, 90, 120),
                 damageEnabled: true,
@@ -339,6 +349,281 @@ enum TrackBuilder {
     static let segmentLength: CGFloat = 200
     static let rumbleLength = 3
     static let roadWidth: CGFloat = 1500
+
+    /// Build a course. The campaign levels (and the tutorial and challenge)
+    /// play the retail game's own segments, in the order its level files list
+    /// them, with every hazard sitting where its grid puts it. The free modes
+    /// keep the procedural generator.
+    static func build(_ config: LevelConfig, mode: GameMode, level: Int) -> [RoadSegment] {
+        let routeKey: String?
+        switch mode {
+        case .arcade:    routeKey = "arcade\(level)"
+        case .tutorial:  routeKey = "tutorial"
+        case .challenge: routeKey = "challenge"
+        default:         routeKey = nil
+        }
+        if let key = routeKey, let course = campaign(key, config: config) {
+            return course
+        }
+        return build(config)
+    }
+
+    /// The `Path=` families that lift or drop the road. The original names the
+    /// vertical shape of a segment here; the grid itself only ever describes
+    /// the plan view, so a hill is a `Path=Hill` segment rather than a taller
+    /// block of cells. Values are multiples of the segment length.
+    private static let lift: [String: CGFloat] = [
+        "Hill": 1.6, "Hill4": 1.2, "Hill4C": 1.2, "Hump": 1.5,
+        "SuperTramp": 2.4, "HalfPipe": 1.5, "Wibble": 0.7,
+        "Valley": -1.6, "Valley4": -1.2, "Valley4C": -1.2,
+        "Dip": -1.4, "DodgeDip": -1.0,
+    ]
+
+    /// The `Path=` families that swing the road sideways, as (half-cycles,
+    /// amplitude in lanes). A `Wibble` is a wiggle, a `Sweep` one long arc, a
+    /// `Slalom` a tight alternating weave. Segments that name no path bend
+    /// only where their own grid says so.
+    private static let weave: [String: (cycles: CGFloat, amp: CGFloat)] = [
+        "Sweep": (0.5, 2.6), "Wibble": (2, 1.4), "Snake": (1.5, 2.2),
+        "Slalom": (3, 2.0), "SlalomBig": (2, 2.6), "SlalomDouble": (4, 2.0),
+        "Turnover": (1, 2.2), "TurnoverDouble": (2, 2.2), "Turnunder": (1, 2.0),
+        "TwisterB": (1.5, 2.0), "Twister2A": (2, 2.0), "Twister2B": (1, 2.2),
+        "LoopBow": (1, 2.4), "LoopOut": (1, 2.2), "LoopOut3": (1.5, 2.2),
+        "Valley4C": (1, 0.8), "Hill4C": (1, 0.8), "Cage2": (2, 1.2),
+    ]
+
+    /// Rebuild a campaign course from the retail segment grids.
+    ///
+    /// A level file lists a pool of segments; with `Random:no` the original
+    /// plays them in the order written and cycles back to the top until the
+    /// track reaches its approximate `Length:`. Each grid row is one slice of
+    /// road, so the road bends exactly where the grid's drivable cells move
+    /// across its eight columns, and every symbol lands in its own lane.
+    private static func campaign(_ key: String, config: LevelConfig) -> [RoadSegment]? {
+        guard let route = TrackData.route[key], route.count >= 2 else { return nil }
+        let pool = route.count > 2 ? Array(route[1..<(route.count - 1)]) : []
+
+        // One entry per grid row: the eight lateral cells, the segment's
+        // vertical family, and how far along that segment the row sits.
+        struct Slice {
+            var cells: [Character]
+            var family: String
+            var along: CGFloat
+            var flip: CGFloat
+        }
+        var slices: [Slice] = []
+        slices.reserveCapacity(max(64, config.rows + 32))
+        var familyCount: [String: Int] = [:]
+
+        func appendSegment(_ entry: String) {
+            let name = String(entry.split(separator: "@", maxSplits: 1)[0])
+            guard let raw = TrackData.grid[name] else { return }
+            let family = TrackData.path[name] ?? ""
+            // A pool that repeats the same bend should bank the other way the
+            // second time round, the way the original's signed angles do.
+            let seen = familyCount[family, default: 0]
+            familyCount[family] = seen + 1
+            let flip: CGFloat = seen % 2 == 0 ? 1 : -1
+            let chars = Array(raw)
+            var rows: [[Character]] = []
+            var i = 0
+            while i + 8 <= chars.count {
+                let row = Array(chars[i..<(i + 8)])
+                // A row walled off end to end is a seam between segments, not road.
+                if !row.allSatisfy({ $0 == "@" }) { rows.append(row) }
+                i += 8
+            }
+            let span = CGFloat(max(1, rows.count - 1))
+            for (n, row) in rows.enumerated() {
+                slices.append(Slice(cells: row, family: family,
+                                    along: CGFloat(n) / span, flip: flip))
+            }
+        }
+
+        let budget = max(24, config.rows)
+        appendSegment(route[0])
+        if !pool.isEmpty {
+            var n = 0
+            while slices.count < budget - 8 && n < 2000 {
+                appendSegment(pool[n % pool.count])
+                n += 1
+            }
+        }
+        appendSegment(route[route.count - 1])
+        guard slices.count > 6 else { return nil }
+
+        let count = slices.count
+
+        // The plan view: the road's lane centre, carried forward over rows that
+        // leave it blank, then smoothed so a one-column step reads as a bend
+        // instead of a kink. Rows with no real band of road — the airborne gap
+        // in a jump, or a row that holds a lone hazard marker — must not tug
+        // the centre sideways, so only a mostly intact row moves it.
+        var plan = [CGFloat](repeating: 3.5, count: count)
+        var centre: CGFloat = 3.5
+        for i in 0..<count {
+            let road = slices[i].cells.indices.filter {
+                slices[i].cells[$0] != "@" && slices[i].cells[$0] != " "
+            }
+            if road.count >= 5, let lo = road.first, let hi = road.last {
+                centre = (CGFloat(lo) + CGFloat(hi)) / 2
+            }
+            var value = centre
+            if let w = weave[slices[i].family] {
+                value -= w.amp * sin(2 * .pi * w.cycles * slices[i].along) * slices[i].flip
+            }
+            plan[i] = value
+        }
+        func blur(_ v: [CGFloat], _ radius: Int) -> [CGFloat] {
+            var out = v
+            for i in v.indices {
+                var sum: CGFloat = 0
+                var n: CGFloat = 0
+                for j in max(0, i - radius)...min(v.count - 1, i + radius) {
+                    sum += v[j]; n += 1
+                }
+                out[i] = sum / n
+            }
+            return out
+        }
+        plan = blur(blur(plan, 14), 14)
+
+        // A bend that keeps leaning one way would walk the road off the screen.
+        // Taking out the slow drift leaves the bends centred on the view, the
+        // way the original's own angles cycle instead of spiralling.
+        let driftWindow = 220
+        plan = plan.enumerated().map { i, value in
+            let lo = max(0, i - driftWindow), hi = min(count, i + driftWindow + 1)
+            return value - plan[lo..<hi].reduce(0, +) / CGFloat(hi - lo)
+        }
+
+        // The renderer accumulates `curve` twice to sweep the road sideways, so
+        // a small heading change near the camera throws the distant road a long
+        // way across the screen. Feed it the second difference of the lane the
+        // plan draws, scaled down to a gentle bend, and the road stays on the
+        // view instead of fanning off to one side (eight lanes span one road
+        // width, so one lane of plan is `laneWidth` of world x).
+        let laneWidth = roadWidth / 8
+        let bend: CGFloat = 0.25
+        var curve = [CGFloat](repeating: 0, count: count)
+        for i in 0..<count {
+            let back2 = plan[max(0, i - 2)], back1 = plan[max(0, i - 1)]
+            curve[i] = max(-20, min(20, bend * (plan[i] - 2 * back1 + back2) * laneWidth))
+        }
+
+        var segments: [RoadSegment] = []
+        segments.reserveCapacity(count)
+        var worldY: CGFloat = 0
+        for i in 0..<count {
+            let seg = RoadSegment(index: i)
+            seg.curve = curve[i]
+            seg.banding = (i / rumbleLength) % 2
+
+            let row = slices[i].cells
+            let road = row.indices.filter { row[$0] != "@" && row[$0] != " " }
+            let lo = road.first ?? 0, hi = road.last ?? 7
+            let laneCentre = (CGFloat(lo) + CGFloat(hi)) / 2
+            let halfLane = max(0.5, (CGFloat(hi) - CGFloat(lo)) / 2)
+            /// Map a grid column to a position across the road.
+            func across(_ col: Int) -> CGFloat {
+                max(-0.92, min(0.92, (CGFloat(col) - laneCentre) / (halfLane + 0.5)))
+            }
+            func spanWidth(_ from: Int, _ to: Int) -> CGFloat {
+                min(0.95, (CGFloat(to - from + 1)) / (2 * halfLane + 1))
+            }
+
+            var sprites: [EntitySpec] = []
+            var saltCount = 0
+            var col = 0
+            while col < 8 {
+                let ch = row[col]
+                switch ch {
+                case "s":
+                    if saltCount < 6 {
+                        sprites.append(EntitySpec(kind: .salt, offset: across(col), depth: 0.5))
+                        saltCount += 1
+                    }
+                case "M":
+                    sprites.append(EntitySpec(kind: .asteroid, offset: across(col), depth: 0.5))
+                case "&":
+                    sprites.append(EntitySpec(kind: .slug, offset: across(col), depth: 0.5))
+                case "0", "1", "2", "3":
+                    sprites.append(EntitySpec(kind: ch == "0" ? .turret : .asteroid,
+                                              offset: across(col), depth: 0.5))
+                case "#":
+                    // A pit is as wide as the run of cells it covers, so it can
+                    // be steered around exactly like the original's.
+                    var end = col
+                    while end + 1 < 8 && row[end + 1] == "#" { end += 1 }
+                    sprites.append(EntitySpec(kind: .hole,
+                                              offset: across((col + end) / 2),
+                                              depth: 0.5,
+                                              width: spanWidth(col, end)))
+                    col = end
+                case "+":
+                    sprites.append(EntitySpec(kind: .ringUpgrade, offset: 0, depth: 0.5))
+                case "~":
+                    sprites.append(EntitySpec(kind: .ringSlow, offset: 0, depth: 0.5))
+                case ">":
+                    sprites.append(EntitySpec(kind: .ringExplode, offset: 0, depth: 0.5))
+                case "*":
+                    sprites.append(EntitySpec(kind: .parcel, offset: 0, depth: 0.5))
+                default:
+                    break
+                }
+                col += 1
+            }
+            seg.sprites = sprites
+
+            // Elevation: the segment's family lifts or drops the road, and a
+            // stretch of rough road rides a little higher than the smooth road
+            // either side of it.
+            let amp = lift[slices[i].family] ?? 0
+            var y = amp * sin(slices[i].along * .pi) * segmentLength
+            if road.count >= 6, road.filter({ row[$0] == "_" }).count >= road.count * 7 / 10 {
+                y += 0.25 * segmentLength
+            }
+
+            seg.p1.world = Vec3(x: 0, y: worldY, z: CGFloat(i) * segmentLength)
+            worldY = y
+            seg.p2.world = Vec3(x: 0, y: worldY, z: CGFloat(i + 1) * segmentLength)
+            segments.append(seg)
+        }
+
+        // The level files ask for a parcel quota and a weapon ladder, but a
+        // route only carries parcel and pickup cells on the segments that name
+        // them. Fill in what the grids leave out so the quota is reachable and
+        // the blaster can still climb to the rockets.
+        var rng = SystemRandomNumberGenerator()
+        func topUp(_ kind: EntityKind, to target: Int, minGap: Int) {
+            var needed = target - segments.reduce(0) {
+                $0 + $1.sprites.filter { $0.kind == kind }.count
+            }
+            guard needed > 0 else { return }
+            let lo = min(12, segments.count / 4)
+            let hi = max(lo + 1, segments.count - 8)
+            guard hi > lo else { return }
+            var order = Array(lo..<hi)
+            order.shuffle(using: &rng)
+            var chosen: [Int] = []
+            for index in order {
+                guard needed > 0 else { break }
+                guard segments[index].sprites.isEmpty,
+                      chosen.allSatisfy({ abs($0 - index) >= minGap }) else { continue }
+                segments[index].sprites.append(EntitySpec(kind: kind, offset: 0, depth: 0.5))
+                chosen.append(index)
+                needed -= 1
+            }
+        }
+        topUp(.parcel, to: max(6, max(config.parcels, config.quota + 4)), minGap: 5)
+        topUp(.ringUpgrade, to: 4, minGap: 60)
+        topUp(.heart, to: max(2, segments.count / 120), minGap: 40)
+
+        if let last = segments.last {
+            last.sprites.append(EntitySpec(kind: .postOffice, offset: 0, depth: 0.5))
+        }
+        return segments
+    }
 
     static func build(_ config: LevelConfig) -> [RoadSegment] {
         var segments: [RoadSegment] = []

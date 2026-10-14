@@ -291,7 +291,7 @@ final class GameScene: SKScene {
     }
 
     private func resetTrack() {
-        segments = TrackBuilder.build(config)
+        segments = TrackBuilder.build(config, mode: mode, level: level)
         trackLength = CGFloat(segments.count) * segmentLength
 
         state = RaceState()
@@ -584,7 +584,9 @@ final class GameScene: SKScene {
             for spec in seg.sprites {
                 // A pit is as wide as it looks; everything else is a point-sized
                 // pick-up or hazard with a slim footprint.
-                let tolerance = spec.kind == .hole ? holeHalfWidth * 0.93 : 0.16
+                let tolerance = spec.kind == .hole
+                    ? (spec.width > 0 ? spec.width : holeHalfWidth * 2) / 2 * 0.93
+                    : 0.16
                 guard abs(spec.offset - playerX) < tolerance else { continue }
                 switch spec.kind {
                 case .parcel:
@@ -909,7 +911,7 @@ final class GameScene: SKScene {
                 let widthFactor: CGFloat
                 switch spec.kind {
                 case .postOffice: widthFactor = 1.1
-                case .hole:       widthFactor = holeHalfWidth * 2
+                case .hole:       widthFactor = spec.width > 0 ? spec.width : holeHalfWidth * 2
                 default:          widthFactor = 0.42
                 }
                 let spriteWidth = p.screenW * widthFactor

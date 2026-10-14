@@ -21,6 +21,7 @@
 		AA0000000000000000000071 /* Sound.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000071 /* Sound.swift */; };
 		AA0000000000000000000072 /* LevelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000072 /* LevelCatalog.swift */; };
 		AA0000000000000000000073 /* LevelSelectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000073 /* LevelSelectView.swift */; };
+		AA0000000000000000000074 /* TrackData.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000074 /* TrackData.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -39,6 +40,7 @@
 		BB0000000000000000000071 /* Sound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sound.swift; sourceTree = "<group>"; };
 		BB0000000000000000000072 /* LevelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelCatalog.swift; sourceTree = "<group>"; };
 		BB0000000000000000000073 /* LevelSelectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelSelectView.swift; sourceTree = "<group>"; };
+		BB0000000000000000000074 /* TrackData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackData.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -85,6 +87,7 @@
 			children = (
 				BB0000000000000000000004 /* GameModel.swift */,
 				BB0000000000000000000072 /* LevelCatalog.swift */,
+				BB0000000000000000000074 /* TrackData.swift */,
 				BB0000000000000000000003 /* GameScene.swift */,
 				BB0000000000000000000005 /* Sprites.swift */,
 				BB0000000000000000000071 /* Sound.swift */,
@@ -195,6 +198,7 @@
 				AA0000000000000000000071 /* Sound.swift in Sources */,
 				AA0000000000000000000072 /* LevelCatalog.swift in Sources */,
 				AA0000000000000000000073 /* LevelSelectView.swift in Sources */,
+				AA0000000000000000000074 /* TrackData.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
