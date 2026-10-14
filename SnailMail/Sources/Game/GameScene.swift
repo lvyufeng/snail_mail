@@ -263,6 +263,12 @@ final class GameScene: SKScene {
         // fallback in place of the blue rails, so a screenshot pair can show
         // what the rails cover.
         if args.contains("-norails") { railsStand = false }
+        // `-nosnail` takes Turbo and his shadow off the road, so a screenshot
+        // pair can measure exactly how wide he is drawn on his own row.
+        if args.contains("-nosnail") {
+            snail.isHidden = true
+            childNode(withName: "snailshadow")?.isHidden = true
+        }
         guard let i = args.firstIndex(of: "-weapon"), i + 1 < args.count,
               let level = Int(args[i + 1]) else { return }
         state.weaponLevel = max(1, min(level, state.maxWeaponLevel))
@@ -1645,6 +1651,17 @@ final class GameScene: SKScene {
             shadow.zRotation = snail.zRotation
             shadow.alpha = fallTimer >= 0 ? max(0, 1 - fallTimer / fallDuration) : 1
         }
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-snailprobe") {
+            let f = snail.calculateAccumulatedFrame()
+            let body = (snail.childNode(withName: "snailframes") as? SKSpriteNode)?
+                .calculateAccumulatedFrame()
+            print("SNAILPROBE scale=\(snailScale) node w=\(f.width) h=\(f.height)"
+                  + " body w=\(body?.width ?? 0) h=\(body?.height ?? 0)"
+                  + " centre=(\(f.midX),\(f.midY)) scene=\(size.width)x\(size.height)"
+                  + " half=\(snailRowHalfWidth)")
+        }
+        #endif
     }
 
     private func drawSegment(_ seg: RoadSegment, n: Int) {

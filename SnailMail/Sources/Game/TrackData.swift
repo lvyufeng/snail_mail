@@ -8,7 +8,7 @@
 // The grids are 8 columns wide per row, concatenated into one string per
 // segment (so `grid[key]!.count / 8` is the row count).  Characters:
 //   `.`/`_` road (smooth/rough), `@` side wall, ` ` off-road/airborne gap,
-//   `#` pit, `s` salt, `M` meteor, `&` slug, `0` turret, `1`-`3` enemies,
+//   `#` pit, `s` salt, `M` meteor, `&` slug, `0`-`9` a solid one-cell block,
 //   `$` parcel, `>` blast ring, `+` power-up ring, `~` slow ring,
 //   `!` plain scoring ring, `o` decorative arch, `<`/`R` ramp,
 //   `(` trampoline, `J` jetpack, `[` highway enemy,

@@ -228,9 +228,10 @@ struct EntitySpec {
     /// How much of the road the entity covers, as a fraction of the full width.
     /// Zero means "use the kind's own footprint" (see `GameScene`).
     var width: CGFloat = 0
-    /// Which pillar mesh a turret wears. The retail build models eight posts of
-    /// growing width and the course grid spells the one it wants with the digit
-    /// `0`...`3`; everything else uses the slim first tier.
+    /// Which pillar mesh a turret wears. The build models the post at eight
+    /// widths (`X/PILLAR1..8.X2`) but the course grid never spells which one it
+    /// wants, so every turret a piece places is the slim first tier and this
+    /// only carries the size a debug hook or the procedural art asks for.
     var tier: Int = 1
 }
 
@@ -831,14 +832,17 @@ enum TrackBuilder {
                     sprites.append(EntitySpec(kind: .asteroid, offset: across(col), depth: 0.5))
                 case "&":
                     sprites.append(EntitySpec(kind: .slug, offset: across(col), depth: 0.5))
-                case "0", "1", "2", "3":
-                    // The digits are the turrets, and which digit it is says how
-                    // big a pillar the piece wants: the build ships the same
-                    // post modelled at eight widths, so `0` is the slim one to
-                    // weave past and each step up stands wider across the road.
+                case "0", "1", "2", "3", "4", "5", "6", "7", "8", "9":
+                    // Every digit spells the same block. The build's grid
+                    // dispatcher sends `0` down one path and `1`...`9` down
+                    // another, but both write the same row kind and the same
+                    // mesh, and the value of the digit is never read — so a
+                    // piece cannot ask for a wider post by naming a bigger
+                    // number. No course ever puts two digits side by side
+                    // either, so a digit is always one cell wide, which is the
+                    // `X/PILLAR1.X2` slab the grid's own cell measures.
                     sprites.append(EntitySpec(kind: .turret, offset: across(col),
-                                              depth: 0.5,
-                                              tier: (ch.wholeNumberValue ?? 0) + 1))
+                                              depth: 0.5))
                 case "#":
                     // A pit is as wide as the run of cells it covers, so it can
                     // be steered around exactly like the original's.
