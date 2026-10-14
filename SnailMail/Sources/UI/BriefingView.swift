@@ -29,7 +29,7 @@ struct BriefingView: View {
 
     var body: some View {
         ZStack {
-            SpaceBackground(showPlanet: true)
+            RetailBackdrop(stem: "starmapbg")
 
             GeometryReader { geo in
                 ScrollView(showsIndicators: false) {
@@ -82,6 +82,9 @@ struct BriefingView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .statusBarHidden()
-        .onAppear { Sound.shared.start() }
+        .onAppear {
+            Sound.shared.start()
+            Sound.shared.playMusic(.menu)
+        }
     }
 }

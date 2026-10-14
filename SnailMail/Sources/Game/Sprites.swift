@@ -58,9 +58,45 @@ enum Sprites {
         return n
     }
 
+    // MARK: - Retail artwork
+
+    /// The imported retail sprite for `path`, sized so its artwork spans `width`
+    /// world units — or nil when `tools/import_art.py` has not been run and the
+    /// art is not in the bundle, which leaves every caller on the procedural
+    /// drawing below it.
+    ///
+    /// `lift` raises the sprite by that fraction of its own height. The flat art
+    /// this replaces is centred on the road point, so a billboard meant to stand
+    /// on the road passes `0.5` and a flat or floating one passes `0`.
+    private static func retail(_ path: String, width: CGFloat,
+                               lift: CGFloat = 0.5) -> SKNode? {
+        guard RetailAssets.installed, let tex = RetailAssets.billboard(path) else { return nil }
+        let size = tex.size()
+        guard size.width > 0, size.height > 0 else { return nil }
+        let node = SKSpriteNode(texture: tex)
+        node.size = CGSize(width: width, height: width * size.height / size.width)
+        node.position = CGPoint(x: 0, y: node.size.height * lift)
+        return node
+    }
+
+    /// Resize a retail billboard to a new world width, keeping its own aspect.
+    private static func fit(_ node: SKSpriteNode, width: CGFloat) {
+        guard let tex = node.texture, tex.size().width > 0 else { return }
+        node.size = CGSize(width: width, height: width * tex.size().height / tex.size().width)
+    }
+
+    /// The heavy rock billboards the retail build scatters across the highway.
+    /// Four meshes ship, so pick one at random per rock to keep a field of them
+    /// from looking stamped.
+    private static func garbagePath() -> String {
+        let faces = ["a", "b", "c", "d"]
+        return "Art/Sprites/garbage\(faces.randomElement() ?? "a").png"
+    }
+
     // MARK: - Turbo the snail (seen from behind as it races away)
 
     static func makeSnail() -> SKNode {
+        if let retail = makeRetailSnail() { return retail }
         let root = SKNode()
 
         // Jetpack tucked behind the shell.
@@ -115,6 +151,41 @@ enum Sprites {
         return root
     }
 
+    /// Turbo himself, drawn from the billboard baked out of the retail build's
+    /// own `snail-turbo` mesh, with the procedural exhaust plume kept because
+    /// it reads better than the model's flat thrust texture.
+    private static func makeRetailSnail() -> SKNode? {
+        guard let body = retail("Art/Baked/snail.png", width: snailNativeWidth, lift: 0.5)
+        else { return nil }
+        let root = SKNode()
+        body.name = "snailbody"
+        root.addChild(body)
+        if let flame = makeFlame() {
+            flame.name = "flame"
+            flame.position = CGPoint(x: 0, y: body.position.y - 4)
+            flame.alpha = 0
+            root.addChild(flame)
+        }
+        return root
+    }
+
+    /// How wide Turbo's own art is, in the same world units the procedural
+    /// parts use. Callers that place him in a perspective scene (the race)
+    /// divide their target width by this to get the node's scale.
+    static let snailNativeWidth: CGFloat = 116
+
+    /// Swap Turbo's billboard for the damaged or invincible one the retail
+    /// build ships, so a hit and a shield both read at a glance.
+    static func setSnailVariant(_ node: SKNode, damaged: Bool, invincible: Bool) {
+        guard let body = node.childNode(withName: "snailbody") as? SKSpriteNode else { return }
+        let name = invincible ? "snail-invincible" : (damaged ? "snail-damage" : "snail")
+        guard let tex = RetailAssets.billboard("Art/Baked/\(name).png") else { return }
+        if body.texture === tex { return }
+        body.texture = tex
+        fit(body, width: snailNativeWidth)
+        body.position = CGPoint(x: 0, y: body.size.height / 2)
+    }
+
     private static func makeFlame() -> SKNode? {
         let root = SKNode()
         let outer = CGMutablePath()
@@ -166,6 +237,7 @@ enum Sprites {
     ]
 
     private static func makeEntityBody(_ kind: EntityKind, fringe: UIColor) -> SKNode {
+        if let retail = makeRetailEntity(kind) { return retail }
         switch kind {
         case .parcel:      return makeParcel()
         case .salt:        return makeSalt()
@@ -188,6 +260,57 @@ enum Sprites {
         case .signBang:         return makeSignBang()
         case .signConstruction: return makeSignConstruction()
         case .signStop:         return makeSignStop()
+        }
+    }
+
+    /// The retail billboard for a road entity, or nil to fall back to the flat
+    /// drawing. Each sprite is sized to the width the renderer already scales
+    /// `entityBaseWidth` against, so swapping the art in does not move anything.
+    private static func makeRetailEntity(_ kind: EntityKind) -> SKNode? {
+        let w = entityBaseWidth(kind)
+        switch kind {
+        case .parcel:
+            return retail("Art/Sprites/parcel000.png", width: w)
+        case .salt:
+            return retail("Art/Baked/salt.png", width: w)
+        case .heart:
+            return retail("Art/Sprites/health.png", width: w)
+        case .asteroid:
+            return retail(garbagePath(), width: w)
+        case .enemy:
+            return retail(garbagePath(), width: w)
+        case .slug:
+            return retail("Art/Sprites/slug000.png", width: w)
+        case .turret:
+            return retail("Art/Baked/pillar.png", width: w)
+        case .postOffice:
+            return retail("Art/Baked/postoffice.png", width: w)
+        case .ringUpgrade, .ringNormal:
+            return retail("Art/Sprites/particlering-big.png", width: w)
+        case .ringSlow:
+            return retail("Art/Sprites/particleslow-big.png", width: w)
+        case .ringExplode:
+            return retail("Art/Sprites/particleexplode-big.png", width: w)
+        case .arch:
+            guard let ring = retail("Art/Sprites/particlering-big.png", width: w) else { return nil }
+            ring.alpha = 0.45
+            return ring
+        case .hole:
+            return retail("Art/Objects/hole.png", width: w, lift: 0)
+        case .ramp:
+            return retail("Art/Objects/ramp.png", width: w)
+        case .trampoline:
+            return retail("Art/Baked/tramp.png", width: w)
+        case .jetpack:
+            return retail("Art/Sprites/jetpack000.png", width: w)
+        case .signBang:
+            return retail("Art/Baked/signbang.png", width: w, lift: 0)
+        case .signConstruction:
+            return retail("Art/Baked/signconstruction.png", width: w, lift: 0)
+        case .signStop:
+            return retail("Art/Baked/signstop.png", width: w, lift: 0)
+        case .barrier:
+            return nil     // the retail fence is a tiled road texture, not a sprite
         }
     }
 
@@ -505,6 +628,7 @@ enum Sprites {
     /// a glance, and the laser a cyan beam so the middle rung reads differently
     /// from the starting pellet.
     static func makeBullet(level: Int) -> SKNode {
+        if let retail = makeRetailBullet(level: level) { return retail }
         if level >= 3 {
             let root = SKNode()
 
@@ -561,10 +685,40 @@ enum Sprites {
                          stroke: UIColor(hex: "#FF9A3D"), line: 2)
     }
 
+    /// The retail shots. The rocket is the build's own `rocket` mesh baked to a
+    /// billboard; the laser is its `lazer` sprite. Both are drawn nose-up, so
+    /// each is turned a quarter turn inside its node to face down the road the
+    /// way the renderer's own rotation expects. The starting blaster keeps its
+    /// flat drawing — the build ships no sprite for it.
+    private static func makeRetailBullet(level: Int) -> SKNode? {
+        let path: String
+        let width: CGFloat
+        if level >= 3 {
+            path = "Art/Baked/rocket.png"
+            width = 28
+        } else if level >= 2 {
+            path = "Art/Objects/lazer_lazer.png"
+            width = 11
+        } else {
+            return nil
+        }
+        guard RetailAssets.installed, let tex = RetailAssets.billboard(path),
+              tex.size().width > 0 else { return nil }
+        let sprite = SKSpriteNode(texture: tex)
+        sprite.size = CGSize(width: width, height: width * tex.size().height / tex.size().width)
+        sprite.zRotation = -.pi / 2
+        let root = SKNode()
+        root.addChild(sprite)
+        return root
+    }
+
     /// The vapour laser a highway pest spits back at the snail. It stays in
     /// the pest's own hostile palette — a magenta bolt around a white-hot core
     /// — so an incoming shot is never mistaken for a friendly pick-up.
     static func makeEnemyBullet() -> SKNode {
+        if let retail = retailBullet("Art/Objects/vapourlazer_lazer.png", width: 30) {
+            return retail
+        }
         let root = SKNode()
         root.addChild(roundRect(46, 18, .zero, radius: 9,
                                 fill: magenta.withAlphaComponent(0.28), stroke: .clear, line: 0))
@@ -572,6 +726,16 @@ enum Sprites {
                                 fill: UIColor(hex: "#FF2E88"), stroke: UIColor(hex: "#7A0F3C"), line: 3))
         root.addChild(roundRect(16, 4, .zero, radius: 2, fill: .white, stroke: .clear, line: 0))
         return root
+    }
+
+    /// A muzzle-to-target bolt reused for the pests' return fire: a plain
+    /// retail sprite centred on its own node.
+    private static func retailBullet(_ path: String, width: CGFloat) -> SKNode? {
+        guard RetailAssets.installed, let tex = RetailAssets.billboard(path),
+              tex.size().width > 0 else { return nil }
+        let node = SKSpriteNode(texture: tex)
+        node.size = CGSize(width: width, height: width * tex.size().height / tex.size().width)
+        return node
     }
 
     // MARK: - Sky

@@ -40,7 +40,8 @@ final class AppRouter: ObservableObject {
     }
 
     /// Debug hooks used for automated screenshots: `-showgalaxy` opens the star
-    /// map, `-screen <name>` opens one of the menu's side screens and
+    /// map, `-briefing <mode>` (optionally with `-level N`) opens a level's
+    /// briefing, `-screen <name>` opens one of the menu's side screens and
     /// `-autostart <mode>` (optionally with `-level N`) launches straight into a
     /// race. Only compiled into debug builds so shipping builds always open on
     /// the menu.
@@ -48,6 +49,13 @@ final class AppRouter: ObservableObject {
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
         if args.contains("-showgalaxy") { return [.galaxy] }
+        if let i = args.firstIndex(of: "-briefing"), i + 1 < args.count,
+           let mode = GameMode(rawValue: args[i + 1]) {
+            let level = args.firstIndex(of: "-level").flatMap { j in
+                j + 1 < args.count ? Int(args[j + 1]) : nil
+            } ?? 0
+            return [.briefing(mode: mode, level: level)]
+        }
         if let i = args.firstIndex(of: "-screen"), i + 1 < args.count {
             switch args[i + 1] {
             case "help": return [.help]

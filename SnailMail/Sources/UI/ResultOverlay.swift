@@ -112,7 +112,7 @@ struct ResultOverlay: View {
     private func submit(_ board: HighScores.Board) {
         place = scores.submit(board, name: name, score: state.score, level: levelName)
         submitted = true
-        Sound.shared.play(.upgrade)
+        Sound.shared.play(.highlight)
     }
 
     /// One tally as a whole-number share of the run's total score — the

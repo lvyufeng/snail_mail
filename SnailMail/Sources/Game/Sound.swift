@@ -1,33 +1,150 @@
 import AVFoundation
 
-/// A tiny procedural audio bank. Music and every effect are synthesised into
-/// PCM buffers at runtime, so the project still ships no audio assets — the
-/// sound side of the remake stays original like the art.
+/// The game's audio.
+///
+/// When `tools/import_art.py` has decoded the retail installer into the bundle
+/// the game plays the 2005 build's own music, effects and snail voice — the
+/// `.ogg` files the original shipped, re-encoded to AAC. On a checkout without
+/// that folder every lookup here fails and the synthesised bank takes over, so
+/// the remake is never silent.
+///
+/// The original's `Voice/_Voice.txt` sets the balance between the three buses:
+/// `NormalizeMusic:50`, `NormalizeSfx:40`, `NormalizeVoice:100`, and asks for a
+/// spoken line roughly every `Frequency:20` seconds. Both are honoured below.
 final class Sound {
     static let shared = Sound()
 
+    /// Which background track a screen wants. The retail build keeps four race
+    /// tracks plus a menu and an intro theme.
+    enum Music: Equatable {
+        case menu, intro, race(Int)
+
+        var retailPath: String {
+            switch self {
+            case .menu: "Audio/Music/mainmenu.m4a"
+            case .intro: "Audio/Music/introtext.m4a"
+            case .race(let track): "Audio/Music/\(abs(track) % 4 + 1).m4a"
+            }
+        }
+    }
+
     enum Effect {
-        case shoot, enemyFire, collect, upgrade, hit, boost, select, win, lose, fall
+        case shoot(Int)       // player's weapon tier, 1...3
+        case enemyFire
+        case collect          // parcel picked up
+        case deliver          // parcels handed over at the post office
+        case upgrade(Int)     // power-up ring, rung 1...7
+        case hit              // fence, pillar, slug, salt
+        case asteroid
+        case boost
+        case jetpack
+        case skid
+        case heart
+        case extraLife
+        case slow             // slow ring
+        case explodeRing
+        case invincible
+        case trampoline
+        case select
+        case highlight
+        case servo            // star-map cursor
+        case win
+        case lose
+        case fall
+    }
+
+    /// The snail's spoken lines, one case per set `Voice/_Voice.txt` declares.
+    enum Voice {
+        case start, victory, damage, ouch, dying, fall, package
+        case powerup, slow, enemies, postal, misc, wormTunnel, superTramp
+
+        var lines: [String] {
+            switch self {
+            case .start:
+                ["allowsixtoeightminutes", "bringiton", "ifeeltheneedforspeed", "justryandstopme",
+                 "thisisajob", "turbosthename", "watchout", "zoomzoom",
+                 "snailmailalwaysontime", "snailmailinthirtyminutes"]
+            case .victory:
+                ["howsthatforexpressservice", "ideserveapromotion", "ideservearaise", "igotahotfoot",
+                 "imthesnail", "ontimeandfeelingfine", "somebodypinchme"]
+            case .damage:
+                ["heyijustwaxed", "imgonnaneedanewshell", "itburns", "myeyes",
+                 "thatsgonnaleaveamark", "uhoh"]
+            case .dying:
+                ["abandonshell", "imfallingandicantgetup", "ineedanewjob", "notcool",
+                 "thisisnotmyday"]
+            case .ouch:
+                ["ow1", "ow2", "ow3", "ow4"]
+            case .fall:
+                ["fall1", "fall2", "fall3"]
+            case .package:
+                ["postagedue", "somebodycallforadelivery", "specialdelivery", "speedydelivery"]
+            case .powerup:
+                ["fullyloaded", "hellinashell", "imonfire", "imonfirebaby", "impackin",
+                 "mynewmailingtechnique", "myshellistrickedout", "smokin", "somebodystopme",
+                 "trailblazer", "thatwasawesome"]
+            case .slow:
+                ["amievenmoving", "anyslower", "comeon", "fasterisbetter", "icandobetter",
+                 "fasterwouldbebetter", "isleepfasterthanthis"]
+            case .enemies:
+                ["alwaystipyourmailcarrier", "alwaystipyourpostalworker", "backoff",
+                 "backoffslugs", "comingthrough", "makeway"]
+            case .postal:
+                ["imgoingpostal", "imgoingpostal2", "imgoingpostal3"]
+            case .wormTunnel:
+                ["whoahdude", "zippidydoodah", "whohohohoah"]
+            case .superTramp:
+                ["whoahdude", "woohoo", "whohohohoah"]
+            case .misc:
+                ["checkmeout", "donthateme", "footache", "gotmail", "isurecoulduse",
+                 "itsnotjustashell", "mynameisturbo", "partfootparttummy", "snailsinspace",
+                 "thatwascool", "hellinashell", "trailblazer", "escargot"]
+            }
+        }
     }
 
     private let engine = AVAudioEngine()
+    /// The synthesised bank's buses.
     private let sfxNode = AVAudioPlayerNode()
     private let musicNode = AVAudioPlayerNode()
+    /// The retail sample buses. Effects fire often enough to overlap, so they
+    /// round-robin over a small pool instead of cutting each other off.
+    private let retailMixer = AVAudioMixerNode()
+    private let voiceNode = AVAudioPlayerNode()
+    private var retailNodes: [AVAudioPlayerNode] = []
+    private var retailCursor = 0
+
     private let format = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 1)!
+    private let musicFormat = AVAudioFormat(standardFormatWithSampleRate: 44100, channels: 2)!
+
     private var effects: [String: AVAudioPCMBuffer] = [:]
-    private var music: AVAudioPCMBuffer?
+    private var sounds: [String: AVAudioPCMBuffer] = [:]
+    private var musicSelection: Music?
+    private var musicBuffer: AVAudioPCMBuffer?
+    private var flips: [String: Int] = [:]
     private var ready = false
 
     private(set) var muted = false
 
-    /// User-facing volume levels, 0...1, scaling the engine's own balanced
-    /// defaults. The Options screen's "Music Volume" / "Sounds Volume" rows
-    /// drive these, and they persist between launches.
+    /// User-facing volume levels, 0...1, scaling the balanced defaults the
+    /// retail `_Voice.txt` asks for. The Options screen's "Music Volume" and
+    /// "Sounds Volume" rows drive these, and they persist between launches.
     private(set) var musicLevel: Double
     private(set) var sfxLevel: Double
 
-    private static let baseMusic: Float = 0.32
-    private static let baseSfx: Float = 0.9
+    private static let synthMusic: Float = 0.32
+    private static let synthSfx: Float = 0.9
+    /// NormalizeMusic:50 / NormalizeSfx:40 / NormalizeVoice:100 of `_Voice.txt`,
+    /// scaled to sit at the same loudness as the synthesised bank.
+    private static let retailMusic: Float = 0.55
+    private static let retailSfx: Float = 0.8
+    private static let voice: Float = 1.0
+    /// `Frequency:20` — how often the original lets the snail speak.
+    private static let voiceInterval: TimeInterval = 20
+
+    private var voiceBusy = false
+    private var lastVoiceAt: TimeInterval = -1000
+    private var lastVoiceLine: String?
 
     private enum Key {
         static let music = "audio.musicLevel"
@@ -39,29 +156,88 @@ final class Sound {
         let storedSfx = defaults.object(forKey: Key.sfx) as? Double
         musicLevel = storedMusic ?? 1
         sfxLevel = storedSfx ?? 1
+        retailNodes = (0..<6).map { _ in AVAudioPlayerNode() }
     }
 
-    /// Starts the engine and the looping background track. Safe to call on every
-    /// appearance; it only boots once. Fails silently on machines without audio.
+    /// Starts the engine. Safe to call on every appearance; it only boots once.
+    /// Fails silently on machines without audio.
     func start() {
-        guard !ready else { if !musicNode.isPlaying { startMusic() }; return }
+        guard !ready else {
+            if let buffer = musicBuffer, !musicNode.isPlaying { scheduleMusic(buffer) }
+            return
+        }
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
         try? session.setActive(true)
 
         engine.attach(sfxNode)
         engine.attach(musicNode)
+        engine.attach(retailMixer)
+        engine.attach(voiceNode)
         engine.connect(sfxNode, to: engine.mainMixerNode, format: format)
-        engine.connect(musicNode, to: engine.mainMixerNode, format: format)
+        engine.connect(musicNode, to: engine.mainMixerNode, format: musicFormat)
+        engine.connect(retailMixer, to: engine.mainMixerNode, format: format)
+        engine.connect(voiceNode, to: engine.mainMixerNode, format: format)
+        for node in retailNodes {
+            engine.attach(node)
+            engine.connect(node, to: retailMixer, format: format)
+        }
         engine.mainMixerNode.outputVolume = 0.7
-        applyVolumes()
 
         buildEffects()
-        music = buildMusic()
+        applyVolumes()
         do { try engine.start() } catch { return }
         ready = true
-        startMusic()
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-audiotest") { runSelfTest() }
+        #endif
     }
+
+#if DEBUG
+    /// `-audiotest` decodes every clip the game can ask for and writes a report
+    /// beside the app's temporary files. The simulator has no speakers to check
+    /// by ear, so this is how the retail audio path gets verified: a wrong
+    /// bundle path or a converter that refuses a file shows up as MISSING.
+    private func runSelfTest() {
+        var lines = ["retail: \(RetailAssets.installed ? "installed" : "missing")"]
+        for music in [Music.menu, .intro, .race(0), .race(1), .race(2), .race(3)] {
+            lines.append("music \(music.retailPath): \(describe(retail(music.retailPath, format: musicFormat)))")
+        }
+        let effects: [Effect] = [.shoot(1), .shoot(2), .shoot(3), .enemyFire, .collect, .deliver,
+                                 .upgrade(1), .upgrade(7), .hit, .asteroid, .boost, .jetpack,
+                                 .skid, .heart, .extraLife, .slow, .explodeRing, .invincible,
+                                 .trampoline, .select, .highlight, .servo, .win]
+        for effect in effects {
+            let name = retailName(effect)
+            let buffer = name.flatMap { retail($0, format: format) }
+            lines.append("sfx \(name ?? "-"): \(describe(buffer))")
+        }
+        var spoken = 0
+        var missing: [String] = []
+        for voice in [Voice.start, .victory, .damage, .ouch, .dying, .fall, .package, .powerup,
+                      .slow, .enemies, .postal, .misc, .wormTunnel, .superTramp] {
+            for line in voice.lines {
+                spoken += 1
+                if retail("Audio/Voice/\(line).m4a", format: format) == nil { missing.append(line) }
+            }
+        }
+        for line in TrackData.tutorialVoice.compactMap({ $0 }) {
+            spoken += 1
+            if retail("Audio/Voice/\(line).m4a", format: format) == nil { missing.append(line) }
+        }
+        lines.append("voice: \(spoken) lines, \(missing.count) missing \(missing.joined(separator: ","))")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("audiotest.txt")
+        try? lines.joined(separator: "\n").write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private func describe(_ buffer: AVAudioPCMBuffer?) -> String {
+        guard let buffer else { return "MISSING" }
+        return String(format: "ok %.2fs %dch %gHz",
+                      Double(buffer.frameLength) / buffer.format.sampleRate,
+                      Int(buffer.format.channelCount),
+                      buffer.format.sampleRate)
+    }
+#endif
 
     func setMuted(_ value: Bool) {
         muted = value
@@ -81,47 +257,202 @@ final class Sound {
     }
 
     private func applyVolumes() {
-        musicNode.volume = muted ? 0 : Self.baseMusic * Float(musicLevel)
-        sfxNode.volume = muted ? 0 : Self.baseSfx * Float(sfxLevel)
+        let installed = hasRetailAudio
+        musicNode.volume = muted ? 0 : (installed ? Self.retailMusic : Self.synthMusic) * Float(musicLevel)
+        sfxNode.volume = muted ? 0 : Self.synthSfx * Float(sfxLevel)
+        retailMixer.volume = muted ? 0 : Self.retailSfx * Float(sfxLevel)
+        voiceNode.volume = muted ? 0 : Self.voice * Float(sfxLevel)
     }
 
+    // MARK: - Music
+
+    /// Swaps the background track. Asking for the track that is already playing
+    /// is a no-op, so a screen can name its theme on every appearance.
+    func playMusic(_ music: Music) {
+        if musicSelection == music, let buffer = musicBuffer {
+            if ready, !musicNode.isPlaying { scheduleMusic(buffer) }
+            return
+        }
+        musicSelection = music
+        musicBuffer = retail(music.retailPath, format: musicFormat) ?? buildMusic()
+        guard ready, let buffer = musicBuffer else { return }
+        musicNode.stop()
+        scheduleMusic(buffer)
+    }
+
+    private func scheduleMusic(_ buffer: AVAudioPCMBuffer) {
+        musicNode.scheduleBuffer(buffer, at: nil, options: [.loops], completionHandler: nil)
+        if !musicNode.isPlaying { musicNode.play() }
+    }
+
+    // MARK: - Effects
+
     func play(_ effect: Effect) {
-        guard ready, !muted, let buffer = effects[key(effect)] else { return }
+        guard ready, !muted else { return }
+        if let name = retailName(effect), let buffer = retail(name, format: format) {
+            let node = retailNodes[retailCursor % retailNodes.count]
+            retailCursor += 1
+            node.scheduleBuffer(buffer, at: nil, options: [.interrupts], completionHandler: nil)
+            if !node.isPlaying { node.play() }
+            return
+        }
+        guard let buffer = effects[synthKey(effect)] else { return }
         sfxNode.scheduleBuffer(buffer, at: nil, options: [.interrupts], completionHandler: nil)
         if !sfxNode.isPlaying { sfxNode.play() }
     }
 
-    private func startMusic() {
-        guard ready, let music, !musicNode.isPlaying else { return }
-        musicNode.scheduleBuffer(music, at: nil, options: [.loops], completionHandler: nil)
-        musicNode.play()
+    /// Plays one of the snail's spoken lines, no more often than the original's
+    /// twenty seconds and never cutting off the line already speaking.
+    func speak(_ voice: Voice) {
+        guard ready, !muted, hasRetailAudio else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastVoiceAt >= Self.voiceInterval else { return }
+        let lines = voice.lines
+        guard !lines.isEmpty else { return }
+        var line = lines[Int.random(in: 0..<lines.count)]
+        if lines.count > 1, line == lastVoiceLine {
+            line = lines[Int.random(in: 0..<lines.count)]
+        }
+        playVoiceLine(line)
     }
 
-    private func key(_ effect: Effect) -> String {
+    /// Plays the tutorial's own voice-over.  Each scripted line names one
+    /// recording (`tut1`…`tut18`) rather than drawing from a set, and the
+    /// track files give it its own `Duration`, so the twenty-second chatter
+    /// limit does not apply; only the "don't cut off the current line" rule
+    /// does.
+    func speak(tutorialLine name: String) {
+        guard ready, !muted, hasRetailAudio else { return }
+        playVoiceLine(name)
+    }
+
+    private func playVoiceLine(_ line: String) {
+        guard !voiceBusy else { return }
+        guard let buffer = retail("Audio/Voice/\(line).m4a", format: format) else { return }
+        lastVoiceLine = line
+        lastVoiceAt = ProcessInfo.processInfo.systemUptime
+        voiceBusy = true
+        voiceNode.scheduleBuffer(buffer, at: nil, options: [.interrupts],
+                                 completionCallbackType: .dataPlayedBack) { [weak self] _ in
+            DispatchQueue.main.async { self?.voiceBusy = false }
+        }
+        if !voiceNode.isPlaying { voiceNode.play() }
+    }
+
+    private var hasRetailAudio: Bool { RetailAssets.installed }
+
+    private func retailName(_ effect: Effect) -> String? {
+        switch effect {
+        case .shoot(let tier):
+            switch tier {
+            case 1: return "Audio/Sfx/laser1.m4a"
+            case 2: return "Audio/Sfx/laser2.m4a"
+            default: return "Audio/Sfx/rocket1.m4a"
+            }
+        case .enemyFire:   return "Audio/Sfx/enemyfire.m4a"
+        case .collect:     return "Audio/Sfx/packagecount.m4a"
+        case .deliver:     return "Audio/Sfx/placepackage.m4a"
+        case .upgrade(let rung): return "Audio/Sfx/pw\(max(1, min(7, rung))).m4a"
+        case .hit:         return "Audio/Sfx/wallhit.m4a"
+        case .asteroid:    return "Audio/Sfx/asteroidimpact\(flip("impact", of: 2) + 1).m4a"
+        case .boost:       return "Audio/Sfx/turbofire\(flip("turbofire", of: 2) + 1).m4a"
+        case .jetpack:     return "Audio/Sfx/jetpack.m4a"
+        case .skid:        return "Audio/Sfx/skidstop.m4a"
+        case .heart:       return "Audio/Sfx/heart.m4a"
+        case .extraLife:   return "Audio/Sfx/extralife.m4a"
+        case .slow:        return "Audio/Sfx/slowring.m4a"
+        case .explodeRing: return "Audio/Sfx/explodering.m4a"
+        case .invincible:  return "Audio/Sfx/invincible.m4a"
+        case .trampoline:  return "Audio/Sfx/boing.m4a"
+        case .select:      return "Audio/Sfx/select.m4a"
+        case .highlight:   return "Audio/Sfx/highlight.m4a"
+        case .servo:       return "Audio/Sfx/servo\(flip("servo", of: 2) + 1).m4a"
+        case .win:         return "Audio/Sfx/cheers.m4a"
+        case .lose:        return nil
+        case .fall:        return nil
+        }
+    }
+
+    private func synthKey(_ effect: Effect) -> String {
         switch effect {
         case .shoot: "shoot"
         case .enemyFire: "enemyFire"
-        case .collect: "collect"
-        case .upgrade: "upgrade"
-        case .hit: "hit"
-        case .boost: "boost"
-        case .select: "select"
+        case .collect, .deliver, .heart: "collect"
+        case .upgrade, .extraLife, .invincible: "upgrade"
+        case .hit, .asteroid, .skid, .explodeRing: "hit"
+        case .boost, .jetpack, .trampoline, .slow: "boost"
+        case .select, .highlight, .servo: "select"
         case .win: "win"
         case .lose: "lose"
         case .fall: "fall"
         }
     }
 
+    /// Walks a counter so paired samples alternate, the way the original's
+    /// two-variant impacts and servos do.
+    private func flip(_ key: String, of count: Int) -> Int {
+        let index = (flips[key] ?? 0) % max(1, count)
+        flips[key] = index + 1
+        return index
+    }
+
+    // MARK: - Retail samples
+
+    private func retail(_ path: String, format target: AVAudioFormat) -> AVAudioPCMBuffer? {
+        guard hasRetailAudio else { return nil }
+        let key = "\(path)|\(target.channelCount)"
+        if let hit = sounds[key] { return hit }
+        guard let url = RetailAssets.url(path), let buffer = decode(url, to: target) else { return nil }
+        sounds[key] = buffer
+        return buffer
+    }
+
+    /// Reads a retail `.m4a` and converts it to the bus's format, so every
+    /// buffer can be scheduled on a node connected once at start-up.
+    private func decode(_ url: URL, to target: AVAudioFormat) -> AVAudioPCMBuffer? {
+        guard let file = try? AVAudioFile(forReading: url) else { return nil }
+        let source = file.processingFormat
+        let frames = AVAudioFrameCount(file.length)
+        guard frames > 0,
+              let input = AVAudioPCMBuffer(pcmFormat: source, frameCapacity: frames),
+              (try? file.read(into: input)) != nil else { return nil }
+        if source.sampleRate == target.sampleRate,
+           source.channelCount == target.channelCount,
+           source.commonFormat == target.commonFormat {
+            return input
+        }
+        guard let converter = AVAudioConverter(from: source, to: target) else { return nil }
+        let ratio = target.sampleRate / source.sampleRate
+        let capacity = AVAudioFrameCount(Double(input.frameLength) * ratio + 4096)
+        guard let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return nil }
+        var fed = false
+        var error: NSError?
+        converter.convert(to: output, error: &error) { _, status in
+            if fed {
+                status.pointee = .endOfStream
+                return nil
+            }
+            fed = true
+            status.pointee = .haveData
+            return input
+        }
+        guard error == nil, output.frameLength > 0 else { return nil }
+        return output
+    }
+
     // MARK: - Synthesis
 
-    private func buffer(duration: Double, _ sample: (Double) -> Double) -> AVAudioPCMBuffer {
+    private func buffer(duration: Double, format: AVAudioFormat,
+                        _ sample: (Double) -> Double) -> AVAudioPCMBuffer {
         let sr = format.sampleRate
         let frames = AVAudioFrameCount(max(1, duration * sr))
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
         buffer.frameLength = frames
-        let channel = buffer.floatChannelData![0]
+        let channels = Int(format.channelCount)
+        let data = buffer.floatChannelData!
         for i in 0..<Int(frames) {
-            channel[i] = Float(max(-1, min(1, sample(Double(i) / sr))))
+            let value = Float(max(-1, min(1, sample(Double(i) / sr))))
+            for channel in 0..<channels { data[channel][i] = value }
         }
         return buffer
     }
@@ -136,7 +467,7 @@ final class Sound {
                        volume: Double, decay: Bool = true) -> AVAudioPCMBuffer {
         var phase = 0.0
         let sr = format.sampleRate
-        return buffer(duration: duration) { t in
+        return buffer(duration: duration, format: format) { t in
             let f = from + (to - from) * (t / duration)
             phase += f / sr
             let env = decay ? pow(1 - t / duration, 1.6) : 1
@@ -146,7 +477,7 @@ final class Sound {
 
     private func noise(duration: Double, volume: Double) -> AVAudioPCMBuffer {
         var seed: UInt64 = 0x9E3779B97F4A7C15
-        return buffer(duration: duration) { t in
+        return buffer(duration: duration, format: format) { t in
             seed = seed &* 6364136223846793005 &+ 1442695040888963407
             let r = Double((seed >> 33) & 0xFFFF) / 32768.0 - 1
             return r * volume * pow(1 - t / duration, 2)
@@ -171,7 +502,7 @@ final class Sound {
 
     private func arpeggio(_ notes: [Double], step: Double, volume: Double) -> AVAudioPCMBuffer {
         let total = step * Double(notes.count)
-        return buffer(duration: total) { t in
+        return buffer(duration: total, format: format) { t in
             let index = min(notes.count - 1, Int(t / step))
             let local = t - Double(index) * step
             let env = pow(max(0, 1 - local / step), 1.4)
@@ -187,7 +518,7 @@ final class Sound {
         let total = beat * 4 * Double(bars)
         let roots = [110.0, 110.0, 146.83, 164.81]          // A A D E
         let arp = [440.0, 554.37, 659.25, 554.37, 493.88, 659.25, 880.0, 659.25]
-        return buffer(duration: total) { t in
+        return buffer(duration: total, format: musicFormat) { t in
             let bar = min(bars - 1, Int(t / (beat * 4)))
             let root = roots[bar]
             let step = Int(t / (beat / 2)) % arp.count

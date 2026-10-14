@@ -51,6 +51,11 @@ struct GameView: View {
                 Sound.shared.start()
             }
         }
+        // The race owns the whole screen: the HUD is laid out against the
+        // retail build's 640x480 frame, so it has to see the frame's real
+        // height rather than the height left over under a navigation bar.
+        .ignoresSafeArea()
+        .toolbar(.hidden, for: .navigationBar)
         .statusBarHidden()
     }
 

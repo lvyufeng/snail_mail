@@ -10,7 +10,7 @@ struct MenuView: View {
 
     var body: some View {
         ZStack {
-            SpaceBackground(showPlanet: true)
+            RetailBackdrop(stem: "menubg")
 
             GeometryReader { geo in
                 ScrollView(showsIndicators: false) {
@@ -132,7 +132,10 @@ struct MenuView: View {
             .padding(.horizontal, 18)
             .padding(.top, 8)
         }
-        .onAppear { Sound.shared.start() }
+        .onAppear {
+            Sound.shared.start()
+            Sound.shared.playMusic(.menu)
+        }
     }
 }
 

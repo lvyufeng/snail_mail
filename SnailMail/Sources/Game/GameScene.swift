@@ -19,7 +19,20 @@ final class GameScene: SKScene {
     /// How wide the pit is, as a fraction of the half-road: the pit is drawn
     /// 0.9 × screenW across and the snail drops in over the same span.
     private let holeHalfWidth: CGFloat = 0.45
-    private let snailBaseScale: CGFloat = 1.15
+    /// How wide Turbo is drawn, as a fraction of the highway's full width at
+    /// his own row on screen. Measuring him against the road rather than the
+    /// screen keeps his proportions right on a tall portrait phone, where the
+    /// near highway fills the frame edge to edge: at his row the road spans
+    /// virtually the whole 402pt width, so this fraction is, in practice, how
+    /// wide he reads on screen. The retail build's landscape frame is 4:3, so
+    /// the same world size there reads smaller; 0.18 keeps him about a lane
+    /// wide and stops him dominating the portrait view.
+    private let snailRoadFraction: CGFloat = 0.18
+    /// Turbo's own width, in points, at the snapshot's screen scale.
+    private var snailScale: CGFloat = 1
+    /// Half the highway's on-screen width on Turbo's row, refreshed by
+    /// `renderRoad()` from the segment he is racing over.
+    private var snailRowHalfWidth: CGFloat = 0
     /// Seconds the snail spends tumbling down a hole before climbing out.
     private let fallDuration: CGFloat = 0.9
     /// Seconds the snail spends airborne after hitting a ramp or trampoline.
@@ -52,6 +65,10 @@ final class GameScene: SKScene {
     private var segments: [RoadSegment] = []
     private var trackLength: CGFloat = 1
     private var fringe: UIColor
+    /// The two tones the road checkerboard alternates between, taken from the
+    /// retail surface the level's `Track:` script selects.
+    private var roadTan: UIColor
+    private var roadOrange: UIColor
 
     private(set) var state = RaceState()
     var onStateChange: ((RaceState) -> Void)?
@@ -68,6 +85,9 @@ final class GameScene: SKScene {
     private var fireCooldown: CGFloat = 0
     private var boostUntil: CGFloat = 0
     private var invincibleUntil: CGFloat = 0
+    /// The skid sound is played at most this often, so a twitchy drag does not
+    /// turn into a wall of tyre noise.
+    private var skidUntil: CGFloat = 0
     private var elapsed: CGFloat = 0
     private var lastUpdate: TimeInterval = 0
     /// >= 0 while the snail is dropping into a hole; -1 the rest of the time.
@@ -113,8 +133,19 @@ final class GameScene: SKScene {
     private var starLayers: [SKNode] = []
     private var fogNode = SKNode()
 
-    private var roadPool: [SKShapeNode] = []      // tan cells
-    private var roadPoolB: [SKShapeNode] = []     // orange cells
+    private var roadPool: [SKShapeNode] = []      // tan cells (procedural fallback)
+    private var roadPoolB: [SKShapeNode] = []     // orange cells (procedural fallback)
+    /// One shape per road tone per segment: the retail highway is a tiling of a
+    /// few tones, so each segment's cells are bucketed by tone and every tone
+    /// gets its own path. Empty when the retail art is missing, in which case
+    /// the two-tone `roadPool`/`roadPoolB` checkerboard takes over.
+    private var roadTonePool: [[SKShapeNode]] = []
+    private let roadSurface: RetailAssets.TrackSurface?
+    /// How much of the road's width one retail tile covers, and how many cells
+    /// the tiling has on a side. The lattice is 16 cells square and half of it
+    /// spans the highway, so eight cells lie across the road.
+    private let roadTilesAcross: CGFloat = 0.5
+    private let roadCellsAcross = 8
     private var wallLeftPool: [SKShapeNode] = []
     private var wallRightPool: [SKShapeNode] = []
     private var entityPool: [EntityKind: [SKNode]] = [:]
@@ -142,6 +173,10 @@ final class GameScene: SKScene {
             blue: config.fringe.z / 255,
             alpha: 1
         )
+        let palette = RetailAssets.roadColours(track: config.track)
+        self.roadOrange = palette.dark
+        self.roadTan = palette.light
+        self.roadSurface = RetailAssets.trackSurface(config.track)
         super.init(size: size)
         self.scaleMode = .resizeFill
         self.backgroundColor = UIColor(hex: backgroundHex(for: config.background))
@@ -177,6 +212,9 @@ final class GameScene: SKScene {
     // MARK: - Lifecycle
 
     override func didMove(to view: SKView) {
+        // The race screen opens on the start line, so it carries the menu theme
+        // until the snail actually sets off and the race track takes over.
+        Sound.shared.playMusic(.menu)
         buildBackground()
         roadLayer.zPosition = 0
         addChild(roadLayer)
@@ -244,6 +282,15 @@ final class GameScene: SKScene {
         sky.name = "sky"
         sky.zPosition = -100
 
+        // The retail build fills the sky with one of four tiled space textures
+        // and scrolls it past the camera at the rate its `BACKGROUNDS/*.txt`
+        // script's `Distort:` gives. Use the same art and the same rate.
+        if let tex = RetailAssets.background(config.background) {
+            buildRetailSky(into: sky, texture: tex)
+            addChild(sky)
+            return
+        }
+
         let top = UIColor(hex: backgroundHex(for: config.background))
         let grad = Sprites.gradientTexture(size: CGSize(width: 8, height: size.height),
                                            colors: [top, UIColor(hex: "#140A2C"), UIColor(hex: "#06040D")])
@@ -307,9 +354,9 @@ final class GameScene: SKScene {
         fogNode.zPosition = 8
         let fog = SKSpriteNode(texture: Sprites.gradientTexture(
             size: CGSize(width: 8, height: size.height * 0.5),
-            colors: [UIColor(hex: "#160A30").withAlphaComponent(0),
-                     UIColor(hex: "#1A1038").withAlphaComponent(0.96),
-                     UIColor(hex: "#160A30").withAlphaComponent(0)],
+            colors: [fogColour.withAlphaComponent(0),
+                     fogColour.withAlphaComponent(0.96),
+                     fogColour.withAlphaComponent(0)],
             locations: [0, 0.5, 1]))
         fog.size = CGSize(width: size.width, height: size.height * 0.5)
         fog.position = CGPoint(x: size.width / 2, y: size.height * 0.5)
@@ -317,14 +364,58 @@ final class GameScene: SKScene {
         addChild(fogNode)
     }
 
+    /// The level's fog colour — the tint its `BACKGROUNDS/*.txt` script names.
+    private var fogColour: UIColor { UIColor(hex: backgroundHex(for: config.background)) }
+
+    /// Fills the sky with the level's own space texture, tiled to cover a screen
+    /// that is taller than the 512x256 art, and scrolls the whole stack past the
+    /// camera. The scroll rate comes straight from the script's `Distort:`
+    /// value, so the purple routes stream past fastest and the green warp slowest,
+    /// exactly as the retail build does it.
+    private func buildRetailSky(into sky: SKNode, texture: SKTexture) {
+        let art = texture.size()
+        guard art.width > 0, art.height > 0 else { return }
+        let tileW = size.width
+        let tileH = tileW * art.height / art.width
+        let list = SKNode()
+        let count = Int(ceil(size.height / tileH)) + 3
+        for i in 0..<count {
+            let tile = SKSpriteNode(texture: texture)
+            tile.size = CGSize(width: tileW, height: tileH)
+            tile.position = CGPoint(x: size.width / 2, y: CGFloat(i) * tileH - tileH)
+            list.addChild(tile)
+        }
+        sky.addChild(list)
+
+        // Distort runs 0 (still) up to 20 (the purple nebula). Scale it into a
+        // comfortable scroll: the fastest sky crosses one tile in a few seconds.
+        let distort = RetailAssets.backgroundDistort(config.background)
+        if distort > 0 {
+            let duration = TimeInterval(max(1.6, tileH / (distort * 12)))
+            let down = SKAction.moveBy(x: 0, y: -tileH, duration: duration)
+            list.run(.repeatForever(.sequence([down, .moveBy(x: 0, y: tileH, duration: 0)])))
+        }
+    }
+
     private func preparePools() {
         for i in 0..<drawDistance {
-            roadPool.append(makeQuadNode(fill: .black, z: -CGFloat(i)))
-            roadPoolB.append(makeQuadNode(fill: .black, z: -CGFloat(i) + 0.05))
+            if let surface = roadSurface {
+                var row: [SKShapeNode] = []
+                row.reserveCapacity(surface.palette.count)
+                for tone in surface.palette {
+                    let node = makeQuadNode(fill: tone, z: -CGFloat(i))
+                    roadLayer.addChild(node)
+                    row.append(node)
+                }
+                roadTonePool.append(row)
+            } else {
+                roadPool.append(makeQuadNode(fill: .black, z: -CGFloat(i)))
+                roadPoolB.append(makeQuadNode(fill: .black, z: -CGFloat(i) + 0.05))
+                roadLayer.addChild(roadPool[i])
+                roadLayer.addChild(roadPoolB[i])
+            }
             wallLeftPool.append(makeQuadNode(fill: .black, z: -CGFloat(i) + 0.1))
             wallRightPool.append(makeQuadNode(fill: .black, z: -CGFloat(i) + 0.1))
-            roadLayer.addChild(roadPool[i])
-            roadLayer.addChild(roadPoolB[i])
             roadLayer.addChild(wallLeftPool[i])
             roadLayer.addChild(wallRightPool[i])
         }
@@ -343,7 +434,7 @@ final class GameScene: SKScene {
     private func buildSnail() {
         snail = Sprites.makeSnail()
         snail.zPosition = 30
-        snail.setScale(snailBaseScale)
+        snail.setScale(snailScale)
         addChild(snail)
 
         // Soft shadow under the snail so it sits on the road.
@@ -388,7 +479,7 @@ final class GameScene: SKScene {
         clearBullets()
         clearEnemyBullets()
         enemyFireTimer = enemyFireInterval
-        snail.setScale(snailBaseScale)
+        snail.setScale(snailScale)
         snail.zRotation = 0
         snail.alpha = 1
         state.phase = .ready
@@ -406,6 +497,8 @@ final class GameScene: SKScene {
         state.phase = .running
         state.elapsed = 0
         elapsed = 0
+        Sound.shared.playMusic(.race(config.track))
+        Sound.shared.speak(.start)
         publish()
     }
 
@@ -427,7 +520,17 @@ final class GameScene: SKScene {
         publish()
     }
 
-    func steer(toFraction x: CGFloat) { targetX = x }
+    func steer(toFraction x: CGFloat) {
+        let previous = targetX
+        targetX = x
+        // A hard swipe at speed scrubs the tyres — the original keeps a
+        // dedicated `CameraSkidStop` model and `skidstop` sample for it.
+        if state.phase == .running, elapsed >= skidUntil,
+           abs(x - previous) > 0.5, currentSpeed > baseTargetSpeed * 0.8 {
+            skidUntil = elapsed + 0.7
+            Sound.shared.play(.skid)
+        }
+    }
 
     func setTouching(_ touching: Bool) { self.touching = touching }
 
@@ -560,7 +663,7 @@ final class GameScene: SKScene {
                               offset: playerX,
                               travel: 0,
                               lastPoint: .zero))
-        Sound.shared.play(.shoot)
+        Sound.shared.play(.shoot(state.weaponLevel))
     }
 
     /// Runs every shot forward, re-projects it on the road and resolves the
@@ -714,18 +817,19 @@ final class GameScene: SKScene {
                     state.parcels += 1
                     state.sheet.parcelCollect += 100
                     Sound.shared.play(.collect)
+                    Sound.shared.speak(.package)
                     toRemove.append((seg, spec))
                 case .heart:
                     state.postalMeter = min(state.maxMeter, state.postalMeter + 25)
                     state.sheet.bonus += 100
-                    Sound.shared.play(.collect)
+                    Sound.shared.play(.heart)
                     toRemove.append((seg, spec))
                 case .ringUpgrade:
                     if state.weaponLevel < state.maxWeaponLevel {
                         // The power-up ring is the only way up the weapon ladder:
                         // blaster -> laser -> rocket launcher.
                         state.weaponLevel += 1
-                        Sound.shared.play(.upgrade)
+                        Sound.shared.play(.upgrade(state.weaponLevel))
                     } else {
                         // Already at rockets. The original promises that once
                         // you have grabbed enough rings "I will become
@@ -733,24 +837,28 @@ final class GameScene: SKScene {
                         // buys a spell of invulnerability and a bonus.
                         invincibleUntil = max(invincibleUntil, elapsed + 4)
                         state.sheet.bonus += 200
-                        Sound.shared.play(.upgrade)
+                        Sound.shared.play(.invincible)
                     }
+                    Sound.shared.speak(.powerup)
                     toRemove.append((seg, spec))
                 case .ringExplode:
                     // The yellow ring reaches out and pops every enemy around
                     // it, exactly as the tutorial describes.
                     detonateBlast()
                     state.sheet.ring += 200
+                    Sound.shared.play(.explodeRing)
                     toRemove.append((seg, spec))
                 case .ringSlow:
                     currentSpeed *= 0.6
+                    Sound.shared.play(.slow)
+                    Sound.shared.speak(.slow)
                     toRemove.append((seg, spec))
                 case .salt:
                     damage(10, seg: seg)
                     toRemove.append((seg, spec))
                 case .asteroid:
                     currentSpeed *= 0.5
-                    damage(4, seg: seg)
+                    damage(4, seg: seg, sound: .asteroid)
                     toRemove.append((seg, spec))
                 case .slug:
                     damage(12, seg: seg)
@@ -782,9 +890,9 @@ final class GameScene: SKScene {
                         beginFall(offset: spec.offset)
                     }
                 case .ramp:
-                    launch(power: 1.0)
+                    launch(power: 1.0, sound: .boost)
                 case .trampoline:
-                    launch(power: 1.5)
+                    launch(power: 1.5, sound: .trampoline)
                 case .jetpack:
                     // The retail level hands the jetpack back with a
                     // `JetPackOff` piece a few segments later, so the flight
@@ -798,13 +906,13 @@ final class GameScene: SKScene {
                         jetpackOffZ = 0
                         jetpackUntil = elapsed + 3.5
                     }
-                    Sound.shared.play(.boost)
+                    Sound.shared.play(.jetpack)
                     toRemove.append((seg, spec))
                 case .ringNormal:
                     state.sheet.ring += 150
                     currentSpeed = min(baseTargetSpeed * 1.5,
                                        currentSpeed + baseTargetSpeed * 0.35)
-                    Sound.shared.play(.collect)
+                    Sound.shared.play(.highlight)
                     toRemove.append((seg, spec))
                 case .arch:
                     break
@@ -829,7 +937,7 @@ final class GameScene: SKScene {
             ?? CGPoint(x: size.width * 0.5, y: size.height * 0.2)
     }
 
-    private func damage(_ amount: Double, seg: RoadSegment) {
+    private func damage(_ amount: Double, seg: RoadSegment, sound: Sound.Effect = .hit) {
         guard config.damageEnabled else { return }
         // Brief invulnerability after any hit. Fixed obstacles (holes, turrets)
         // stay on the road, so without this the snail would keep taking damage
@@ -837,7 +945,10 @@ final class GameScene: SKScene {
         guard !invincible else { return }
         invincibleUntil = elapsed + 0.75
         state.postalMeter = max(0, state.postalMeter - amount)
-        Sound.shared.play(.hit)
+        Sound.shared.play(sound)
+        // The retail snail complains when it is hurt; its voice script makes
+        // `Ouch` a subset of the same complaint set.
+        Sound.shared.speak(amount >= 10 ? .damage : .ouch)
         if state.postalMeter <= 0 {
             finish(won: false)
         }
@@ -854,10 +965,17 @@ final class GameScene: SKScene {
         let script = TrackData.tutorialScript
         guard mode == .tutorial, !script.isEmpty, !segments.isEmpty else { return }
         let step = segments[segmentIndex(at: positionZ + playerZ)].script
-        if step >= 0 && step < script.count { tutorialStep = max(tutorialStep, step) }
-        guard tutorialStep >= 0 else { return }
-        let line = script[tutorialStep]
+        guard step >= 0 && step < script.count && step > tutorialStep else { return }
+        tutorialStep = step
+        let line = script[step]
         if !line.isEmpty { state.tutorialMessage = line }
+        // The retail build speaks each line as the piece arrives.  The
+        // script names the recording, so play it by name; the empty lines
+        // carry no voice.
+        if step < TrackData.tutorialVoice.count,
+           let voice = TrackData.tutorialVoice[step] {
+            Sound.shared.speak(tutorialLine: voice)
+        }
     }
 
     /// The jump pieces leave the road out for a run of blank rows. The snail
@@ -879,7 +997,10 @@ final class GameScene: SKScene {
             gapStartZ = CGFloat(seg.gapStart) * segmentLength
             gapLengthZ = CGFloat(seg.gapRun) * segmentLength
             gapArc = min(150, 46 + CGFloat(seg.gapRun) * 5)
-            if seg.gapRun >= 6 { Sound.shared.play(.boost) }
+            if seg.gapRun >= 6 {
+                Sound.shared.play(.boost)
+                Sound.shared.speak(.wormTunnel)
+            }
         }
         var dz = (z - gapStartZ).truncatingRemainder(dividingBy: max(trackLength, 1))
         if dz < 0 { dz += max(trackLength, 1) }
@@ -888,7 +1009,7 @@ final class GameScene: SKScene {
 
     /// Fly off a ramp or trampoline: a short hop that clears pits and hazards,
     /// with a burst of speed for the landing.
-    private func launch(power: CGFloat) {
+    private func launch(power: CGFloat, sound: Sound.Effect) {
         guard fallTimer < 0, hopTimer < 0 else { return }
         hopTimer = 0
         hopPower = power
@@ -896,7 +1017,8 @@ final class GameScene: SKScene {
         currentSpeed = min(baseTargetSpeed * 1.6,
                            currentSpeed + baseTargetSpeed * 0.5 * power)
         boostUntil = max(boostUntil, elapsed + 0.5)
-        Sound.shared.play(.boost)
+        Sound.shared.play(sound)
+        Sound.shared.speak(.superTramp)
     }
 
     /// Drop the snail into a pit. Contact damage is suppressed while falling —
@@ -909,6 +1031,7 @@ final class GameScene: SKScene {
         clearBullets()
         clearEnemyBullets()
         Sound.shared.play(.fall)
+        Sound.shared.speak(.fall)
         spawnBurst(at: playerPoint())
     }
 
@@ -932,7 +1055,7 @@ final class GameScene: SKScene {
         currentSpeed = baseTargetSpeed * 0.35
         state.speed = Double(currentSpeed)
 
-        snail.setScale(snailBaseScale)
+        snail.setScale(snailScale)
         snail.zRotation = 0
         snail.alpha = 1
 
@@ -1114,8 +1237,9 @@ final class GameScene: SKScene {
 
     private func renderRoad() {
         for i in 0..<drawDistance {
-            roadPool[i].isHidden = true
-            roadPoolB[i].isHidden = true
+            if i < roadPool.count { roadPool[i].isHidden = true }
+            if i < roadPoolB.count { roadPoolB[i].isHidden = true }
+            for node in roadTonePool[i] { node.isHidden = true }
             wallLeftPool[i].isHidden = true
             wallRightPool[i].isHidden = true
         }
@@ -1131,6 +1255,9 @@ final class GameScene: SKScene {
         var maxy = size.height
         var x: CGFloat = 0
         var dx: CGFloat = -(baseSegment.curve * basePercent)
+        // The row Turbo rides on, in the projection's own y-grows-downwards
+        // canvas space. His size is read off the highway here.
+        let snailRow = size.height * 0.83
 
         for n in 0..<drawDistance {
             let seg = segments[(baseSegment.index + n) % segments.count]
@@ -1154,31 +1281,45 @@ final class GameScene: SKScene {
             }
 
             drawSegment(seg, n: n)
+            if seg.p1.screenY >= snailRow && seg.p2.screenY <= snailRow {
+                let span = max(0.0001, seg.p1.screenY - seg.p2.screenY)
+                let t = (seg.p1.screenY - snailRow) / span
+                snailRowHalfWidth = interpolate(seg.p1.screenW, seg.p2.screenW, t)
+            }
             maxy = seg.p2.screenY
         }
 
         renderEntities(baseSegment: baseSegment)
 
         // Player.
+        // Turbo is scaled against the highway on his own row, not against the
+        // screen, so a tall portrait phone does not inflate him.
+        let halfRoad = snailRowHalfWidth > 0 ? snailRowHalfWidth : size.width * 0.48
+        snailScale = max(0.05, halfRoad * 2 * snailRoadFraction / Sprites.snailNativeWidth)
         if fallTimer >= 0 {
             // Tumbling down the pit: sink below the road, spin and shrink.
             let p = min(1, fallTimer / fallDuration)
             let ease = p * p
             snail.position = CGPoint(x: size.width * 0.5,
-                                     y: size.height * 0.17 - 95 * ease)
+                                     y: size.height * 0.17 - 95 * ease * snailScale)
             snail.zRotation = p * 5.6
-            snail.setScale(snailBaseScale * (1 - 0.5 * ease))
+            snail.setScale(snailScale * (1 - 0.5 * ease))
             snail.alpha = 1 - 0.3 * p
         } else {
             snail.position = CGPoint(x: size.width * 0.5, y: size.height * 0.17)
             // Steer with the road, then add the roll of a loop or a screw so
             // the snail actually turns over as it flies the piece.
             snail.zRotation = -playerX * 0.22 + playerRoll
-            snail.setScale(snailBaseScale)
+            snail.setScale(snailScale)
             Sprites.setBoost(snail, on: elapsed < boostUntil || jetpackActive
                              || currentSpeed > baseTargetSpeed * 1.05)
             // Blink while the post-hit invulnerability is active.
             snail.alpha = elapsed < invincibleUntil ? 0.45 + 0.55 * abs(sin(elapsed * 22)) : 1
+            // The retail build swaps Turbo's own billboard for a damaged or a
+            // shielded one; no-op on the procedural art, which has neither.
+            Sprites.setSnailVariant(snail,
+                                    damaged: config.damageEnabled && state.postalMeter <= 34,
+                                    invincible: invincible)
             snail.position.y += sin(elapsed * 14) * 2
             // Riding a ramp: arc the snail up and over the road.
             if hopTimer >= 0 {
@@ -1195,7 +1336,9 @@ final class GameScene: SKScene {
             }
         }
         if let shadow = childNode(withName: "snailshadow") {
-            shadow.position = CGPoint(x: snail.position.x, y: snail.position.y - 34)
+            shadow.setScale(snailScale)
+            shadow.position = CGPoint(x: snail.position.x,
+                                      y: snail.position.y - 34 * snailScale)
             shadow.zRotation = snail.zRotation
             shadow.alpha = fallTimer >= 0 ? max(0, 1 - fallTimer / fallDuration) : 1
         }
@@ -1206,10 +1349,17 @@ final class GameScene: SKScene {
         // fringe walls, just the background scrolling past underneath.
         guard !seg.airborne else { return }
 
-        // The original road is a diamond lattice of sandy-tan and burnt-orange
-        // tiles (see objects_world00_track0). Reproduce it as a checkerboard of
-        // column cells whose parity alternates with depth as well as across the
-        // road, so the pattern scrolls toward the camera.
+        if let surface = roadSurface {
+            drawTiledRoad(seg, n: n, surface: surface)
+            drawFringe(seg, n: n)
+            return
+        }
+
+        // The retail highway is a tiling texture -- a diamond lattice in the two
+        // tones `Track:` selects (sand, grass, ice, violet). SpriteKit cannot map
+        // a texture across a shape's fill, so the same lattice is rebuilt as a
+        // checkerboard of column cells whose parity alternates with depth as
+        // well as across the road, using the retail palette.
         let l1 = seg.p1.screenX - seg.p1.screenW, r1 = seg.p1.screenX + seg.p1.screenW
         let l2 = seg.p2.screenX - seg.p2.screenW, r2 = seg.p2.screenX + seg.p2.screenW
         let y1 = fy(seg.p1.screenY), y2 = fy(seg.p2.screenY)
@@ -1238,12 +1388,100 @@ final class GameScene: SKScene {
             evenPath.closeSubpath()
         }
         roadPool[n].isHidden = false
-        roadPool[n].fillColor = GameScene.roadTan
+        roadPool[n].fillColor = roadTan
         roadPool[n].path = evenPath
         roadPoolB[n].isHidden = oddPath.isEmpty
-        roadPoolB[n].fillColor = GameScene.roadOrange
+        roadPoolB[n].fillColor = roadOrange
         roadPoolB[n].path = oddPath
 
+        drawFringe(seg, n: n)
+    }
+
+    /// The road with the retail tiling read back in. Each segment is cut where
+    /// the texture's cell grid crosses it and across the road into one cell per
+    /// texture column; every cell takes the tone of the texture cell it covers
+    /// and is added to that tone's path, so a whole segment costs one shape per
+    /// tone rather than one per cell.
+    private func drawTiledRoad(_ seg: RoadSegment, n: Int,
+                               surface: RetailAssets.TrackSurface) {
+        let tones = roadTonePool[n]
+        guard !tones.isEmpty else { return }
+
+        let l1 = seg.p1.screenX - seg.p1.screenW, r1 = seg.p1.screenX + seg.p1.screenW
+        let l2 = seg.p2.screenX - seg.p2.screenW, r2 = seg.p2.screenX + seg.p2.screenW
+        let y1 = fy(seg.p1.screenY), y2 = fy(seg.p2.screenY)
+        guard r1 > l1 || r2 > l2 else { return }
+
+        let blocks = CGFloat(surface.blocks)
+        // One tile of the texture is `roadTileWorld` across in world units, and
+        // the lattice is square, so the same figure measures depth.
+        let tileWorld = 2 * roadWidth / roadTilesAcross
+        let v1 = CGFloat(seg.index) * segmentLength / tileWorld
+        let v2 = v1 + segmentLength / tileWorld
+        let dv = v2 - v1
+
+        // Cut the segment at every texture row boundary it crosses.
+        var cuts: [CGFloat] = [0, 1]
+        if dv > 0 {
+            var m = Int(floor(v1 * blocks)) + 1
+            while CGFloat(m) / blocks < v2 {
+                let t = (CGFloat(m) / blocks - v1) / dv
+                if t > 0 && t < 1 { cuts.append(t) }
+                m += 1
+            }
+        }
+        cuts.sort()
+
+        // Cells overlap by a fraction of a point so the seams between them do
+        // not show as hairlines against the sky.
+        let bleed: CGFloat = 0.4
+        var paths = [CGMutablePath?](repeating: nil, count: tones.count)
+
+        for ci in 0..<(cuts.count - 1) {
+            let ta = cuts[ci], tb = cuts[ci + 1]
+            guard tb - ta > 0.0001 else { continue }
+            let tm = (ta + tb) / 2
+            let by = Int(floor((v1 + dv * tm) * blocks))
+            let ay0 = y1 + (y2 - y1) * ta - bleed
+            let ay1 = y1 + (y2 - y1) * tb + bleed
+            let ax0L = l1 + (l2 - l1) * ta, ax0R = r1 + (r2 - r1) * ta
+            let ax1L = l1 + (l2 - l1) * tb, ax1R = r1 + (r2 - r1) * tb
+
+            for c in 0..<roadCellsAcross {
+                let f0 = CGFloat(c) / CGFloat(roadCellsAcross)
+                let f1 = CGFloat(c + 1) / CGFloat(roadCellsAcross)
+                let bx = Int(floor(((f0 + f1) / 2) * roadTilesAcross * blocks))
+                let tone = surface.toneIndex(blockX: bx, blockY: by)
+                guard tone < tones.count else { continue }
+
+                let p: CGMutablePath
+                if let existing = paths[tone] { p = existing } else {
+                    let made = CGMutablePath()
+                    paths[tone] = made
+                    p = made
+                }
+                let a0 = ax0L + (ax0R - ax0L) * f0
+                let a1 = ax0L + (ax0R - ax0L) * f1
+                let b0 = ax1L + (ax1R - ax1L) * f0
+                let b1 = ax1L + (ax1R - ax1L) * f1
+                let g: CGFloat = 0.4
+                p.move(to: CGPoint(x: min(a0, b0) - g, y: ay0))
+                p.addLine(to: CGPoint(x: max(a1, b1) + g, y: ay0))
+                p.addLine(to: CGPoint(x: max(a1, b1) + g, y: ay1))
+                p.addLine(to: CGPoint(x: min(a0, b0) - g, y: ay1))
+                p.closeSubpath()
+            }
+        }
+
+        for (tone, node) in tones.enumerated() {
+            if let path = paths[tone] {
+                node.path = path
+                node.isHidden = false
+            }
+        }
+    }
+
+    private func drawFringe(_ seg: RoadSegment, n: Int) {
         // Fringe walls on both sides, tinted with the level's fringe colour.
         let lh1 = seg.p1.screenW * wallRatio
         let lh2 = seg.p2.screenW * wallRatio
@@ -1262,8 +1500,6 @@ final class GameScene: SKScene {
                                      rx2, fy(seg.p2.screenY - lh2), rx2, fy(seg.p2.screenY))
     }
 
-    private static let roadTan = UIColor(hex: "#C18E4C")
-    private static let roadOrange = UIColor(hex: "#C35612")
     private let checkCols = 6
 
     private func renderEntities(baseSegment: RoadSegment) {
@@ -1392,6 +1628,7 @@ final class GameScene: SKScene {
         }
         state.phase = .finished(won: won)
         Sound.shared.play(won ? .win : .lose)
+        Sound.shared.speak(won ? .victory : .dying)
         publish()
         onFinish?(won)
     }

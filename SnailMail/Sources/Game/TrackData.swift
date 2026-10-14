@@ -229,33 +229,44 @@ enum TrackData {
     /// The tutorial's scripted lines, in the order its level file
     /// lists them.  Entry `n` belongs to the piece the pool lays at
     /// index `n`; an empty string leaves the previous line on
-    /// screen.  The retail build pairs each line with a voice-over
-    /// (`Voice/tut*.ogg`) and inline icon art, neither of which is
-    /// bundled here, so the icons are spelled out as words.
+    /// screen.  The retail script writes its hard line breaks as `>`
+    /// and drops inline sprite art into the prose with the glyphs
+    /// `{ } ~ [ ] ^ _ ;`; the breaks are `\n` here and the glyphs are
+    /// kept verbatim so the banner can draw the same icons.
     static let tutorialScript: [String] = [
-        "Hi! I'm Turbo the Snail.\nSteer with the mouse!",
+        "Hi! I'm Turbo the Snail.\nSteer } with the mouse!",
         "The blue barriers prevent\nme from falling off the\nsides of the highway.",
-        "I work for Snail Mail. Help\nme collect Packages.",
-        "Asteroids slow me down.\nHold the Mouse Button\nto shoot",
+        "I work for Snail Mail. Help\nme collect Packages { .",
+        "Asteroids slow me down.\nHold the Mouse Button\nto shoot ]",
         "Don't let me fall through\nthe holes in the highway!",
-        "Salt burns me! I can't\nshoot salt I have to avoid it!",
-        "More salt! If I take\ntoo much damage I go postal!",
-        "Hearts restore my Postal\nMeter located on the right.",
-        "Look Out! Evil enemies try to\nknock me off the highway",
-        "I get better weapons\nwhen I go through power-ups!",
+        "Salt ^ burns me! I can't\nshoot ^ I have to avoid it!",
+        "More ^ Salt! If I take\ntoo much damage I go postal!",
+        "Hearts _ restore my Postal\nMeter located on the right.",
+        "Look Out! Evil [ try to\nknock me off the highway",
+        "I get better weapons\nwhen I go through ~ !",
         "",
-        "Lasers or Rockets,\nI can destroy enemies",
+        "Lasers or Rockets,\nI can destroy [",
         "",
-        "If I have Lasers shoot the enemies",
-        "Steer clear of slow rings\nThey slow me down!",
+        "If I have Lasers shoot the [",
+        "Steer clear of ; rings\nThey slow me down!",
         "Yellow Rings they\nblow up my enemies!",
         "I can't blow up Turrets\nso guide me around them!",
-        "If I grab enough power-ups\nI will become invincible!",
+        "If I grab enough ~\nI will become invincible!",
         "",
         "",
         "",
-        "I can plow through enemies\nwhen I'm invincible.",
+        "I can plow through [\nwhen I'm invincible.",
         "Excellent. Time to\nhit the Post Office.",
+    ]
+
+    /// The voice-over each tutorial line names, keyed by the same index
+    /// as `tutorialScript`.  The retail level file pairs line `n` with
+    /// `Sample="Voice/tutN.ogg"` and, at index 6, an out-of-order
+    /// `tut18`; the blank lines carry no recording, so they are `nil`.
+    static let tutorialVoice: [String?] = [
+        "tut1", "tut2", "tut3", "tut4", "tut5", "tut6", "tut18",
+        "tut7", "tut8", "tut9", nil, "tut10", nil, "tut11", "tut12",
+        "tut13", "tut14", "tut15", nil, nil, nil, "tut16", "tut17",
     ]
 
     /// The `GalaxyText:` blurb every campaign level file carries: the

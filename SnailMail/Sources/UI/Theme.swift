@@ -64,6 +64,30 @@ struct SpaceBackground: View {
     }
 }
 
+/// The 2005 build's own backdrop for a screen, filling the display, or the
+/// shared drawn space when `tools/import_art.py` has not put the art in the
+/// bundle. Every menu screen swaps to this so the chrome sits on the real
+/// artwork instead of on a remake of it.
+struct RetailBackdrop: View {
+    /// The retail tile name, e.g. `menubg`, `help`, `splash`.
+    var stem: String
+    var showPlanet: Bool = true
+
+    var body: some View {
+        Group {
+            if let img = RetailAssets.stitched(stem)
+                ?? RetailAssets.image("Art/Backgrounds/\(stem).png") {
+                Image(uiImage: img)
+                    .resizable()
+                    .scaledToFill()
+                    .ignoresSafeArea()
+            } else {
+                SpaceBackground(showPlanet: showPlanet)
+            }
+        }
+    }
+}
+
 /// A simple ringed planet drawn from primitives, matched to the palette.
 struct PlanetView: View {
     var body: some View {
@@ -272,6 +296,14 @@ struct SnailMascot: View {
     private static let cyan    = Color(hex: "#58E1FF")
 
     var body: some View {
+        if let img = RetailAssets.billboardImage("Art/Baked/snail.png") {
+            Image(uiImage: img).resizable().scaledToFit()
+        } else {
+            drawn
+        }
+    }
+
+    private var drawn: some View {
         Canvas { ctx, size in
             let u = min(size.width, size.height) / 200
             let cx = size.width / 2

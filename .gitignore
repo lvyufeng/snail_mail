@@ -14,3 +14,8 @@ xcuserdata/
 # Python caches for the data-import tools
 __pycache__/
 *.pyc
+
+# Artwork, models and audio decoded from the retail game by
+# tools/import_art.py. They are the 2005 build's own content, so they stay on
+# the machine that owns a copy of the game instead of going into the repo.
+SnailMail/Resources/Retail/

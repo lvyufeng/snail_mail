@@ -228,6 +228,7 @@ struct LevelConfig {
     var length: Int               // approximate number of segments
     var rows: Int                 // the original `Length:` budget, in track rows
     var background: String
+    var track: Int                // the `Track:` number naming the trackN.png/slideN.png pair
     var fringe: SIMD3<Double>    // RGB 0...255
     var damageEnabled: Bool       // false in Tutorial
     var guided: Bool              // shows step-by-step Tutorial hints
@@ -253,6 +254,7 @@ struct LevelConfig {
                 length: star.segments,
                 rows: star.route,
                 background: star.background,
+                track: star.track,
                 fringe: star.fringe,
                 damageEnabled: true,
                 guided: false
@@ -271,6 +273,7 @@ struct LevelConfig {
                 length: Int(Double(t.route) * 0.4),
                 rows: t.route,
                 background: t.background,
+                track: 0,
                 fringe: t.fringe,
                 damageEnabled: false,
                 guided: true
@@ -288,6 +291,7 @@ struct LevelConfig {
                 length: 340,
                 rows: 0,
                 background: "SpaceRed",
+                track: Int.random(in: 0...3),
                 fringe: SIMD3(255, 150, 70),
                 damageEnabled: true,
                 guided: false
@@ -306,6 +310,8 @@ struct LevelConfig {
                 length: Int(Double(c.route) * 0.4),
                 rows: c.route,
                 background: c.background,
+                // The retail challenge script asks for `Track:random`.
+                track: Int.random(in: 0...3),
                 fringe: c.fringe,
                 damageEnabled: true,
                 guided: false

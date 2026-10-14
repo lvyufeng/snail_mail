@@ -18,6 +18,7 @@
 		AA0000000000000000000009 /* HUDView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000009 /* HUDView.swift */; };
 		AA0000000000000000000010 /* ResultOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000010 /* ResultOverlay.swift */; };
 		AA0000000000000000000070 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000070 /* Theme.swift */; };
+		AA0000000000000000000080 /* RetailAssets.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000080 /* RetailAssets.swift */; };
 		AA0000000000000000000071 /* Sound.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000071 /* Sound.swift */; };
 		AA0000000000000000000072 /* LevelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000072 /* LevelCatalog.swift */; };
 		AA0000000000000000000073 /* LevelSelectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000073 /* LevelSelectView.swift */; };
@@ -42,6 +43,7 @@
 		BB0000000000000000000009 /* HUDView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HUDView.swift; sourceTree = "<group>"; };
 		BB0000000000000000000010 /* ResultOverlay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResultOverlay.swift; sourceTree = "<group>"; };
 		BB0000000000000000000070 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		BB0000000000000000000080 /* RetailAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RetailAssets.swift; sourceTree = "<group>"; };
 		BB0000000000000000000071 /* Sound.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sound.swift; sourceTree = "<group>"; };
 		BB0000000000000000000072 /* LevelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelCatalog.swift; sourceTree = "<group>"; };
 		BB0000000000000000000073 /* LevelSelectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LevelSelectView.swift; sourceTree = "<group>"; };
@@ -104,6 +106,7 @@
 				BB0000000000000000000003 /* GameScene.swift */,
 				BB0000000000000000000005 /* Sprites.swift */,
 				BB0000000000000000000071 /* Sound.swift */,
+				BB0000000000000000000080 /* RetailAssets.swift */,
 			);
 			path = Sources/Game;
 			sourceTree = "<group>";
@@ -140,6 +143,7 @@
 			buildPhases = (
 				CC0000000000000000000002 /* Sources */,
 				CC0000000000000000000001 /* Frameworks */,
+				CC0000000000000000000004 /* Copy retail assets */,
 				CC0000000000000000000003 /* Resources */,
 			);
 			buildRules = (
@@ -195,6 +199,27 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		CC0000000000000000000004 /* Copy retail assets */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy retail assets";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# tools/import_art.py decodes the retail build's own artwork, models\n# and audio into SnailMail/Resources/Retail, which is untracked. Copy it\n# into the bundle when it is there, so a clean checkout still builds and\n# simply falls back to the procedural art.\nRETAIL=\"$SRCROOT/SnailMail/Resources/Retail\"\nif [ -d \"$RETAIL\" ]; then\n  DEST=\"$BUILT_PRODUCTS_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/Retail\"\n  mkdir -p \"$DEST\"\n  /usr/bin/rsync -a --delete \"$RETAIL/\" \"$DEST/\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		CC0000000000000000000002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -210,6 +235,7 @@
 				AA0000000000000000000009 /* HUDView.swift in Sources */,
 				AA0000000000000000000010 /* ResultOverlay.swift in Sources */,
 				AA0000000000000000000070 /* Theme.swift in Sources */,
+				AA0000000000000000000080 /* RetailAssets.swift in Sources */,
 				AA0000000000000000000071 /* Sound.swift in Sources */,
 				AA0000000000000000000072 /* LevelCatalog.swift in Sources */,
 				AA0000000000000000000073 /* LevelSelectView.swift in Sources */,

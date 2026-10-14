@@ -11,7 +11,7 @@ private struct InfoScaffold<Content: View>: View {
 
     var body: some View {
         ZStack {
-            SpaceBackground(showPlanet: true)
+            RetailBackdrop(stem: "help")
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 16) {
@@ -45,7 +45,10 @@ private struct InfoScaffold<Content: View>: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .statusBarHidden()
-        .onAppear { Sound.shared.start() }
+        .onAppear {
+            Sound.shared.start()
+            Sound.shared.playMusic(.menu)
+        }
     }
 }
 
@@ -260,6 +263,10 @@ struct IntroView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .statusBarHidden()
+        .onAppear {
+            Sound.shared.start()
+            Sound.shared.playMusic(.intro)
+        }
     }
 
     private func advance() {
