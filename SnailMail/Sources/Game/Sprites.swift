@@ -416,12 +416,26 @@ enum Sprites {
     }
 
     private static func makeHole() -> SKNode {
-        let node = shape(CGPath(ellipseIn: CGRect(x: -60, y: -23, width: 120, height: 46),
-                                transform: nil),
-                         fill: UIColor.black.withAlphaComponent(0.92),
-                         stroke: UIColor(hex: "#4A2E7A"), line: 3)
-        node.name = "hole"
-        return node
+        let root = SKNode()
+        // Mouth of the pit: a flat black ellipse punched straight through the
+        // road surface, sized to the width the snail actually falls through.
+        root.addChild(shape(CGPath(ellipseIn: CGRect(x: -60, y: -23, width: 120, height: 46),
+                                   transform: nil),
+                            fill: UIColor.black.withAlphaComponent(0.95),
+                            stroke: UIColor(hex: "#4A2E7A"), line: 3))
+        // Inner ellipse shifted toward the far lip reads as depth rather than a
+        // painted-on black blob.
+        root.addChild(shape(CGPath(ellipseIn: CGRect(x: -42, y: -6, width: 84, height: 28),
+                                   transform: nil),
+                            fill: UIColor(hex: "#1A0B31").withAlphaComponent(0.85),
+                            stroke: .clear, line: 0))
+        // A brighter rim so the pit is legible at speed against the tan road.
+        root.addChild(shape(CGPath(ellipseIn: CGRect(x: -62, y: -24, width: 124, height: 47),
+                                   transform: nil),
+                            fill: .clear,
+                            stroke: UIColor(hex: "#9C6BFF").withAlphaComponent(0.75), line: 2))
+        root.name = "hole"
+        return root
     }
 
     // MARK: - Projectiles

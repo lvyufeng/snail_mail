@@ -407,7 +407,8 @@ enum TrackBuilder {
         // instead of drifting toward one end.
         @discardableResult
         func place(_ kind: EntityKind, count: Int, minGap: Int,
-                   avoiding blocked: Set<Int> = []) -> [Int] {
+                   avoiding blocked: Set<Int> = [],
+                   offset: ClosedRange<CGFloat>? = nil) -> [Int] {
             guard count > 0 else { return [] }
             var candidates = Array(20..<(segments.count - 30))
             candidates.shuffle(using: &rng)
@@ -417,8 +418,10 @@ enum TrackBuilder {
                 if blocked.contains(index) { continue }
                 if chosen.allSatisfy({ abs($0 - index) >= minGap }) {
                     let seg = segments[index]
-                    let offset = CGFloat.random(in: -0.8...0.8, using: &rng)
-                    seg.sprites.append(EntitySpec(kind: kind, offset: offset, depth: CGFloat.random(in: 0...1, using: &rng)))
+                    let range = offset ?? -0.8...0.8
+                    seg.sprites.append(EntitySpec(kind: kind,
+                                                  offset: CGFloat.random(in: range, using: &rng),
+                                                  depth: CGFloat.random(in: 0...1, using: &rng)))
                     chosen.append(index)
                 }
             }
@@ -470,7 +473,11 @@ enum TrackBuilder {
             place(.asteroid, count: Int(CGFloat(hazardCount) * config.trash / 200), minGap: 8, avoiding: ringSegments)
             place(.slug, count: Int(CGFloat(hazardCount) * config.trash / 300), minGap: 12, avoiding: ringSegments)
             place(.turret, count: usable.count / 130, minGap: 60, avoiding: ringSegments)
-            place(.hole, count: usable.count / 150, minGap: 60, avoiding: ringSegments)
+            // Holes are drawn across the middle of the road, so they must sit
+            // there logically too: a random offset would put the pit the player
+            // sees and the pit they fall into in different places.
+            place(.hole, count: usable.count / 150, minGap: 60,
+                  avoiding: ringSegments, offset: -0.1...0.1)
         }
         place(.heart, count: max(1, usable.count / 90), minGap: 40, avoiding: ringSegments)
     }

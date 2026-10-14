@@ -7,7 +7,7 @@ final class Sound {
     static let shared = Sound()
 
     enum Effect {
-        case shoot, collect, upgrade, hit, boost, select, win, lose
+        case shoot, collect, upgrade, hit, boost, select, win, lose, fall
     }
 
     private let engine = AVAudioEngine()
@@ -73,6 +73,7 @@ final class Sound {
         case .select: "select"
         case .win: "win"
         case .lose: "lose"
+        case .fall: "fall"
         }
     }
 
@@ -126,6 +127,8 @@ final class Sound {
         effects["select"] = sweep(from: 1400, to: 1400, duration: 0.05, volume: 0.24)
         effects["win"] = arpeggio([523.25, 659.25, 783.99, 1046.5], step: 0.11, volume: 0.32)
         effects["lose"] = arpeggio([523.25, 415.3, 329.6, 196.0], step: 0.14, volume: 0.32)
+        // Falling down a hole: a long slide downward under a puff of dust.
+        effects["fall"] = sweep(from: 900, to: 90, duration: 0.7, volume: 0.34, decay: false)
     }
 
     private func arpeggio(_ notes: [Double], step: Double, volume: Double) -> AVAudioPCMBuffer {

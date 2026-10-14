@@ -16,6 +16,12 @@ final class GameScene: SKScene {
     private let drawDistance = 220
     private let playerZ: CGFloat
     private let wallRatio: CGFloat = 0.45
+    /// How wide the pit is, as a fraction of the half-road: the pit is drawn
+    /// 0.9 × screenW across and the snail drops in over the same span.
+    private let holeHalfWidth: CGFloat = 0.45
+    private let snailBaseScale: CGFloat = 1.15
+    /// Seconds the snail spends tumbling down a hole before climbing out.
+    private let fallDuration: CGFloat = 0.9
 
     // MARK: - Data
 
@@ -49,6 +55,10 @@ final class GameScene: SKScene {
     private var invincibleUntil: CGFloat = 0
     private var elapsed: CGFloat = 0
     private var lastUpdate: TimeInterval = 0
+    /// >= 0 while the snail is dropping into a hole; -1 the rest of the time.
+    private var fallTimer: CGFloat = -1
+    /// Where the pit sat across the road, so the snail climbs out beside it.
+    private var fallOffset: CGFloat = 0
 
     // MARK: - Nodes
 
@@ -137,6 +147,13 @@ final class GameScene: SKScene {
             state.sheet.slug = 1200
             state.sheet.garbage = 800
             finish(won: true)
+        }
+        if ProcessInfo.processInfo.arguments.contains("-pittest") {
+            startRace()
+            // Drop a pit directly under the snail so the fall can be watched.
+            let idx = segmentIndex(at: positionZ + playerZ)
+            segments[idx].sprites.removeAll { $0.kind == .hole }
+            segments[idx].sprites.append(EntitySpec(kind: .hole, offset: 0, depth: 0.5))
         }
         #endif
     }
@@ -252,7 +269,7 @@ final class GameScene: SKScene {
     private func buildSnail() {
         snail = Sprites.makeSnail()
         snail.zPosition = 30
-        snail.setScale(1.15)
+        snail.setScale(snailBaseScale)
         addChild(snail)
 
         // Soft shadow under the snail so it sits on the road.
@@ -283,6 +300,11 @@ final class GameScene: SKScene {
         elapsed = 0
         boostUntil = 0
         invincibleUntil = 0
+        fallTimer = -1
+        fallOffset = 0
+        snail.setScale(snailBaseScale)
+        snail.zRotation = 0
+        snail.alpha = 1
         state.phase = .ready
         publish()
     }
@@ -327,6 +349,15 @@ final class GameScene: SKScene {
 
         elapsed += fdt
         state.elapsed = Double(elapsed)
+
+        // Mid-fall the snail has no control and no forward drive: it plunges,
+        // then climbs back out behind the pit.
+        if fallTimer >= 0 {
+            updateFall(fdt: fdt)
+            renderRoad()
+            publish()
+            return
+        }
 
         updateSpeed(fdt: fdt)
         updateSteering(fdt: fdt)
@@ -435,7 +466,10 @@ final class GameScene: SKScene {
         for idx in window {
             let seg = segments[((idx % segments.count) + segments.count) % segments.count]
             for spec in seg.sprites {
-                guard abs(spec.offset - playerX) < 0.16 else { continue }
+                // A pit is as wide as it looks; everything else is a point-sized
+                // pick-up or hazard with a slim footprint.
+                let tolerance = spec.kind == .hole ? holeHalfWidth * 0.93 : 0.16
+                guard abs(spec.offset - playerX) < tolerance else { continue }
                 switch spec.kind {
                 case .parcel:
                     state.parcels += 1
@@ -489,7 +523,7 @@ final class GameScene: SKScene {
                 case .turret:
                     damage(14, seg: seg)
                 case .hole:
-                    damage(16, seg: seg)
+                    beginFall(offset: spec.offset)
                 case .postOffice:
                     break
                 }
@@ -513,6 +547,53 @@ final class GameScene: SKScene {
         if state.postalMeter <= 0 {
             finish(won: false)
         }
+    }
+
+    // MARK: - Falling into a hole
+
+    /// Drop the snail into a pit. Contact damage is suppressed while falling —
+    /// the plunge itself is the punishment, and it is applied on the way out.
+    private func beginFall(offset: CGFloat) {
+        guard fallTimer < 0, state.phase == .running else { return }
+        fallTimer = 0
+        fallOffset = offset
+        Sound.shared.play(.fall)
+        spawnBurst(atSegment: segmentIndex(at: positionZ + playerZ))
+    }
+
+    private func updateFall(fdt: CGFloat) {
+        fallTimer += fdt
+        // Forward motion dies instantly — the snail is no longer on the road.
+        currentSpeed = max(0, currentSpeed - fdt * 3000)
+        state.speed = Double(currentSpeed)
+        if fallTimer >= fallDuration { endFall() }
+    }
+
+    /// Climb back out: rewind a few segments, plant the snail on the side of the
+    /// pit it did not fall through, and hand out a moment of mercy invincibility
+    /// so it cannot immediately drop in again.
+    private func endFall() {
+        fallTimer = -1
+        let side: CGFloat = fallOffset >= 0 ? -0.62 : 0.62
+        positionZ = max(0, positionZ - segmentLength * 3)
+        playerX = side
+        targetX = side
+        currentSpeed = baseTargetSpeed * 0.35
+        state.speed = Double(currentSpeed)
+
+        snail.setScale(snailBaseScale)
+        snail.zRotation = 0
+        snail.alpha = 1
+
+        if config.damageEnabled {
+            state.postalMeter = max(0, state.postalMeter - 16)
+            Sound.shared.play(.hit)
+            if state.postalMeter <= 0 {
+                finish(won: false)
+                return
+            }
+        }
+        invincibleUntil = elapsed + 1.4
     }
 
     private func updateInvincibility() {
@@ -610,16 +691,28 @@ final class GameScene: SKScene {
         renderEntities(baseSegment: baseSegment)
 
         // Player.
-        snail.position = CGPoint(x: size.width * 0.5, y: size.height * 0.17)
-        snail.zRotation = -playerX * 0.22
-        Sprites.setBoost(snail, on: elapsed < boostUntil || currentSpeed > baseTargetSpeed * 1.05)
-        // Blink while the post-hit invulnerability is active.
-        snail.alpha = elapsed < invincibleUntil ? 0.45 + 0.55 * abs(sin(elapsed * 22)) : 1
-        let bob = sin(elapsed * 14) * 2
-        snail.position.y += bob
+        if fallTimer >= 0 {
+            // Tumbling down the pit: sink below the road, spin and shrink.
+            let p = min(1, fallTimer / fallDuration)
+            let ease = p * p
+            snail.position = CGPoint(x: size.width * 0.5,
+                                     y: size.height * 0.17 - 95 * ease)
+            snail.zRotation = p * 5.6
+            snail.setScale(snailBaseScale * (1 - 0.5 * ease))
+            snail.alpha = 1 - 0.3 * p
+        } else {
+            snail.position = CGPoint(x: size.width * 0.5, y: size.height * 0.17)
+            snail.zRotation = -playerX * 0.22
+            snail.setScale(snailBaseScale)
+            Sprites.setBoost(snail, on: elapsed < boostUntil || currentSpeed > baseTargetSpeed * 1.05)
+            // Blink while the post-hit invulnerability is active.
+            snail.alpha = elapsed < invincibleUntil ? 0.45 + 0.55 * abs(sin(elapsed * 22)) : 1
+            snail.position.y += sin(elapsed * 14) * 2
+        }
         if let shadow = childNode(withName: "snailshadow") {
             shadow.position = CGPoint(x: snail.position.x, y: snail.position.y - 34)
             shadow.zRotation = snail.zRotation
+            shadow.alpha = fallTimer >= 0 ? max(0, 1 - fallTimer / fallDuration) : 1
         }
     }
 
@@ -696,15 +789,17 @@ final class GameScene: SKScene {
                 let ex = p.screenX + spec.offset * p.screenW
                 let ey = fy(p.screenY)
                 node.position = CGPoint(x: ex, y: ey)
-                let spriteWidth = p.screenW * (spec.kind == .postOffice ? 1.1 : 0.42)
+                let widthFactor: CGFloat
+                switch spec.kind {
+                case .postOffice: widthFactor = 1.1
+                case .hole:       widthFactor = holeHalfWidth * 2
+                default:          widthFactor = 0.42
+                }
+                let spriteWidth = p.screenW * widthFactor
                 let scale = spriteWidth / Sprites.entityBaseWidth(spec.kind)
                 node.setScale(max(0.02, scale))
                 node.isHidden = false
                 node.zPosition = -CGFloat(n) + 0.5
-                if spec.kind == .hole {
-                    node.position = CGPoint(x: p.screenX, y: ey)
-                    node.setScale(max(0.05, p.screenW * 0.9 / 120))
-                }
             }
         }
         // Hide unused pooled entities.
