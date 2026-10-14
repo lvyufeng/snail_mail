@@ -24,6 +24,10 @@ final class GameScene: SKScene {
     private let config: LevelConfig
     /// Debug/screenshot hook: skip the "tap to start" screen and race at once.
     var autoStart = false
+#if DEBUG
+    /// Set by the `-weapon N` screenshot hook so projectiles appear without a held touch.
+    var debugAutoFire = false
+#endif
     private var segments: [RoadSegment] = []
     private var trackLength: CGFloat = 1
     private var fringe: UIColor
@@ -61,8 +65,10 @@ final class GameScene: SKScene {
     private var wallRightPool: [SKShapeNode] = []
     private var entityPool: [EntityKind: [SKNode]] = [:]
     private var entityUse: [EntityKind: Int] = [:]
-    private var bulletPool: [SKNode] = []
-    private var bulletUse = 0
+    /// Bullets are pooled per weapon tier so an upgrade immediately swaps the
+    /// shared pool's look — a tier-1 pellet must never be reused as a rocket.
+    private var bulletPool: [Int: [SKNode]] = [:]
+    private var bulletUse: [Int: Int] = [:]
 
     // MARK: - Init
 
@@ -83,6 +89,18 @@ final class GameScene: SKScene {
     }
 
     required init?(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+#if DEBUG
+    /// Screenshot hooks: `-weapon N` starts at a weapon tier with autofire enabled.
+    private func applyDebugArguments() {
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-weapon"), i + 1 < args.count,
+              let level = Int(args[i + 1]) else { return }
+        state.weaponLevel = max(1, min(level, state.maxWeaponLevel))
+        state.suitStep = min(level - 1, Suit.allCases.count - 1)
+        debugAutoFire = true
+    }
+#endif
 
     private func backgroundHex(for name: String) -> String {
         switch name {
@@ -106,6 +124,9 @@ final class GameScene: SKScene {
         preparePools()
         buildSnail()
         resetTrack()
+        #if DEBUG
+        applyDebugArguments()
+        #endif
         if autoStart { startRace() }
     }
 
@@ -311,7 +332,7 @@ final class GameScene: SKScene {
             return
         }
 
-        if touching {
+        if touching || debugAutoFire {
             fireCooldown -= fdt
             if fireCooldown <= 0 {
                 fireCooldown = state.weaponLevel >= 3 ? 0.16 : 0.26
@@ -358,6 +379,7 @@ final class GameScene: SKScene {
         bullet.position = start
         bullet.isHidden = false
         bullet.setScale(1)
+        bullet.zRotation = .pi / 2   // nose points up the road
         bullet.removeAllActions()
         bullet.run(.sequence([
             .move(to: CGPoint(x: size.width * 0.5 + playerX * 60, y: size.height * 0.55), duration: 0.16),
@@ -372,10 +394,13 @@ final class GameScene: SKScene {
     private func hitScan() {
         let playerSegIndex = segmentIndex(at: positionZ + playerZ)
         let range = 2...48
+        // Rockets have a wider warhead, so they reach a little further across the
+        // road than the early pellets.
+        let reach: CGFloat = state.weaponLevel >= 3 ? 0.30 : 0.22
         for d in range {
             let seg = segments[(playerSegIndex + d) % segments.count]
             for spec in seg.sprites where spec.kind.isShootable {
-                if abs(spec.offset - playerX) < 0.22 {
+                if abs(spec.offset - playerX) < reach {
                     destroy(spec, in: seg)
                     return
                 }
@@ -418,6 +443,25 @@ final class GameScene: SKScene {
                 case .ringSlow:
                     currentSpeed *= 0.6
                     toRemove.append((seg, spec))
+                case .suitSpade, .suitClub, .suitHeart, .suitDiamond:
+                    guard let suit = spec.kind.suit else { break }
+                    if suit.rawValue == state.suitStep {
+                        // Correct next rung: climb the ladder.
+                        state.suitStep += 1
+                        state.score += 30
+                        state.postalMeter = min(state.maxMeter, state.postalMeter + 6)
+                        Sound.shared.play(.upgrade)
+                        if state.suitStep >= Suit.allCases.count {
+                            // Full ♠♣♥♦ climb pays out the top weapon tier.
+                            state.weaponLevel = state.maxWeaponLevel
+                            state.score += 150
+                        }
+                        toRemove.append((seg, spec))
+                    } else if suit.rawValue > state.suitStep {
+                        // Skipped a rung: the gate zaps you and stays put.
+                        damage(6, seg: seg)
+                    }
+                    // A suit already climbed is inert scenery.
                 case .salt:
                     damage(10, seg: seg)
                     toRemove.append((seg, spec))
@@ -464,19 +508,24 @@ final class GameScene: SKScene {
     // MARK: - Bullets
 
     private func obtainBullet() -> SKNode {
-        if bulletUse < bulletPool.count {
-            let n = bulletPool[bulletUse]; bulletUse += 1; return n
+        let level = state.weaponLevel
+        var arr = bulletPool[level] ?? []
+        let index = bulletUse[level] ?? 0
+        if index < arr.count {
+            bulletUse[level] = index + 1
+            return arr[index]
         }
-        let n = Sprites.makeBullet(level: state.weaponLevel)
-        n.zPosition = 25
-        fxLayer.addChild(n)
-        bulletPool.append(n)
-        bulletUse += 1
-        return n
+        let node = Sprites.makeBullet(level: level)
+        node.zPosition = 25
+        fxLayer.addChild(node)
+        arr.append(node)
+        bulletPool[level] = arr
+        bulletUse[level] = index + 1
+        return node
     }
 
     private func updateBullets(fdt: CGFloat) {
-        bulletUse = 0
+        bulletUse.removeAll()
     }
 
     private func spawnBurst(atSegment index: Int) {

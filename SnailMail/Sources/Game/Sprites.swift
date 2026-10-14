@@ -21,6 +21,83 @@ enum Sprites {
     static let good     = UIColor(hex: "#6BE36B")
     static let danger   = UIColor(hex: "#FF5A6E")
 
+    // MARK: - Card suits
+
+    /// One neon tint per suit, drawn from the shared palette so the ladder reads
+    /// as part of the same world as the pickups and the fringe.
+    static func suitColor(_ suit: Suit) -> UIColor {
+        switch suit {
+        case .spade: cyan
+        case .club: good
+        case .heart: magenta
+        case .diamond: gold
+        }
+    }
+
+    /// A heart outline centred on the origin, sized to `s` across.
+    private static func heartPath(_ s: CGFloat) -> CGPath {
+        let base = CGMutablePath()
+        base.move(to: CGPoint(x: 0, y: -22))
+        base.addCurve(to: CGPoint(x: -24, y: 10),
+                      control1: CGPoint(x: -14, y: -12), control2: CGPoint(x: -24, y: -2))
+        base.addArc(center: CGPoint(x: -12, y: 10), radius: 12, startAngle: .pi, endAngle: 0, clockwise: false)
+        base.addArc(center: CGPoint(x: 12, y: 10), radius: 12, startAngle: .pi, endAngle: 0, clockwise: false)
+        base.addCurve(to: CGPoint(x: 0, y: -22),
+                      control1: CGPoint(x: 24, y: -2), control2: CGPoint(x: 14, y: -12))
+        base.closeSubpath()
+        let out = CGMutablePath()
+        let f = s / 48
+        out.addPath(base, transform: CGAffineTransform(scaleX: f, y: f))
+        return out
+    }
+
+    /// The pip for a suit, centred on the origin inside a `s`-wide box.
+    static func suitPipPath(_ suit: Suit, size s: CGFloat) -> CGPath {
+        switch suit {
+        case .heart:
+            return heartPath(s)
+
+        case .spade:
+            let p = CGMutablePath()
+            p.addPath(heartPath(s * 0.92),
+                      transform: CGAffineTransform(scaleX: 1, y: -1).translatedBy(x: 0, y: s * 0.10))
+            p.move(to: CGPoint(x: 0, y: s * 0.14))
+            p.addLine(to: CGPoint(x: s * 0.18, y: -s * 0.28))
+            p.addLine(to: CGPoint(x: s * 0.06, y: -s * 0.28))
+            p.addLine(to: CGPoint(x: s * 0.06, y: -s * 0.46))
+            p.addLine(to: CGPoint(x: -s * 0.06, y: -s * 0.46))
+            p.addLine(to: CGPoint(x: -s * 0.06, y: -s * 0.28))
+            p.addLine(to: CGPoint(x: -s * 0.18, y: -s * 0.28))
+            p.closeSubpath()
+            return p
+
+        case .diamond:
+            let p = CGMutablePath()
+            p.move(to: CGPoint(x: 0, y: s * 0.50))
+            p.addLine(to: CGPoint(x: s * 0.36, y: 0))
+            p.addLine(to: CGPoint(x: 0, y: -s * 0.50))
+            p.addLine(to: CGPoint(x: -s * 0.36, y: 0))
+            p.closeSubpath()
+            return p
+
+        case .club:
+            let p = CGMutablePath()
+            let r = s * 0.21
+            func dot(_ cx: CGFloat, _ cy: CGFloat) {
+                p.addEllipse(in: CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2))
+            }
+            dot(0, s * 0.25)
+            dot(-s * 0.22, -s * 0.06)
+            dot(s * 0.22, -s * 0.06)
+            p.move(to: CGPoint(x: -s * 0.045, y: -s * 0.14))
+            p.addLine(to: CGPoint(x: -s * 0.13, y: -s * 0.46))
+            p.addLine(to: CGPoint(x: s * 0.13, y: -s * 0.46))
+            p.addLine(to: CGPoint(x: s * 0.045, y: -s * 0.14))
+            p.closeSubpath()
+            return p
+        }
+    }
+
     // MARK: - Helpers
 
     private static func shape(_ path: CGPath, fill: UIColor, stroke: UIColor = ink,
@@ -176,8 +253,56 @@ enum Sprites {
         case .ringUpgrade: return makeRing(color: good)
         case .ringSlow:    return makeRing(color: UIColor(hex: "#7A5CFF"))
         case .ringExplode: return makeRing(color: gold)
+        case .suitSpade:   return makeSuitGate(.spade)
+        case .suitClub:    return makeSuitGate(.club)
+        case .suitHeart:   return makeSuitGate(.heart)
+        case .suitDiamond: return makeSuitGate(.diamond)
         case .hole:        return makeHole()
         }
+    }
+
+    /// A card-suit gate: a standing playing card carrying the suit pip, ringed by
+    /// a coloured halo so it reads from far down the road. These are the rungs of
+    /// the ♠♣♥♦ ladder — the player climbs them in order.
+    private static func makeSuitGate(_ suit: Suit) -> SKNode {
+        let root = SKNode()
+        let tint = suitColor(suit)
+
+        // Contact shadow so the card sits on the road.
+        let shadow = SKShapeNode(ellipseOf: CGSize(width: 104, height: 26))
+        shadow.fillColor = UIColor.black.withAlphaComponent(0.30)
+        shadow.strokeColor = .clear
+        shadow.position = CGPoint(x: 0, y: -66)
+        shadow.zPosition = -3
+        root.addChild(shadow)
+
+        // Halo, pulsed on its own node so it never fights the depth scale the
+        // renderer applies to the gate root.
+        let halo = SKShapeNode(circleOfRadius: 78)
+        halo.fillColor = tint.withAlphaComponent(0.16)
+        halo.strokeColor = tint.withAlphaComponent(0.5)
+        halo.lineWidth = 4
+        halo.zPosition = -2
+        root.addChild(halo)
+        halo.run(.repeatForever(.sequence([
+            .group([.scale(to: 1.12, duration: 0.5), .fadeAlpha(to: 0.55, duration: 0.5)]),
+            .group([.scale(to: 0.92, duration: 0.5), .fadeAlpha(to: 1.0, duration: 0.5)]),
+        ])))
+
+        // The card.
+        root.addChild(roundRect(96, 132, .zero, radius: 12,
+                                fill: UIColor(hex: "#FBF3E2"), stroke: ink, line: 5))
+        root.addChild(roundRect(74, 110, .zero, radius: 8,
+                                fill: tint.withAlphaComponent(0.16), stroke: tint, line: 3))
+
+        // Centre pip and two corner pips, like a real card.
+        root.addChild(shape(suitPipPath(suit, size: 54), fill: tint, stroke: ink, line: 3))
+        for (cx, cy) in [(-29.0, 47.0), (29.0, -47.0)] as [(CGFloat, CGFloat)] {
+            let corner = shape(suitPipPath(suit, size: 17), fill: tint, stroke: .clear, line: 0)
+            corner.position = CGPoint(x: cx, y: cy)
+            root.addChild(corner)
+        }
+        return root
     }
 
     private static func makeParcel() -> SKNode {
@@ -301,17 +426,55 @@ enum Sprites {
 
     // MARK: - Projectiles
 
+    /// The weapon ladder: a small pellet, a fat slug, then the two rocket tiers
+    /// the original tops out at. The rocket gets a nose cone, tail fins and an
+    /// exhaust plume so it is unmistakable at a glance.
     static func makeBullet(level: Int) -> SKNode {
         if level >= 3 {
             let root = SKNode()
-            root.addChild(roundRect(30, 14, .zero, radius: 6, fill: gold, line: 2))
+
+            // Exhaust plume trailing the tail.
+            let plume = CGMutablePath()
+            plume.move(to: CGPoint(x: -14, y: 6))
+            plume.addQuadCurve(to: CGPoint(x: -14, y: -6), control: CGPoint(x: -34, y: 0))
+            plume.closeSubpath()
+            root.addChild(shape(plume, fill: UIColor(hex: "#FF7A2D"), stroke: .clear, line: 0))
+            let core = CGMutablePath()
+            core.move(to: CGPoint(x: -14, y: 3))
+            core.addQuadCurve(to: CGPoint(x: -14, y: -3), control: CGPoint(x: -24, y: 0))
+            core.closeSubpath()
+            root.addChild(shape(core, fill: UIColor(hex: "#FFD24C"), stroke: .clear, line: 0))
+
+            // Tail fins.
+            let fin = CGMutablePath()
+            fin.move(to: CGPoint(x: -14, y: 5))
+            fin.addLine(to: CGPoint(x: -22, y: 12))
+            fin.addLine(to: CGPoint(x: -8, y: 6))
+            fin.closeSubpath()
+            root.addChild(shape(fin, fill: magenta, line: 2))
+            let fin2 = CGMutablePath()
+            fin2.move(to: CGPoint(x: -14, y: -5))
+            fin2.addLine(to: CGPoint(x: -22, y: -12))
+            fin2.addLine(to: CGPoint(x: -8, y: -6))
+            fin2.closeSubpath()
+            root.addChild(shape(fin2, fill: magenta, line: 2))
+
+            // Body + nose cone.
+            root.addChild(roundRect(30, 16, CGPoint(x: -1, y: 0), radius: 7, fill: gold, line: 2))
             let nose = CGMutablePath()
-            nose.addLines(between: [CGPoint(x: 15, y: 7), CGPoint(x: 26, y: 0), CGPoint(x: 15, y: -7)])
+            nose.addLines(between: [CGPoint(x: 14, y: 8), CGPoint(x: 28, y: 0), CGPoint(x: 14, y: -8)])
             nose.closeSubpath()
             root.addChild(shape(nose, fill: UIColor(hex: "#FF7A2D"), line: 2))
+
+            // Window porthole.
+            root.addChild(circle(3.5, CGPoint(x: 4, y: 0), fill: cyan, stroke: ink, line: 1.5))
             return root
         }
-        return roundRect(24, 9, .zero, radius: 4, fill: UIColor(hex: "#FFE24C"),
+        if level >= 2 {
+            return roundRect(28, 12, .zero, radius: 5, fill: UIColor(hex: "#FFD24C"),
+                             stroke: UIColor(hex: "#FF9A3D"), line: 2)
+        }
+        return roundRect(22, 8, .zero, radius: 4, fill: UIColor(hex: "#FFE24C"),
                          stroke: UIColor(hex: "#FF9A3D"), line: 2)
     }
 
@@ -359,6 +522,7 @@ enum Sprites {
         case .slug: 70
         case .turret: 80
         case .ringUpgrade, .ringSlow, .ringExplode: 88
+        case .suitSpade, .suitClub, .suitHeart, .suitDiamond: 132
         case .asteroid: 80
         default: 48
         }

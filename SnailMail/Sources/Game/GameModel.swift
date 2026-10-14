@@ -55,6 +55,20 @@ enum GamePhase: Equatable {
 
 // MARK: - Entities
 
+/// The four suits, in the order the weapon ladder climbs them.
+enum Suit: Int, CaseIterable {
+    case spade, club, heart, diamond
+
+    var symbol: String {
+        switch self {
+        case .spade: "♠"
+        case .club: "♣"
+        case .heart: "♥"
+        case .diamond: "♦"
+        }
+    }
+}
+
 /// Everything that can sit on the highway, mirroring the symbols in the
 /// original segment grid files (`s` salt, `M` meteor, `&` slug, `0` turret,
 /// `#` hole, plus parcels, hearts and the ring pickups).
@@ -67,6 +81,10 @@ enum EntityKind: CaseIterable {
     case ringUpgrade   // raises the weapon tier toward rockets
     case ringSlow      // a dark ring that slows you (avoid)
     case ringExplode   // yellow ring that detonates nearby enemies
+    case suitSpade     // card-suit ladder gates, climbed ♠ ♣ ♥ ♦ in order
+    case suitClub
+    case suitHeart
+    case suitDiamond
     case turret        // immobile, cannot be destroyed, steer around
     case hole          // gap in the road; falling costs health
     case postOffice    // the finish line
@@ -82,6 +100,17 @@ enum EntityKind: CaseIterable {
         switch self {
         case .salt, .slug, .turret, .hole, .ringSlow: true
         default: false
+        }
+    }
+
+    /// The suit a gate carries, or nil for every other kind.
+    var suit: Suit? {
+        switch self {
+        case .suitSpade: .spade
+        case .suitClub: .club
+        case .suitHeart: .heart
+        case .suitDiamond: .diamond
+        default: nil
         }
     }
 }
@@ -240,6 +269,8 @@ struct RaceState: Equatable {
     var quota: Int = 0
     var weaponLevel: Int = 1
     var maxWeaponLevel: Int = 4
+    /// How far the player has climbed the ♠♣♥♦ ladder (0...4).
+    var suitStep: Int = 0
     var invincible: Bool = false
     var score: Int = 0
     var elapsed: Double = 0
@@ -363,14 +394,41 @@ enum TrackBuilder {
             return chosen
         }
 
-        place(.parcel, count: max(1, config.parcels), minGap: 6)
+        // The ♠ ♣ ♥ ♦ ladder. Split the drivable middle of the course into four
+        // ascending zones and drop a few gates of a single suit in each,
+        // alternating sides so the run of cards reads as a climb. Their segments
+        // are reserved so hazards never spawn on top of a gate.
+        var suitSegments = Set<Int>()
+        let ladder: [EntityKind] = [.suitSpade, .suitClub, .suitHeart, .suitDiamond]
+        let lo = 20
+        let hi = segments.count - 30
+        let span = hi - lo
+        if span > 200 {
+            for (zone, kind) in ladder.enumerated() {
+                let zoneLo = lo + span * zone / 4
+                let zoneHi = lo + span * (zone + 1) / 4
+                let side: CGFloat = zone % 2 == 0 ? -0.55 : 0.55
+                let gates = 3
+                for g in 0..<gates {
+                    let t = (CGFloat(g) + 0.5) / CGFloat(gates)
+                    var index = zoneLo + Int(CGFloat(zoneHi - zoneLo) * t)
+                    while suitSegments.contains(index) && index < hi - 2 { index += 2 }
+                    guard index < hi - 2 else { continue }
+                    segments[index].sprites.append(
+                        EntitySpec(kind: kind, offset: side, depth: 0.5))
+                    suitSegments.insert(index)
+                }
+            }
+        }
+
+        place(.parcel, count: max(1, config.parcels), minGap: 6, avoiding: suitSegments)
 
         let hazardCount = usable.count / 6
         // Rings are wide and span the whole road, so reserve their segments
         // first. Hazards are then kept off those segments so a meteor or slug
         // never spawns inside a boost ring.
-        var ringSegments = Set<Int>()
-        ringSegments.formUnion(place(.ringUpgrade, count: max(1, usable.count / 70), minGap: 30))
+        var ringSegments = suitSegments
+        ringSegments.formUnion(place(.ringUpgrade, count: max(1, usable.count / 70), minGap: 30, avoiding: ringSegments))
         ringSegments.formUnion(place(.ringExplode, count: max(1, usable.count / 120), minGap: 50, avoiding: ringSegments))
         ringSegments.formUnion(place(.ringSlow, count: max(1, usable.count / 110), minGap: 50, avoiding: ringSegments))
 
@@ -383,7 +441,7 @@ enum TrackBuilder {
             place(.turret, count: usable.count / 130, minGap: 60, avoiding: ringSegments)
             place(.hole, count: usable.count / 150, minGap: 60, avoiding: ringSegments)
         }
-        place(.heart, count: max(1, usable.count / 90), minGap: 40)
+        place(.heart, count: max(1, usable.count / 90), minGap: 40, avoiding: ringSegments)
     }
 
     // MARK: easing
