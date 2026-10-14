@@ -139,6 +139,11 @@ final class RoadSegment {
     var banding: Int = 0
     var looped = false
     var clip: CGFloat = 0
+    /// Screen-plane roll of the snail while it is on this slice, in radians,
+    /// at the near (`roll`) and far (`rollEnd`) end. Non-zero on the families
+    /// that fly the snail through a loop or a corkscrew.
+    var roll: CGFloat = 0
+    var rollEnd: CGFloat = 0
 
     init(index: Int) { self.index = index }
 }
@@ -399,6 +404,42 @@ enum TrackBuilder {
         "Valley4C": (1, 0.8), "Hill4C": (1, 0.8), "Cage2": (2, 1.2),
     ]
 
+    /// The `Path=` families whose grids are almost empty because the whole
+    /// manoeuvre lives in the name: a loop, a corkscrew, a worm, an inversion.
+    /// Each is a vertical profile of `cycles` arches over the segment whose
+    /// height is `amp` segment lengths, raised to `sharp` so a value below one
+    /// keeps a rounded crown above steep sides — a loop reads as a near-vertical
+    /// climb and drop rather than a lazy hill. The snail rolls through the
+    /// families listed in `rollFamilies` (a full turn for a loop or a screw,
+    /// a half turn for an inversion) so the manoeuvre is legible on screen.
+    private static let vertical: [String: (amp: CGFloat, cycles: CGFloat, sharp: CGFloat)] = [
+        "LoopTheLoop": (3.4, 1, 0.55), "LoopTheLoop2": (3.4, 1, 0.55),
+        "LoopTheLoopT2": (3.0, 1, 0.6), "LoopTheLoopT3": (3.0, 1, 0.6),
+        "LoopTheLoopT4": (2.6, 1, 0.65), "LoopTheLoopW": (3.2, 1, 0.55),
+        "LooptheLoop4": (3.8, 1, 0.5), "LoopBow": (2.6, 1, 0.7),
+        "LoopOut": (2.8, 1, 0.6), "LoopOut3": (2.8, 1, 0.6),
+        "SCREW": (1.7, 1, 0.9), "Worm": (1.0, 3, 1),
+        "Invert": (2.6, 1, 0.7),
+        "Toad0": (1.9, 1, 0.8), "Toad1": (1.9, 1, 0.8),
+        "ToadPair0": (2.2, 1, 0.8), "ToadPair1": (2.2, 1, 0.8),
+    ]
+
+    /// How far the snail rolls in the screen plane over one of the flight
+    /// families: a full turn for a loop or a screw, a half turn at the crown
+    /// of an inversion. Returns the angle at `along` (0...1 through the piece).
+    private static func roll(_ family: String, _ along: CGFloat) -> CGFloat {
+        switch family {
+        case "LoopTheLoop", "LoopTheLoop2", "LoopTheLoopT2", "LoopTheLoopT3",
+             "LoopTheLoopT4", "LoopTheLoopW", "LooptheLoop4", "LoopBow",
+             "LoopOut", "LoopOut3", "SCREW":
+            return 2 * .pi * along
+        case "Invert":
+            return .pi * sin(.pi * along)
+        default:
+            return 0
+        }
+    }
+
     /// Rebuild a campaign course from the retail segment grids.
     ///
     /// A level file lists a pool of segments; with `Random:no` the original
@@ -416,6 +457,7 @@ enum TrackBuilder {
             var cells: [Character]
             var family: String
             var along: CGFloat
+            var step: CGFloat
             var flip: CGFloat
         }
         var slices: [Slice] = []
@@ -443,7 +485,8 @@ enum TrackBuilder {
             let span = CGFloat(max(1, rows.count - 1))
             for (n, row) in rows.enumerated() {
                 slices.append(Slice(cells: row, family: family,
-                                    along: CGFloat(n) / span, flip: flip))
+                                    along: CGFloat(n) / span, step: 1 / span,
+                                    flip: flip))
             }
         }
 
@@ -613,12 +656,26 @@ enum TrackBuilder {
 
             // Elevation: the segment's family lifts or drops the road, and a
             // stretch of rough road rides a little higher than the smooth road
-            // either side of it.
-            let amp = lift[slices[i].family] ?? 0
-            var y = amp * sin(slices[i].along * .pi) * segmentLength
+            // either side of it. The flight families take their height from
+            // `vertical` instead, so a loop or a worm actually leaves the ground.
+            let family = slices[i].family
+            var y: CGFloat = 0
+            if let v = vertical[family] {
+                let phase = .pi * v.cycles * slices[i].along
+                y = v.amp * pow(abs(sin(phase)), v.sharp) * segmentLength
+            } else {
+                y = (lift[family] ?? 0) * sin(slices[i].along * .pi) * segmentLength
+            }
             if road.count >= 6, road.filter({ row[$0] == "_" }).count >= road.count * 7 / 10 {
                 y += 0.25 * segmentLength
             }
+
+            // Roll the snail through the loop, screw and inversion pieces. Each
+            // slice records the angle at its near and far end so the renderer can
+            // interpolate it with the same fraction it uses for the road height.
+            let nextAlong = min(1, slices[i].along + slices[i].step)
+            seg.roll = TrackBuilder.roll(family, slices[i].along)
+            seg.rollEnd = TrackBuilder.roll(family, nextAlong)
 
             seg.p1.world = Vec3(x: 0, y: worldY, z: CGFloat(i) * segmentLength)
             worldY = y

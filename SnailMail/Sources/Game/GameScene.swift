@@ -875,6 +875,7 @@ final class GameScene: SKScene {
         let playerSeg = segments[segmentIndex(at: positionZ + playerZ)]
         let playerPercent = percentRemaining(positionZ + playerZ, segmentLength)
         let playerY = interpolate(playerSeg.p1.world.y, playerSeg.p2.world.y, playerPercent)
+        let playerRoll = interpolate(playerSeg.roll, playerSeg.rollEnd, playerPercent)
 
         var maxy = size.height
         var x: CGFloat = 0
@@ -919,7 +920,9 @@ final class GameScene: SKScene {
             snail.alpha = 1 - 0.3 * p
         } else {
             snail.position = CGPoint(x: size.width * 0.5, y: size.height * 0.17)
-            snail.zRotation = -playerX * 0.22
+            // Steer with the road, then add the roll of a loop or a screw so
+            // the snail actually turns over as it flies the piece.
+            snail.zRotation = -playerX * 0.22 + playerRoll
             snail.setScale(snailBaseScale)
             Sprites.setBoost(snail, on: elapsed < boostUntil || elapsed < jetpackUntil
                              || currentSpeed > baseTargetSpeed * 1.05)
