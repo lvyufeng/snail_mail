@@ -130,19 +130,24 @@ def parse_level(txt):
 
 
 def parse_segment(txt):
-    """Return (grid, path) for one segment: its rows plus its `Path=` family.
+    """Return (grid, path, jetpack_off) for one segment.
 
+    `grid` is the rows, `path` its `Path=` family, and `jetpack_off` whether
+    any row is tagged `JetPack=Off` — the piece that switches off a jetpack the
+    player picked up earlier (see `Jetpack.txt` and `JetpackOff.txt`).
     A row tagged `Ring=<effect>` is folded so each of its orientation glyphs
     becomes the token naming that ring's effect (see `RING`). `Parcel=` rows
     carry a single parcel's 3D position as metadata on an otherwise blank row;
     the parcels the player actually grabs are the `$` cells in the grid, so
     the metadata row is left blank rather than expanded into a band of parcels.
     """
-    rows, path = [], ""
+    rows, path, jetpack_off = [], "", False
     for line in txt.splitlines():
         m = re.match(r"^@(.{8})@(.*)$", line)
         if m:
             row, attr = m.group(1), m.group(2)
+            if re.search(r"JetPack\s*=\s*Off", attr, re.I):
+                jetpack_off = True
             ring = re.search(r"Ring=(\w+)", attr)
             if ring:
                 token = RING.get(ring.group(1).lower(), "-")
@@ -151,7 +156,7 @@ def parse_segment(txt):
         p = re.search(r"Path=(\S+)", line)
         if p:
             path = p.group(1)
-    return "".join(rows), path
+    return "".join(rows), path, jetpack_off
 
 
 def swift_string(s):
@@ -183,24 +188,29 @@ def main():
         need.update([first.lower(), last.lower()])
         need.update(n.lower() for n, _ in segs)
 
-    grids, paths = {}, {}
+    grids, paths, jetpacks_off = {}, {}, set()
     for key in sorted(need):
         if key not in segments:
             continue
-        grid, path = parse_segment(segments[key])
+        grid, path, jetpack_off = parse_segment(segments[key])
         grids[key] = grid
         if path:
             paths[key] = path
+        if jetpack_off:
+            jetpacks_off.add(key)
 
     def encode(route):
         first, segs, last = route
-        out = [first.lower().replace(".txt", "")]
+        # Keep the file name intact — the grid and path tables are keyed the
+        # same way, so the reader can look a piece up without guessing a
+        # suffix back on to the end of the name.
+        out = [first.lower()]
         for name, attrs in segs:
-            entry = name.lower().replace(".txt", "")
+            entry = name.lower()
             if "Angle" in attrs:
                 entry += "@" + attrs["Angle"]
             out.append(entry)
-        out.append(last.lower().replace(".txt", ""))
+        out.append(last.lower())
         return out
 
     encoded = {k: encode(v) for k, v in routes.items()}
@@ -234,9 +244,17 @@ def main():
               "    static let path: [String: String] = ["]
     lines += [f"        {swift_string(k)}: {swift_string(paths[k])}," for k in sorted(paths)]
     lines += ["    ]", "",
+              "    /// Segments that switch the jetpack back off.  A level hands one",
+              "    /// out on a `Jetpack` piece and takes it back with a `JetPackOff`",
+              "    /// piece a few segments later, so the flight lasts exactly as far",
+              "    /// as the gaps it has to clear instead of a fixed spell.",
+              "    static let jetpackOff: Set<String> = ["]
+    lines += [f"        {swift_string(k)}," for k in sorted(jetpacks_off)]
+    lines += ["    ]", "",
               "    /// Ordered segment list for each level.  Level keys are `arcade0`-",
-              "    /// `arcade50`, plus `tutorial` and `challenge`.  Entries may carry an",
-              "    /// `@<angle>` suffix holding the level's `Angle=` override (degrees).",
+              "    /// `arcade50`, plus `tutorial` and `challenge`.  Each entry names a",
+              "    /// grid the same way `grid` is keyed, and may carry an `@<angle>`",
+              "    /// suffix holding the level's `Angle=` override (degrees).",
               "    static let route: [String: [String]] = ["]
     for k in sorted(encoded, key=lambda s: (s.rstrip("0123456789"),
                                             int(s[len(s.rstrip("0123456789")):] or 0))):

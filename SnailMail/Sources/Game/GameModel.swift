@@ -145,6 +145,18 @@ final class RoadSegment {
     /// that fly the snail through a loop or a corkscrew.
     var roll: CGFloat = 0
     var rollEnd: CGFloat = 0
+    /// True where the grid leaves the road out altogether. The jump pieces
+    /// spell the void they fly over as a run of blank rows, so nothing is
+    /// drawn for these slices and the snail arcs across them.
+    var airborne = false
+    /// The slice index the airborne run starts at, and how many slices long
+    /// the whole run is. Both are only meaningful on an `airborne` slice, and
+    /// they let the renderer measure how far across the void the snail is.
+    var gapStart = 0
+    var gapRun = 0
+    /// True on the piece that switches a jetpack back off (`JetPackOff.txt`),
+    /// which the levels drop in after the gaps the jetpack is meant to clear.
+    var jetpackOff = false
 
     init(index: Int) { self.index = index }
 }
@@ -476,6 +488,8 @@ enum TrackBuilder {
             var flip: CGFloat
             /// The level's `Angle=` override for this piece, in degrees.
             var angle: CGFloat?
+            /// Whether this piece is a `JetPackOff` switch.
+            var jetpackOff: Bool
         }
         var slices: [Slice] = []
         slices.reserveCapacity(max(64, config.rows + 32))
@@ -487,6 +501,7 @@ enum TrackBuilder {
             let angle = parts.count > 1 ? CGFloat(Double(parts[1]) ?? 0) : nil
             guard let raw = TrackData.grid[name] else { return }
             let family = TrackData.path[name] ?? ""
+            let jetpackOff = TrackData.jetpackOff.contains(name)
             // A pool that repeats the same bend should bank the other way the
             // second time round, the way the original's signed angles do.
             let seen = familyCount[family, default: 0]
@@ -507,7 +522,8 @@ enum TrackBuilder {
             for (n, row) in rows.enumerated() {
                 slices.append(Slice(cells: row, family: family,
                                     along: CGFloat(n) / span, step: 1 / span,
-                                    flip: flip, angle: angle))
+                                    flip: flip, angle: angle,
+                                    jetpackOff: jetpackOff))
             }
         }
 
@@ -515,20 +531,26 @@ enum TrackBuilder {
         var rng = SystemRandomNumberGenerator()
         appendSegment(route[0])
         if !pool.isEmpty {
+            // Retail's `Length:` scales the speed and the clock, not the slice
+            // count; a level always lays its pool down at least once. Cycling
+            // until the row budget is met used to cut the tail of the pool —
+            // and with it the `JetPackOff` switch that follows `Jetpack`. Run a
+            // whole pass first, then keep going only while the road is short.
+            let minDraws = pool.count
             if TrackData.random.contains(key) {
                 // The challenge gauntlet is `Random:yes` in the retail level
                 // file: its pool is drawn as a shuffled deck, reshuffled every
                 // time it runs out, so no two runs lay out the same way.
                 var deck: [String] = []
                 var drawn = 0
-                while slices.count < budget - 8 && drawn < 2000 {
+                while (drawn < minDraws || slices.count < budget - 8) && drawn < 4000 {
                     if deck.isEmpty { deck = pool.shuffled(using: &rng) }
                     appendSegment(deck.removeFirst())
                     drawn += 1
                 }
             } else {
                 var n = 0
-                while slices.count < budget - 8 && n < 2000 {
+                while (n < minDraws || slices.count < budget - 8) && n < 4000 {
                     appendSegment(pool[n % pool.count])
                     n += 1
                 }
@@ -609,6 +631,21 @@ enum TrackBuilder {
             let lo = road.first ?? 0, hi = road.last ?? 7
             let laneCentre = (CGFloat(lo) + CGFloat(hi)) / 2
             let halfLane = max(0.5, (CGFloat(hi) - CGFloat(lo)) / 2)
+
+            // A blank row means different things in different pieces. Where a
+            // piece names no `Path=`, the road really has stopped: `Easy Gap`
+            // spells its chasm as a run of empty rows, `Stepping Stones` its
+            // floating slabs, `Forest` the leap over the canopy. Where a piece
+            // does name a path, the blank rows are the road itself — a hill
+            // lifts it, a slalom swings it out of the grid's eight columns, a
+            // worm stands it on its tail — and the `P` markers say so. Only
+            // the first kind is a void, and marking it here lets the renderer
+            // leave it out and the snail arc across it.
+            let airborne = slices[i].family.isEmpty
+                && row.allSatisfy { $0 == " " || $0 == "@" || $0 == "M" }
+            seg.airborne = airborne
+            seg.jetpackOff = slices[i].jetpackOff
+
             /// Map a grid column to a position across the road.
             func across(_ col: Int) -> CGFloat {
                 max(-0.92, min(0.92, (CGFloat(col) - laneCentre) / (halfLane + 0.5)))
@@ -718,6 +755,36 @@ enum TrackBuilder {
             segments.append(seg)
         }
 
+        // Label each airborne run with its start and its whole length, so a
+        // slice the snail is already halfway across still measures its arc
+        // from the near lip of the void. A one- or two-row break in the road
+        // would blink a single frame of background past and is not worth
+        // flying, so only a run this long or longer becomes a void; the rest
+        // are left as ordinary road.
+        let minGapRows = 3
+        var runStart = -1
+        func closeRun(_ end: Int) {
+            guard runStart >= 0 else { return }
+            let run = end - runStart
+            for j in runStart..<end {
+                if run >= minGapRows {
+                    segments[j].gapStart = runStart
+                    segments[j].gapRun = run
+                } else {
+                    segments[j].airborne = false
+                }
+            }
+            runStart = -1
+        }
+        for i in 0..<segments.count {
+            if segments[i].airborne {
+                if runStart < 0 { runStart = i }
+            } else {
+                closeRun(i)
+            }
+        }
+        closeRun(segments.count)
+
         // The level files ask for a parcel quota and a weapon ladder, but a
         // route only carries parcel and pickup cells on the segments that name
         // them. Fill in what the grids leave out so the quota is reachable and
@@ -736,6 +803,7 @@ enum TrackBuilder {
             for index in order {
                 guard needed > 0 else { break }
                 guard segments[index].sprites.isEmpty,
+                      !segments[index].airborne,
                       chosen.allSatisfy({ abs($0 - index) >= minGap }) else { continue }
                 segments[index].sprites.append(EntitySpec(kind: kind, offset: 0, depth: 0.5))
                 chosen.append(index)

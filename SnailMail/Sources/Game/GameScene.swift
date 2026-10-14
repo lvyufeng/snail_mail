@@ -72,6 +72,27 @@ final class GameScene: SKScene {
     private var hopPower: CGFloat = 0
     /// Left while the jetpack carries the snail over everything on the road.
     private var jetpackUntil: CGFloat = 0
+    /// World z of the `JetPackOff` piece that ends the current jetpack flight,
+    /// or 0 while it is a plain timed flight. The levels always drop the
+    /// switch-off piece just past the gaps the jetpack is meant to clear, so
+    /// the flight lasts as far as it has to and no further.
+    private var jetpackOffZ: CGFloat = 0
+    /// True while the jetpack is carrying the snail: it has not timed out and
+    /// the snail has not yet reached the switch-off piece.
+    private var jetpackActive: Bool {
+        elapsed < jetpackUntil && (jetpackOffZ <= 0 || positionZ < jetpackOffZ)
+    }
+    /// True while the snail shrugs off hits: the brief post-hit grace, the
+    /// post-ladder ring bonus, or the jetpack carrying it over everything.
+    private var invincible: Bool { jetpackActive || elapsed < invincibleUntil }
+    /// Progress across the airborne void the snail is flying, 0...1, or -1
+    /// while there is road under it. The jump pieces spell their gap as a run
+    /// of blank rows, and the snail takes that as a ramp and arcs over.
+    private var gapFlight: CGFloat = -1
+    private var gapStartZ: CGFloat = 0
+    private var gapLengthZ: CGFloat = 1
+    /// How high, in points, the arc over the current gap reaches.
+    private var gapArc: CGFloat = 0
 
     // MARK: - Nodes
 
@@ -170,6 +191,23 @@ final class GameScene: SKScene {
             let idx = segmentIndex(at: positionZ + playerZ)
             segments[idx].sprites.removeAll { $0.kind == .hole }
             segments[idx].sprites.append(EntitySpec(kind: .hole, offset: 0, depth: 0.5))
+        }
+        if ProcessInfo.processInfo.arguments.contains("-gaptop") {
+            startRace()
+            // Park the snail at the lip of the widest airborne gap so a jump
+            // can be inspected without driving to one.
+            if let widest = segments.max(by: { $0.gapRun < $1.gapRun }), widest.airborne {
+                let mid = CGFloat(widest.gapStart + widest.gapRun / 2) * segmentLength
+                positionZ = max(0, mid - playerZ - 10 * segmentLength)
+            }
+        }
+        if ProcessInfo.processInfo.arguments.contains("-givesjet") {
+            startRace()
+            // Drop a jetpack under the snail so its flight can be watched
+            // without relying on a piece's own pickup lane.
+            let idx = segmentIndex(at: positionZ + playerZ)
+            segments[idx].sprites.removeAll { $0.kind == .jetpack }
+            segments[idx].sprites.append(EntitySpec(kind: .jetpack, offset: 0, depth: 0.5))
         }
         #endif
     }
@@ -320,7 +358,10 @@ final class GameScene: SKScene {
         fallOffset = 0
         hopTimer = -1
         hopPower = 0
+        gapFlight = -1
+        gapArc = 0
         jetpackUntil = 0
+        jetpackOffZ = 0
         fireCooldown = 0
         clearBullets()
         snail.setScale(snailBaseScale)
@@ -415,6 +456,7 @@ final class GameScene: SKScene {
             hopTimer += fdt
             if hopTimer >= hopDuration { hopTimer = -1 }
         }
+        updateGapFlight()
         handleCollisions()
         updateInvincibility()
         renderRoad()
@@ -425,7 +467,7 @@ final class GameScene: SKScene {
 
     private func updateSpeed(fdt: CGFloat) {
         var target = baseTargetSpeed
-        if elapsed < jetpackUntil { target = baseTargetSpeed * 1.5 }
+        if jetpackActive { target = baseTargetSpeed * 1.5 }
         else if elapsed < boostUntil { target = baseTargetSpeed * 1.4 }
         currentSpeed += (target - currentSpeed) * min(1, fdt * 0.7)
     }
@@ -674,7 +716,7 @@ final class GameScene: SKScene {
                     damage(12, seg: seg)
                     toRemove.append((seg, spec))
                 case .enemy:
-                    guard elapsed >= invincibleUntil else {
+                    guard !invincible else {
                         // Invincible: plough straight through the pest.
                         state.sheet.garbage += 200
                         toRemove.append((seg, spec))
@@ -696,7 +738,7 @@ final class GameScene: SKScene {
                     damage(14, seg: seg)
                 case .hole:
                     // A ramp launch or a jetpack carries the snail over a pit.
-                    if hopTimer < 0 && elapsed >= jetpackUntil {
+                    if hopTimer < 0 && !jetpackActive {
                         beginFall(offset: spec.offset)
                     }
                 case .ramp:
@@ -704,8 +746,18 @@ final class GameScene: SKScene {
                 case .trampoline:
                     launch(power: 1.5)
                 case .jetpack:
-                    jetpackUntil = elapsed + 3.5
-                    invincibleUntil = max(invincibleUntil, jetpackUntil)
+                    // The retail level hands the jetpack back with a
+                    // `JetPackOff` piece a few segments later, so the flight
+                    // lasts exactly as far as the gaps ahead instead of a
+                    // fixed spell. A level with no such piece falls back to a
+                    // short timed boost.
+                    if let off = nextJetpackOffZ() {
+                        jetpackOffZ = off
+                        jetpackUntil = elapsed + 30
+                    } else {
+                        jetpackOffZ = 0
+                        jetpackUntil = elapsed + 3.5
+                    }
                     Sound.shared.play(.boost)
                     toRemove.append((seg, spec))
                 case .ringNormal:
@@ -738,7 +790,7 @@ final class GameScene: SKScene {
         // Brief invulnerability after any hit. Fixed obstacles (holes, turrets)
         // stay on the road, so without this the snail would keep taking damage
         // every frame it overlapped one and die in an instant.
-        guard elapsed >= invincibleUntil else { return }
+        guard !invincible else { return }
         invincibleUntil = elapsed + 0.75
         state.postalMeter = max(0, state.postalMeter - amount)
         Sound.shared.play(.hit)
@@ -748,6 +800,32 @@ final class GameScene: SKScene {
     }
 
     // MARK: - Falling into a hole
+
+    /// The jump pieces leave the road out for a run of blank rows. The snail
+    /// takes that void as a ramp and arcs across it, the same screen-space hop
+    /// the ramps and trampolines use but stretched to span the whole gap. It
+    /// keeps steering the whole way, which is the whole point of a gauntlet
+    /// like `Easy Gap`: its meteors are floating in the void to be dodged.
+    private func updateGapFlight() {
+        guard !segments.isEmpty else { return }
+        let z = positionZ + playerZ
+        let seg = segments[segmentIndex(at: z)]
+        guard seg.airborne, seg.gapRun > 0 else {
+            gapFlight = -1
+            return
+        }
+        if gapFlight < 0 {
+            // Boarding the gap: measure the arc from the near lip of the void,
+            // so a frame that lands mid-run still draws a smooth parabola.
+            gapStartZ = CGFloat(seg.gapStart) * segmentLength
+            gapLengthZ = CGFloat(seg.gapRun) * segmentLength
+            gapArc = min(150, 46 + CGFloat(seg.gapRun) * 5)
+            if seg.gapRun >= 6 { Sound.shared.play(.boost) }
+        }
+        var dz = (z - gapStartZ).truncatingRemainder(dividingBy: max(trackLength, 1))
+        if dz < 0 { dz += max(trackLength, 1) }
+        gapFlight = max(0, min(1, dz / max(gapLengthZ, 1)))
+    }
 
     /// Fly off a ramp or trampoline: a short hop that clears pits and hazards,
     /// with a burst of speed for the landing.
@@ -768,6 +846,7 @@ final class GameScene: SKScene {
         guard fallTimer < 0, state.phase == .running else { return }
         fallTimer = 0
         fallOffset = offset
+        gapFlight = -1
         clearBullets()
         Sound.shared.play(.fall)
         spawnBurst(at: playerPoint())
@@ -809,7 +888,7 @@ final class GameScene: SKScene {
     }
 
     private func updateInvincibility() {
-        state.invincible = elapsed < invincibleUntil
+        state.invincible = invincible
     }
 
     // MARK: - Bullets
@@ -924,7 +1003,7 @@ final class GameScene: SKScene {
             // the snail actually turns over as it flies the piece.
             snail.zRotation = -playerX * 0.22 + playerRoll
             snail.setScale(snailBaseScale)
-            Sprites.setBoost(snail, on: elapsed < boostUntil || elapsed < jetpackUntil
+            Sprites.setBoost(snail, on: elapsed < boostUntil || jetpackActive
                              || currentSpeed > baseTargetSpeed * 1.05)
             // Blink while the post-hit invulnerability is active.
             snail.alpha = elapsed < invincibleUntil ? 0.45 + 0.55 * abs(sin(elapsed * 22)) : 1
@@ -935,6 +1014,13 @@ final class GameScene: SKScene {
                 snail.position.y += sin(p * .pi) * 70 * hopPower
                 snail.zRotation += sin(p * .pi) * 0.3 * hopPower
             }
+            // Flying a gap: the arc grows with the void, so a stepping stone
+            // barely lifts the snail while a `Huge Gap` throws it right up.
+            if gapFlight >= 0 {
+                let p = gapFlight
+                snail.position.y += sin(p * .pi) * gapArc
+                snail.zRotation += sin(p * .pi) * 0.3
+            }
         }
         if let shadow = childNode(withName: "snailshadow") {
             shadow.position = CGPoint(x: snail.position.x, y: snail.position.y - 34)
@@ -944,6 +1030,10 @@ final class GameScene: SKScene {
     }
 
     private func drawSegment(_ seg: RoadSegment, n: Int) {
+        // An airborne slice is the void a jump flies over: no tiles, no
+        // fringe walls, just the background scrolling past underneath.
+        guard !seg.airborne else { return }
+
         // The original road is a diamond lattice of sandy-tan and burnt-orange
         // tiles (see objects_world00_track0). Reproduce it as a checkerboard of
         // column cells whose parity alternates with depth as well as across the
@@ -1083,6 +1173,21 @@ final class GameScene: SKScene {
         var idx = Int(floor(z / segmentLength))
         idx = ((idx % segments.count) + segments.count) % segments.count
         return idx
+    }
+
+    /// World z of the next `JetPackOff` piece at or after the snail, wrapped
+    /// round the loop track the way `segmentIndex` wraps a z back to the top.
+    /// Returns nil when the course has none, leaving the timed fallback.
+    private func nextJetpackOffZ() -> CGFloat? {
+        guard !segments.isEmpty else { return nil }
+        let start = segmentIndex(at: positionZ)
+        for offset in 0..<segments.count {
+            let idx = (start + offset) % segments.count
+            guard segments[idx].jetpackOff else { continue }
+            let z = CGFloat(idx) * segmentLength
+            return z <= positionZ ? z + CGFloat(segments.count) * segmentLength : z
+        }
+        return nil
     }
 
     private func percentRemaining(_ z: CGFloat, _ total: CGFloat) -> CGFloat {
