@@ -79,12 +79,6 @@ enum Sprites {
         return node
     }
 
-    /// Resize a retail billboard to a new world width, keeping its own aspect.
-    private static func fit(_ node: SKSpriteNode, width: CGFloat) {
-        guard let tex = node.texture, tex.size().width > 0 else { return }
-        node.size = CGSize(width: width, height: width * tex.size().height / tex.size().width)
-    }
-
     /// The heavy rock billboards the retail build scatters across the highway.
     /// Four meshes ship, so pick one at random per rock to keep a field of them
     /// from looking stamped.
@@ -151,39 +145,96 @@ enum Sprites {
         return root
     }
 
-    /// Turbo himself, drawn from the billboard baked out of the retail build's
-    /// own `snail-turbo` mesh, with the procedural exhaust plume kept because
-    /// it reads better than the model's flat thrust texture.
+    /// Turbo himself: the billboards baked out of the retail build's own
+    /// `snail-turbo` meshes, with the procedural exhaust plume kept because it
+    /// reads better than the model's flat thrust texture.
     private static func makeRetailSnail() -> SKNode? {
-        guard let body = retail("Art/Baked/snail.png", width: snailNativeWidth, lift: 0.5)
-        else { return nil }
+        guard let body = SnailFrames(width: snailFrameWidth) else { return nil }
+        body.name = "snailframes"
         let root = SKNode()
-        body.name = "snailbody"
         root.addChild(body)
         if let flame = makeFlame() {
             flame.name = "flame"
-            flame.position = CGPoint(x: 0, y: body.position.y - 4)
+            // Just below Turbo's own middle, where the trimmed billboard put it.
+            flame.position = CGPoint(x: 0,
+                                     y: body.size.height * snailFrameArtHeight / 2 - 4)
             flame.alpha = 0
             root.addChild(flame)
         }
         return root
     }
 
+    // MARK: - Turbo's animation
+
+    /// One clip out of the retail build's `X/ANIMATION.TXT`: the poses it swaps
+    /// between, how long the whole run takes, and whether it plays once through
+    /// or bounces back and forth forever.
+    struct SnailClip {
+        let frames: [Int]
+        let seconds: CGFloat
+        let pingPong: Bool
+    }
+
+    /// Every clip the retail build animates Turbo with, transcribed from
+    /// `X/ANIMATION.TXT` — the frame numbers in play order, the duration, and
+    /// the `Mode:` line. The comment above each is the script's own.
+    static let snailClips: [String: SnailClip] = [
+        // "Standing still"
+        "base":       SnailClip(frames: [0], seconds: 0.5, pingPong: false),
+        "invincible": SnailClip(frames: [0], seconds: 0.5, pingPong: false),
+        // "Scootin' Along"
+        "move":       SnailClip(frames: [0, 1], seconds: 0.5, pingPong: true),
+        // "Alternative Move with Bobbing Head"
+        "bobalong":   SnailClip(frames: [0, 1, 2, 3, 4], seconds: 0.5, pingPong: true),
+        // "Bumped into Something Painful"
+        "damaged":    SnailClip(frames: [0, 1], seconds: 0.3, pingPong: true),
+        // "Falling to his snaily death": one wind-up, then eleven of the plunge.
+        "fall":       SnailClip(frames: [0] + Array(repeating: 1, count: 11),
+                                seconds: 6, pingPong: false),
+        // "A look backwards used occasionally during big jumps". The script
+        // lists the turn out and back, so this one plays through.
+        "lookbackleft":  SnailClip(frames: [0, 1, 2, 3, 4, 4, 4, 3, 2, 1, 0],
+                                   seconds: 1.0, pingPong: false),
+        "lookbackright": SnailClip(frames: [0, 1, 2, 3, 4, 4, 4, 3, 2, 1, 0],
+                                   seconds: 1.0, pingPong: false),
+        // "Intro Chatty Snail"
+        "talk":       SnailClip(frames: Array(0...12), seconds: 3.0, pingPong: false),
+        // "Skid to Stop": Turbo scrubs the gear change, wobbles on the spot,
+        // then settles.
+        "skidstop":   SnailClip(frames: [0, 1, 2, 3, 4, 5, 8, 10,
+                                         12, 13, 12, 13, 12, 13, 12, 13,
+                                         14, 15, 16, 17, 18],
+                                seconds: 2.0, pingPong: false),
+        // "Slug Hit Into Shell"
+        "intoshell":  SnailClip(frames: Array(0...7), seconds: 1.0, pingPong: false),
+    ]
+
     /// How wide Turbo's own art is, in the same world units the procedural
     /// parts use. Callers that place him in a perspective scene (the race)
     /// divide their target width by this to get the node's scale.
     static let snailNativeWidth: CGFloat = 116
 
-    /// Swap Turbo's billboard for the damaged or invincible one the retail
-    /// build ships, so a hit and a shield both read at a glance.
-    static func setSnailVariant(_ node: SKNode, damaged: Bool, invincible: Bool) {
-        guard let body = node.childNode(withName: "snailbody") as? SKSpriteNode else { return }
-        let name = invincible ? "snail-invincible" : (damaged ? "snail-damage" : "snail")
-        guard let tex = RetailAssets.billboard("Art/Baked/\(name).png") else { return }
-        if body.texture === tex { return }
-        body.texture = tex
-        fit(body, width: snailNativeWidth)
-        body.position = CGPoint(x: 0, y: body.size.height / 2)
+    /// Turbo's share of one animation frame, in the frame's own pixels: the
+    /// `turbo-base` pose's opaque box is 137 of the frame's 384 pixels across
+    /// and 252 tall, its feet 360 rows down.
+    fileprivate static let snailFrameArtWidth: CGFloat = 137.0 / 384.0
+    fileprivate static let snailFrameArtHeight: CGFloat = 252.0 / 384.0
+    fileprivate static let snailFrameFeet: CGFloat = 360.0 / 384.0
+
+    /// The width an animation frame is drawn at. `bake_clips` stores the poses
+    /// whole inside one shared window rather than trimming each one, so the node
+    /// is sized to the window; this width makes the Turbo inside it come out
+    /// exactly as wide as the trimmed `snail.png` billboard drew him (that one
+    /// puts the same pose across 148 of its 152 pixels).
+    static let snailFrameWidth: CGFloat =
+        snailNativeWidth * (148.0 / 152.0) / snailFrameArtWidth
+
+    /// Advance Turbo's animation by `dt` seconds while it plays `clip`. Asking
+    /// for the clip already playing just carries it on, so a caller can name its
+    /// clip every frame; a clip the art does not ship, and the procedural snail,
+    /// which has no frames at all, are both left alone.
+    static func setSnailClip(_ node: SKNode, _ clip: String, dt: CGFloat) {
+        (node.childNode(withName: "snailframes") as? SnailFrames)?.play(clip, dt: dt)
     }
 
     private static func makeFlame() -> SKNode? {
@@ -791,6 +842,73 @@ enum Sprites {
             CGFloat(SignKind(entity: kind)?.modelWidth ?? 48)
         default: 48
         }
+    }
+}
+
+/// Turbo's billboard, animated the way the retail build animates him: by
+/// swapping between posed meshes. `tools/bake_meshes.py` rasterises every pose
+/// into one shared window, so a swap changes his shape without moving him.
+final class SnailFrames: SKSpriteNode {
+
+    /// Frame number -> texture, per clip. A pose the installer never shipped is
+    /// simply absent, and the clip holds the pose before it instead.
+    private let poses: [String: [Int: SKTexture]]
+    private var clip = "base"
+    private var clock: CGFloat = 0
+
+    /// Nil when the retail art is not in the bundle, so the caller falls back to
+    /// the snail it can draw itself.
+    init?(width: CGFloat) {
+        var loaded: [String: [Int: SKTexture]] = [:]
+        for (name, spec) in Sprites.snailClips {
+            var frames: [Int: SKTexture] = [:]
+            for n in spec.frames where frames[n] == nil {
+                let file = String(format: "snail-%@-%03d.png", name, n)
+                if let tex = RetailAssets.texture("Art/Baked/\(file)") { frames[n] = tex }
+            }
+            if !frames.isEmpty { loaded[name] = frames }
+        }
+        guard let first = loaded["base"]?[0] else { return nil }
+        poses = loaded
+        let size = first.size()
+        // `color:` here is the node's tint at `colorBlendFactor` 1, so it has
+        // to be opaque white: a clear tint multiplies every pixel of the
+        // texture away and Turbo renders as nothing at all.
+        super.init(texture: first, color: .white,
+                   size: CGSize(width: width, height: width * size.height / size.width))
+        // Every frame carries the whole shared window, so most of the sprite is
+        // empty canvas. Anchoring it where Turbo's feet are keeps him sitting on
+        // the road the way the trimmed billboard did.
+        position = CGPoint(x: 0, y: self.size.height * (Sprites.snailFrameFeet - 0.5))
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    func play(_ name: String, dt: CGFloat) {
+        guard Sprites.snailClips[name] != nil, poses[name] != nil else { return }
+        if name == clip { clock += dt } else { clip = name; clock = 0 }
+        guard let spec = Sprites.snailClips[name], let tex = frame(of: spec) else { return }
+        if texture !== tex { texture = tex }
+    }
+
+    /// The pose a clip shows at its current clock. `Pingpong` walks the list
+    /// forwards and back again for as long as the clip runs; anything else plays
+    /// through once and then holds its last pose.
+    private func frame(of spec: Sprites.SnailClip) -> SKTexture? {
+        let count = spec.frames.count
+        guard count > 0, let index = frameIndex(spec) else { return nil }
+        return poses[clip]?[spec.frames[min(count - 1, max(0, index))]]
+    }
+
+    private func frameIndex(_ spec: Sprites.SnailClip) -> Int? {
+        let count = CGFloat(spec.frames.count)
+        guard spec.seconds > 0 else { return 0 }
+        if spec.pingPong {
+            let u = (clock / spec.seconds).truncatingRemainder(dividingBy: 1)
+            let step = u < 0.5 ? u * 2 : (1 - u) * 2
+            return Int((step * (count - 1)).rounded())
+        }
+        return Int((clock / spec.seconds) * count)
     }
 }
 

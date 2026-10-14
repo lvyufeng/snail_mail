@@ -68,12 +68,17 @@ def _find_texture(tex, texdir):
 
 def render(path, texdir, size=256, yaw=0.0, pitch=0.0, roll=0.0,
            backface=0.55, light=(0.35, -0.45, -0.82), oversample=3, zoom=1.04,
-           tex_override=None):
+           tex_override=None, frame=None):
     """Rasterise one mesh to an RGBA image, framed to its own bounds.
 
     Orthographic projection, a per-pixel depth buffer for hidden-surface removal
     and barycentric texture interpolation, with one toon light baked in per face
     so the result keeps the flat, cel-shaded look of the source art.
+
+    `frame` is an optional `(cx, cy, span)` window to render inside instead of
+    the mesh's own bounds. Every pose of one clip must share a window or the
+    billboard drifts as the frames swap, so the animation table below passes
+    `SNAIL_FRAME` for all of Turbo's poses.
     """
     import numpy as np
     from PIL import Image
@@ -96,10 +101,14 @@ def render(path, texdir, size=256, yaw=0.0, pitch=0.0, roll=0.0,
         return (x, y, z)
 
     rv = np.array([rot(v) for v in verts], dtype=np.float64)
-    mn = rv[:, :2].min(axis=0)
-    mx = rv[:, :2].max(axis=0)
-    centre = (mn + mx) / 2
-    span = max(mx[0] - mn[0], mx[1] - mn[1]) or 1.0
+    if frame is not None:
+        centre = np.array(frame[:2], dtype=np.float64)
+        span = float(frame[2])
+    else:
+        mn = rv[:, :2].min(axis=0)
+        mx = rv[:, :2].max(axis=0)
+        centre = (mn + mx) / 2
+        span = max(mx[0] - mn[0], mx[1] - mn[1]) or 1.0
     ss = size * oversample
     scale = ss / span * zoom
 
@@ -225,6 +234,39 @@ BAKE = [
 # (the invincible snail is the same geometry with the gold texture).
 OVERRIDE_TEX = {"snail-invincible": "snail-turbo-invincible"}
 
+# Turbo's animation clips, exactly as `X/ANIMATION.TXT` lists them: the model
+# stem, the frame numbers the clip plays, and the texture override for the one
+# clip whose frames wear another texture (the invincible pose).
+SNAIL_CLIPS = [
+    ("snail-base", "turbo-base", [0], None),
+    ("snail-invincible", "turbo-base", [0], "snail-turbo-invincible"),
+    ("snail-move", "turbo-move", [0, 1], None),
+    ("snail-bobalong", "turbo-bobalong", [0, 1, 2, 3, 4], None),
+    ("snail-damaged", "turbo-damaged", [0, 1], None),
+    ("snail-fall", "turbo-fall", [0, 1], None),
+    ("snail-lookbackleft", "turbo-lookbackleft", [0, 1, 2, 3, 4], None),
+    ("snail-lookbackright", "turbo-lookbackright", [0, 1, 2, 3, 4], None),
+    ("snail-talk", "turbo-talk", list(range(13)), None),
+    ("snail-skidstop", "turbo-skidstop",
+     [0, 1, 2, 3, 4, 5, 8, 10, 12, 13, 14, 15, 16, 17], None),
+    ("snail-intoshell", "turbo-intoshell", list(range(8)), None),
+]
+
+# The one window every Turbo pose is rendered inside: `(centre x, centre y,
+# span)` in the projected model space the `pitch` above produces. The poses
+# range over x -0.68...0.74, y -0.66...0.99, so this window holds them all with
+# a little air. Framing each pose to its own bounds instead would rescale and
+# recentre every frame, and the billboard would jitter as the clip played.
+# The poses are rendered at unit zoom (see `bake_clips`), so the 1.76-unit
+# window is exactly 1.76 units of canvas: the widest pose covers 81 % of it and
+# the tallest leaves ~7 % of bare canvas top and bottom.
+SNAIL_FRAME = (0.034, 0.165, 1.76)
+
+# The animation frames are stored whole, not trimmed, so that every pose lines
+# up on the same canvas; 384px over 1.76 units is 218 pixels per model unit,
+# close to the 226 the single trimmed `snail.png` billboard already carried.
+SNAIL_SIZE = 384
+
 
 def bake_all(x_dir, tex_dir, out_dir, size=256, log=print):
     os.makedirs(out_dir, exist_ok=True)
@@ -241,6 +283,39 @@ def bake_all(x_dir, tex_dir, out_dir, size=256, log=print):
             written += 1
         except Exception as exc:                      # noqa: BLE001
             log("bake: %s failed: %s" % (model, exc))
+    written += bake_clips(x_dir, tex_dir, out_dir, log=log)
+    return written
+
+
+def bake_clips(x_dir, tex_dir, out_dir, size=SNAIL_SIZE, log=print):
+    """Rasterise Turbo's animation poses, whole and untrimmed.
+
+    Each pose is drawn inside the one shared `SNAIL_FRAME` window and saved as
+    the full square canvas, so every frame of every clip agrees on where the
+    snail sits. The app swaps these at the clip's own rate; trimming would
+    rescale and recentre each pose and make the animation crawl around the
+    screen.
+    """
+    os.makedirs(out_dir, exist_ok=True)
+    written = 0
+    for stem, model, nums, tc in SNAIL_CLIPS:
+        for n in nums:
+            src = os.path.join(x_dir, "%s-%03d.x" % (model, n))
+            if not os.path.exists(src):
+                log("bake: %s-%03d.x missing, skipping" % (model, n))
+                continue
+            dst = os.path.join(out_dir, "%s-%03d.png" % (stem, n))
+            try:
+                # Unit zoom: the shared window is then a fixed number of model
+                # units across, so the app can size the billboard from the
+                # window alone instead of from whatever the strip happened to
+                # frame to.
+                img = render(src, tex_dir, size=size, yaw=0.0, pitch=-0.34,
+                             zoom=1.0, frame=SNAIL_FRAME, tex_override=tc)
+                img.save(dst)
+                written += 1
+            except Exception as exc:                  # noqa: BLE001
+                log("bake: %s-%03d.x failed: %s" % (model, n, exc))
     return written
 
 

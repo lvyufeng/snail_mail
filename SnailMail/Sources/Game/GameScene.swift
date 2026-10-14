@@ -89,6 +89,15 @@ final class GameScene: SKScene {
     /// turn into a wall of tyre noise.
     private var skidUntil: CGFloat = 0
     private var elapsed: CGFloat = 0
+    /// This frame's slice of time, handed to Turbo's animation. Zero while the
+    /// race is paused so he holds his pose.
+    private var frameDelta: CGFloat = 0
+    /// Until this time Turbo is playing the retail build's `damaged` clip, which
+    /// is what he does after something bumps into him.
+    private var hurtUntil: CGFloat = 0
+    /// True once a slug has landed the killing blow: Turbo retreats into his
+    /// shell and stays there for the results screen.
+    private var slugged = false
     private var lastUpdate: TimeInterval = 0
     /// >= 0 while the snail is dropping into a hole; -1 the rest of the time.
     private var fallTimer: CGFloat = -1
@@ -470,6 +479,8 @@ final class GameScene: SKScene {
         elapsed = 0
         boostUntil = 0
         invincibleUntil = 0
+        hurtUntil = 0
+        slugged = false
         fallTimer = -1
         fallOffset = 0
         hopTimer = -1
@@ -548,6 +559,9 @@ final class GameScene: SKScene {
         let fdt = CGFloat(dt)
 
         scrollStars(fdt: fdt)
+        // Turbo's animation rides the same clock, but a paused race holds its
+        // pose; a finished one keeps playing so a loss can fall into its shell.
+        frameDelta = state.phase == .paused ? 0 : fdt
         guard state.phase == .running else { renderRoad(); return }
 
         elapsed += fdt
@@ -964,13 +978,17 @@ final class GameScene: SKScene {
         // every frame it overlapped one and die in an instant.
         guard !invincible else { return }
         invincibleUntil = elapsed + 0.75
+        hurtUntil = elapsed + 0.3
         state.postalMeter = max(0, state.postalMeter - amount)
         Sound.shared.play(sound)
         if state.postalMeter <= 0 {
             // A fatal hit is the snail's last word, not one complaint stacked
             // on another: skip the hurt grunt and let `finish` say the dying
             // line — `Slugged` when a slug landed the killing blow.
-            if bySlug { Sound.shared.speakSlug(.gloat) }
+            if bySlug {
+                slugged = true
+                Sound.shared.speakSlug(.gloat)
+            }
             finish(won: false, signOff: bySlug ? .slugged : .dying)
             return
         }
@@ -1087,6 +1105,7 @@ final class GameScene: SKScene {
         if config.damageEnabled {
             state.postalMeter = max(0, state.postalMeter - 16)
             Sound.shared.play(.hit)
+            hurtUntil = elapsed + 0.3
             if state.postalMeter <= 0 {
                 finish(won: false)
                 return
@@ -1260,6 +1279,21 @@ final class GameScene: SKScene {
     /// actually place geometry.
     private func fy(_ y: CGFloat) -> CGFloat { size.height - y }
 
+    /// Which of the retail build's Turbo clips he should be playing. The ones
+    /// that mark a moment — the plunge, the shell, a hit, a skid — outrank the
+    /// two that run while he is simply travelling, so a hit is never hidden
+    /// behind the cruising loop.
+    private func snailClip() -> String {
+        if fallTimer >= 0 { return "fall" }
+        if slugged { return "intoshell" }
+        if elapsed < hurtUntil { return "damaged" }
+        if elapsed < skidUntil { return "skidstop" }
+        if hopTimer >= 0 { return "bobalong" }
+        if gapFlight >= 0 { return targetX < 0 ? "lookbackleft" : "lookbackright" }
+        if invincible { return "invincible" }
+        return currentSpeed < baseTargetSpeed * 0.4 ? "base" : "move"
+    }
+
     private func renderRoad() {
         for i in 0..<drawDistance {
             if i < roadPool.count { roadPool[i].isHidden = true }
@@ -1340,11 +1374,7 @@ final class GameScene: SKScene {
                              || currentSpeed > baseTargetSpeed * 1.05)
             // Blink while the post-hit invulnerability is active.
             snail.alpha = elapsed < invincibleUntil ? 0.45 + 0.55 * abs(sin(elapsed * 22)) : 1
-            // The retail build swaps Turbo's own billboard for a damaged or a
-            // shielded one; no-op on the procedural art, which has neither.
-            Sprites.setSnailVariant(snail,
-                                    damaged: config.damageEnabled && state.postalMeter <= 34,
-                                    invincible: invincible)
+            Sprites.setSnailClip(snail, snailClip(), dt: frameDelta)
             snail.position.y += sin(elapsed * 14) * 2
             // Riding a ramp: arc the snail up and over the road.
             if hopTimer >= 0 {
