@@ -1,48 +1,21 @@
 import SwiftUI
 
 struct ContentView: View {
-    /// Debug hook used for automated screenshots: `-autostart tutorial`.
-    /// Only compiled into debug builds so shipping builds always show the menu.
-    private var autoMode: GameMode? {
-        #if DEBUG
-        let args = ProcessInfo.processInfo.arguments
-        guard let i = args.firstIndex(of: "-autostart"), i + 1 < args.count else { return nil }
-        return GameMode(rawValue: args[i + 1])
-        #else
-        return nil
-        #endif
-    }
-
-    /// Debug hook matching `-autostart`: `-level N` selects a campaign star.
-    private var autoLevel: Int {
-        #if DEBUG
-        let args = ProcessInfo.processInfo.arguments
-        guard let i = args.firstIndex(of: "-level"), i + 1 < args.count,
-              let value = Int(args[i + 1]) else { return 0 }
-        return value
-        #else
-        return 0
-        #endif
-    }
+    @StateObject private var router = AppRouter()
 
     var body: some View {
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("-showgalaxy") {
-            NavigationStack { LevelSelectView() }
-        } else if let mode = autoMode {
-            GameView(mode: mode, level: autoLevel)
-        } else {
-            NavigationStack { MenuView() }
+        NavigationStack(path: $router.path) {
+            MenuView()
+                .navigationDestination(for: AppRoute.self) { route in
+                    switch route {
+                    case .galaxy:
+                        LevelSelectView()
+                    case .game(let mode, let level):
+                        GameView(mode: mode, level: level, onMenu: { router.pop() })
+                    }
+                }
         }
-        #else
-        if let mode = autoMode {
-            GameView(mode: mode, level: autoLevel)
-        } else {
-            NavigationStack {
-                MenuView()
-            }
-        }
-        #endif
+        .environmentObject(router)
     }
 }
 

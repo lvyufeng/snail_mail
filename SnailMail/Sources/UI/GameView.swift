@@ -4,12 +4,15 @@ import SpriteKit
 struct GameView: View {
     let mode: GameMode
     let level: Int
+    /// Leaves the race for the screen below it. Supplied by the navigation
+    /// stack so the results screen's MENU works even when the race is the root.
+    let onMenu: () -> Void
     @StateObject private var model: GameViewModel
-    @Environment(\.dismiss) private var dismiss
 
-    init(mode: GameMode, level: Int = 0) {
+    init(mode: GameMode, level: Int = 0, onMenu: @escaping () -> Void) {
         self.mode = mode
         self.level = level
+        self.onMenu = onMenu
         _model = StateObject(wrappedValue: GameViewModel(mode: mode, level: level))
     }
 
@@ -39,7 +42,7 @@ struct GameView: View {
                 if case .finished(let won) = model.state.phase {
                     ResultOverlay(won: won, state: model.state,
                                   onReplay: { model.restart() },
-                                  onMenu: { dismiss() })
+                                  onMenu: onMenu)
                 }
             }
             .onAppear {

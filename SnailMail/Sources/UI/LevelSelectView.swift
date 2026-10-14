@@ -43,6 +43,7 @@ struct LevelSelectView: View {
 
 private struct GalaxyPanel: View {
     let galaxy: Int
+    @EnvironmentObject private var router: AppRouter
 
     private var stars: [ArcadeLevel] {
         LevelCatalog.arcade.filter { $0.galaxy == galaxy }
@@ -65,8 +66,8 @@ private struct GalaxyPanel: View {
                 }
 
                 ForEach(stars) { level in
-                    NavigationLink {
-                        GameView(mode: .arcade, level: level.id)
+                    Button {
+                        router.push(.game(mode: .arcade, level: level.id))
                     } label: {
                         StarRow(level: level)
                     }

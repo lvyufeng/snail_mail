@@ -3,6 +3,7 @@ import SwiftUI
 /// Title screen: pick a game mode and launch. Shares the deep-space backdrop
 /// and mascot with the gameplay screen so the whole game reads as one piece.
 struct MenuView: View {
+    @EnvironmentObject private var router: AppRouter
     @State private var selected: GameMode = .tutorial
     @State private var muted = Sound.shared.muted
 
@@ -47,16 +48,16 @@ struct MenuView: View {
                         // The campaign opens on the galaxy map so the player
                         // picks a star; every other mode starts its own route.
                         if selected == .arcade {
-                            NavigationLink {
-                                LevelSelectView()
+                            Button {
+                                router.push(.galaxy)
                             } label: {
                                 ArcadeLabel(title: "SELECT STAR", tint: Palette.good, icon: "★")
                             }
                             .buttonStyle(.plain)
                             .padding(.horizontal, 60)
                         } else {
-                            NavigationLink {
-                                GameView(mode: selected)
+                            Button {
+                                router.push(.game(mode: selected, level: 0))
                             } label: {
                                 ArcadeLabel(title: "PLAY", tint: Palette.good, icon: "▶")
                             }

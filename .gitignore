@@ -10,3 +10,7 @@ xcuserdata/
 *.moved-aside
 *.pbxuser
 !default.pbxuser
+
+# Python caches for the data-import tools
+__pycache__/
+*.pyc

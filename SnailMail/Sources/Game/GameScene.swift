@@ -46,10 +46,9 @@ final class GameScene: SKScene {
     private let config: LevelConfig
     /// Debug/screenshot hook: skip the "tap to start" screen and race at once.
     var autoStart = false
-#if DEBUG
     /// Set by the `-weapon N` screenshot hook so projectiles appear without a held touch.
+    /// Always present so the fire loop compiles in release; only ever set under DEBUG.
     var debugAutoFire = false
-#endif
     private var segments: [RoadSegment] = []
     private var trackLength: CGFloat = 1
     private var fringe: UIColor
