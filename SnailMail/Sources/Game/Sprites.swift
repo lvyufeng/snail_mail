@@ -561,6 +561,19 @@ enum Sprites {
                          stroke: UIColor(hex: "#FF9A3D"), line: 2)
     }
 
+    /// The vapour laser a highway pest spits back at the snail. It stays in
+    /// the pest's own hostile palette — a magenta bolt around a white-hot core
+    /// — so an incoming shot is never mistaken for a friendly pick-up.
+    static func makeEnemyBullet() -> SKNode {
+        let root = SKNode()
+        root.addChild(roundRect(46, 18, .zero, radius: 9,
+                                fill: magenta.withAlphaComponent(0.28), stroke: .clear, line: 0))
+        root.addChild(roundRect(34, 10, .zero, radius: 5,
+                                fill: UIColor(hex: "#FF2E88"), stroke: UIColor(hex: "#7A0F3C"), line: 3))
+        root.addChild(roundRect(16, 4, .zero, radius: 2, fill: .white, stroke: .clear, line: 0))
+        return root
+    }
+
     // MARK: - Sky
 
     /// A vertical-gradient texture built with Core Graphics, used as the sky.

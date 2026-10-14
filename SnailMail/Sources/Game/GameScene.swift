@@ -30,6 +30,14 @@ final class GameScene: SKScene {
     private let muzzleAhead: CGFloat = 380
     /// How far a shot carries before it burns out.
     private let bulletRange: CGFloat = 9000
+    /// Seconds between the highway pests' return shots.
+    private let enemyFireInterval: CGFloat = 1.3
+    /// How far up the road, in segments, a pest will open fire. It is well
+    /// beyond the snail's own range on purpose: a pest that waited until it was
+    /// close enough to shoot would be dead before it ever got a shot off.
+    private let enemyFireRange = 60
+    /// The pests' bolt is a touch slower than the snail's own shots.
+    private let enemyBulletSpeedFactor: CGFloat = 2.2
 
     // MARK: - Data
 
@@ -116,6 +124,11 @@ final class GameScene: SKScene {
     /// the look — a tier-1 pellet must never come back as a rocket.
     private var bulletPool: [Int: [SKNode]] = [:]
     private var bullets: [Bullet] = []
+    /// Incoming bolts are pooled the same way, and kept apart from the snail's
+    /// shots because they travel the other way down the road.
+    private var enemyBulletPool: [SKNode] = []
+    private var enemyBullets: [EnemyBullet] = []
+    private var enemyFireTimer: CGFloat = 1.6
 
     // MARK: - Init
 
@@ -369,6 +382,8 @@ final class GameScene: SKScene {
         state.tutorialMessage = ""
         fireCooldown = 0
         clearBullets()
+        clearEnemyBullets()
+        enemyFireTimer = enemyFireInterval
         snail.setScale(snailBaseScale)
         snail.zRotation = 0
         snail.alpha = 1
@@ -468,6 +483,7 @@ final class GameScene: SKScene {
         renderRoad()
         // Shots are moved and resolved against this frame's projections.
         updateBullets(fdt: fdt)
+        updateEnemyFire(fdt: fdt)
         publish()
     }
 
@@ -510,6 +526,20 @@ final class GameScene: SKScene {
         var z: CGFloat
         var offset: CGFloat
         var travel: CGFloat
+        var lastPoint: CGPoint
+    }
+
+    /// A vapour laser the highway pest has spat at the snail. It is placed on
+    /// the road the same way the snail's shots are, but it runs the other way
+    /// — z decreasing — so the two kinds of shot stay separate lists.
+    private struct EnemyBullet {
+        let node: SKNode
+        var z: CGFloat
+        var offset: CGFloat
+        /// The lane the shot was aimed at. The bolt eases onto it as it comes,
+        /// then holds it, so the snail can always step out of the way after the
+        /// pest has fired.
+        let target: CGFloat
         var lastPoint: CGPoint
     }
 
@@ -873,6 +903,7 @@ final class GameScene: SKScene {
         fallOffset = offset
         gapFlight = -1
         clearBullets()
+        clearEnemyBullets()
         Sound.shared.play(.fall)
         spawnBurst(at: playerPoint())
     }
@@ -942,6 +973,118 @@ final class GameScene: SKScene {
 
     private func clearBullets() {
         for i in bullets.indices.reversed() { retireBullet(at: i) }
+    }
+
+    // MARK: - Enemy return fire
+
+    /// The highway pest shoots back. Every so often the nearest pest ahead of
+    /// the snail spits a vapour laser down the road, so the player has to weave
+    /// as well as ram. Each bolt is aimed at the lane the snail was in when it
+    /// was fired, which keeps it dangerous without making it impossible to step
+    /// out of the way.
+    private func updateEnemyFire(fdt: CGFloat) {
+        enemyFireTimer -= fdt
+        if enemyFireTimer <= 0 {
+            enemyFireTimer = enemyFireInterval
+            fireFromEnemyAhead()
+        }
+
+        guard !enemyBullets.isEmpty else { return }
+        let player = positionZ + playerZ
+        // Bolts close on the snail from both directions at once: they fly
+        // toward the camera while the snail drives up the road at them.
+        let step = max(currentSpeed, baseTargetSpeed) * enemyBulletSpeedFactor * fdt
+        for i in enemyBullets.indices.reversed() {
+            var bolt = enemyBullets[i]
+            let previous = bolt.z
+            bolt.z -= step
+            bolt.offset += (bolt.target - bolt.offset) * min(1, fdt * 4)
+
+            // A bolt covers more ground in one frame than the snail is wide, so
+            // test the crossing of the snail's own plane rather than a window
+            // around it — a window lets a fast bolt tunnel straight through.
+            let crossed = previous >= player && bolt.z <= player
+            if crossed, abs(bolt.offset - playerX) < 0.16 {
+                spawnBurst(at: bolt.node.position)
+                damage(14, seg: segments[segmentIndex(at: player)])
+                retireEnemyBullet(at: i)
+                continue
+            }
+            // Once it is past the camera plane the projection stops placing it,
+            // so retire it a little beyond that rather than letting the list
+            // grow behind the snail.
+            if bolt.z < positionZ - segmentLength {
+                retireEnemyBullet(at: i)
+                continue
+            }
+            placeEnemyBullet(&bolt)
+            enemyBullets[i] = bolt
+        }
+    }
+
+    /// Opens fire from the nearest pest the snail is closing on. Only the
+    /// closest one shoots, so a road thick with pests cannot hose the screen.
+    private func fireFromEnemyAhead() {
+        guard !segments.isEmpty else { return }
+        let base = segmentIndex(at: positionZ + playerZ)
+        for d in 2...enemyFireRange {
+            let seg = segments[(base + d) % segments.count]
+            guard let spec = seg.sprites.first(where: { $0.kind == .enemy }) else { continue }
+            let node = obtainEnemyBullet()
+            node.isHidden = false
+            node.alpha = 1
+            node.setScale(1)
+            node.zRotation = 0
+            enemyBullets.append(EnemyBullet(node: node,
+                                            z: CGFloat(base + d) * segmentLength,
+                                            offset: spec.offset,
+                                            target: playerX,
+                                            lastPoint: .zero))
+            Sound.shared.play(.enemyFire)
+            return
+        }
+    }
+
+    /// Moves an incoming bolt to its place on the road, growing as it closes on
+    /// the camera and swinging to point the way it travels.
+    private func placeEnemyBullet(_ bolt: inout EnemyBullet) {
+        guard let p = roadPoint(z: bolt.z, offset: bolt.offset) else {
+            bolt.node.isHidden = true
+            return
+        }
+        bolt.node.isHidden = false
+        bolt.node.position = p.point
+        let muzzleHalfWidth = size.width * 0.5
+        let taper = muzzleHalfWidth > 0 ? p.halfWidth / muzzleHalfWidth : 0
+        bolt.node.setScale(min(1.2, max(0.12, taper * 1.2)))
+        if bolt.lastPoint != .zero {
+            let dx = p.point.x - bolt.lastPoint.x
+            let dy = p.point.y - bolt.lastPoint.y
+            if abs(dx) + abs(dy) > 0.5 {
+                bolt.node.zRotation = atan2(dy, dx)
+            }
+        }
+        bolt.lastPoint = p.point
+    }
+
+    private func obtainEnemyBullet() -> SKNode {
+        if let node = enemyBulletPool.popLast() { return node }
+        let node = Sprites.makeEnemyBullet()
+        node.zPosition = 24
+        fxLayer.addChild(node)
+        return node
+    }
+
+    private func retireEnemyBullet(at index: Int) {
+        let bolt = enemyBullets.remove(at: index)
+        bolt.node.isHidden = true
+        bolt.node.alpha = 1
+        bolt.node.setScale(1)
+        enemyBulletPool.append(bolt.node)
+    }
+
+    private func clearEnemyBullets() {
+        for i in enemyBullets.indices.reversed() { retireEnemyBullet(at: i) }
     }
 
     private func spawnBurst(at point: CGPoint) {

@@ -7,7 +7,7 @@ final class Sound {
     static let shared = Sound()
 
     enum Effect {
-        case shoot, collect, upgrade, hit, boost, select, win, lose, fall
+        case shoot, enemyFire, collect, upgrade, hit, boost, select, win, lose, fall
     }
 
     private let engine = AVAudioEngine()
@@ -66,6 +66,7 @@ final class Sound {
     private func key(_ effect: Effect) -> String {
         switch effect {
         case .shoot: "shoot"
+        case .enemyFire: "enemyFire"
         case .collect: "collect"
         case .upgrade: "upgrade"
         case .hit: "hit"
@@ -120,6 +121,9 @@ final class Sound {
 
     private func buildEffects() {
         effects["shoot"] = sweep(from: 1200, to: 420, duration: 0.09, volume: 0.28)
+        // The evil's vapour laser: a lower, sourer zap than the snail's own so
+        // the two trade shots on different notes.
+        effects["enemyFire"] = sweep(from: 760, to: 240, duration: 0.13, volume: 0.26)
         effects["collect"] = sweep(from: 660, to: 1180, duration: 0.13, volume: 0.34)
         effects["upgrade"] = sweep(from: 520, to: 1560, duration: 0.26, volume: 0.36)
         effects["hit"] = noise(duration: 0.22, volume: 0.5)
