@@ -18,6 +18,7 @@ import os
 import re
 import struct
 import sys
+import textwrap
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -59,15 +60,6 @@ RING_GLYPHS = set("><{}()R")
 RING = {"powerup": "+", "slow": "~", "explode": ">", "explosive": ">",
         "normal": "!", "none": "o"}
 
-# The tutorial's `Message=` lines sprinkle the same inline icon glyphs the
-# grids use, standing in for the picture the retail HUD drew beside the text.
-# None of that artwork is bundled here, so each glyph becomes the word it
-# depicts; the icon is dropped where the sentence already names it (so
-# "Salt ^ burns me!" reads "Salt burns me!").
-TUTORIAL_GLYPHS = {"}": "", "{": "packages", "]": "", "_": "hearts",
-                   "^": "salt", "[": "enemies", ";": "slow", "~": "power-ups"}
-
-
 def deobfuscate(data):
     return bytes(b ^ KEY[i % 256] for i, b in enumerate(data))
 
@@ -75,16 +67,15 @@ def deobfuscate(data):
 def tutorial_message(raw):
     """Turn a retail `Message=` string into the text the remake shows.
 
-    `>` is the retail line break, and the icon glyphs become words (see
-    `TUTORIAL_GLYPHS`). A glyph sitting next to the word it depicts — the `^`
-    in "Salt ^ burns me!" — would then repeat that word, so a doubled word
-    collapses back to one and the spacing is tidied for a sentence.
+    `>` is the retail hard line break: the script wraps each sentence onto
+    three lines by hand rather than letting the banner lay it out, and the
+    spaces the wrap leaves behind are tidied off the fronts of the lines.
+
+    The inline icon glyphs the script drops into the prose (`{ } ~ [ ] ^ _ ;`)
+    are kept verbatim: the retail build draws the sprite the glyph names inline
+    with the words, so the banner draws the same icon in the same place.
     """
-    text = "".join("\n" if ch == ">" else TUTORIAL_GLYPHS.get(ch, ch)
-                   for ch in raw)
-    text = re.sub(r"\b([A-Za-z]+)( +)\1\b", r"\1", text, flags=re.I)
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\s+([.!?,])", r"\1", text)
+    text = raw.replace(">", "\n")
     return "\n".join(line.strip() for line in text.split("\n")).strip()
 
 
@@ -134,7 +125,7 @@ def by_folder(files, folder, suffix):
 
 def parse_level(txt):
     txt = re.sub(r"/\*.*?\*/", "", txt, flags=re.S)
-    segs, script = [], []
+    segs, script, voices = [], [], []
     body = re.search(r"Segments Begin:(.*?)Segments End:", txt, flags=re.S)
     if body:
         for line in body.group(1).splitlines():
@@ -147,15 +138,20 @@ def parse_level(txt):
                 attrs = dict(re.findall(r"(\w+)=(-?[\d.]+)", m.group(2)))
                 segs.append((name, attrs))
                 # The tutorial scripts an on-screen line per pool entry; every
-                # other level leaves the list empty.
+                # other level leaves the list empty.  A line also names the
+                # voice-over that reads it (`Sample="Voice/tutN.ogg"`), which
+                # the blank entries leave out.
                 msg = re.search(r'Message="([^"]*)"', m.group(2))
                 script.append(tutorial_message(msg.group(1)) if msg else "")
+                sample = re.search(r'Sample="Voice/(\w+)\.ogg"', m.group(2), re.I)
+                voices.append(sample.group(1).lower() if sample else None)
     first = re.search(r"First:.*?\n\s*(.*?\.txt)", txt, flags=re.S)
     last = re.search(r"Last:.*?\n\s*(.*?\.txt)", txt, flags=re.S)
     return (os.path.basename(first.group(1)) if first else "Start.txt",
             segs,
             os.path.basename(last.group(1)) if last else "Finish.txt",
             script,
+            voices,
             parse_briefing(txt))
 
 
@@ -199,7 +195,7 @@ def parse_slides(txt):
 
 
 def parse_segment(txt):
-    """Return (grid, paths, jetpack_off, signs, parcels) for one segment.
+    """Return (grid, paths, jetpack_off, signs, parcels, bands, no_fall).
 
     `grid` is the rows, `paths` the `Path=` families the piece names, in the
     order the file writes them, and `jetpack_off` whether any row is tagged
@@ -227,8 +223,25 @@ def parse_segment(txt):
     `Loop the Loop*.txt` a trail of five up the loop.  Only `x` — the lateral
     placement — has a meaning the flat grid can carry, so the parcels keep
     their rows and the `y`/`z` offset is dropped rather than invented.
+
+    `bands` is the list of `(row, start, end)` marks the `P`/`p` row of a
+    piece lays down, and `no_fall` the rows a `NoFall` (or `No Fall`) tag
+    exempts.
+
+    The `P`/`p` row is the piece's own declaration of where its road runs
+    while the family carries it off the grid.  `P` sits on exactly the columns
+    the row above lays road on and `p` on the columns it leaves blank, so the
+    run of `P` is the road's band — `Twister3.txt` marks `PPPppppp` under a
+    crest that only laid three columns, `Toad.txt` `PPPP....` under a road it
+    splits in half, and a piece that crosses the whole grid (`Worm.txt`,
+    `Valley.txt`) marks all eight.  Reading the row as ordinary cells instead
+    would stretch every one of those bands to the eight columns of the marker
+    row itself.  A `NoFall` row is one the build lets the snail cross without
+    dropping it: every one of them is a trampoline piece, where the bounce
+    throws the snail out over the void and has to bring it back.
     """
     rows, paths, jetpack_off, signs, parcels = [], [], False, [], []
+    bands, no_fall = [], []
     laid = 0
     for line in txt.splitlines():
         m = re.match(r"^@(.{8})@(.*)$", line)
@@ -236,10 +249,20 @@ def parse_segment(txt):
             row, attr = m.group(1), m.group(2)
             if re.search(r"JetPack\s*=\s*Off", attr, re.I):
                 jetpack_off = True
+            nofall = re.match(r"\s*No\s*Fall", attr, re.I)
+            if nofall:
+                no_fall.append(laid)
             ring = re.search(r"Ring=(\w+)", attr)
             if ring:
                 token = RING.get(ring.group(1).lower(), "-")
                 row = "".join(token if c in RING_GLYPHS else c for c in row)
+            # The `P`/`p` row: the run of `P` is the road's band, the `p`s
+            # beside it the columns the road has left.  A row with no `P` at
+            # all (there is none in the retail grids) declares nothing.
+            if "P" in row:
+                cols = [i for i, c in enumerate(row) if c == "P"]
+                if cols:
+                    bands.append((laid, cols[0], cols[-1]))
             # A row of nothing but `@` is the seam between pieces, not road:
             # the reader drops it, so the sign row index has to drop it too.
             if row != "@" * 8:
@@ -255,7 +278,7 @@ def parse_segment(txt):
         p = re.search(r"Path=(\S+)", line)
         if p and p.group(1) not in paths:
             paths.append(p.group(1))
-    return "".join(rows), paths, jetpack_off, signs, parcels
+    return "".join(rows), paths, jetpack_off, signs, parcels, bands, no_fall
 
 
 def swift_string(s):
@@ -276,6 +299,7 @@ def main():
 
     # Level routes: arcade0..arcade50, tutorial and challenge.
     routes, need, random_keys, scripts, briefings = {}, set(), set(), {}, {}
+    voicesMap = {}
     for key, name in ([(f"arcade{i}", f"arcade{i:03d}.txt") for i in range(51)]
                       + [("tutorial", "tutorial.txt"), ("challenge", "challenge000.txt")]):
         if name not in levels:
@@ -283,9 +307,11 @@ def main():
             continue
         if re.search(r"Random:\s*yes", levels[name], re.I):
             random_keys.add(key)
-        first, segs, last, script, briefing = parse_level(levels[name])
+        first, segs, last, script, voices, briefing = parse_level(levels[name])
         routes[key] = (first, segs, last)
         scripts[key] = script
+        if any(v is not None for v in voices):
+            voicesMap[key] = voices
         if briefing:
             briefings[key] = briefing
         need.update([first.lower(), last.lower()])
@@ -298,10 +324,12 @@ def main():
     credits_slides = parse_slides(intro["credits.txt"]) if "credits.txt" in intro else []
 
     grids, paths, jetpacks_off, sign_map, parcel_map = {}, {}, set(), {}, {}
+    band_map, nofall_map = {}, {}
     for key in sorted(need):
         if key not in segments:
             continue
-        grid, seg_paths, jetpack_off, signs, parcels = parse_segment(segments[key])
+        (grid, seg_paths, jetpack_off, signs, parcels,
+         bands, no_fall) = parse_segment(segments[key])
         grids[key] = grid
         if seg_paths:
             paths[key] = seg_paths
@@ -311,6 +339,10 @@ def main():
             sign_map[key] = signs
         if parcels:
             parcel_map[key] = parcels
+        if bands:
+            band_map[key] = bands
+        if no_fall:
+            nofall_map[key] = no_fall
 
     def encode(route):
         first, segs, last = route
@@ -406,14 +438,53 @@ def main():
         body = ", ".join("Parcel(row: %d, x: %s)" % (r, x) for r, x in parcel_map[k])
         lines.append(f"        {swift_string(k)}: [{body}],")
     lines += ["    ]", "",
+              "    /// The road band a piece's `P`/`p` row declares, as",
+              "    /// `Band(row:start:end:)`.  `P` sits on exactly the columns the",
+              "    /// row above lays road on and `p` on the columns it leaves",
+              "    /// blank, so the run from `start` to `end` is where the road",
+              "    /// runs while the piece's own family carries it off the grid: a",
+              "    /// twister's crest is three columns, a toad's split road four,",
+              "    /// and a piece that crosses the grid all eight.  `row` numbers",
+              "    /// the rows that lay road, the way `Sign` and `Parcel` do.",
+              "    struct Band {",
+              "        let row: Int",
+              "        let start: Int",
+              "        let end: Int",
+              "    }",
+              "    static let band: [String: [Band]] = ["]
+    for k in sorted(band_map):
+        body = ", ".join("Band(row: %d, start: %d, end: %d)" % (r, a, b)
+                         for r, a, b in band_map[k])
+        lines.append(f"        {swift_string(k)}: [{body}],")
+    lines += ["    ]", "",
+              "    /// Rows a piece tags `NoFall`, in the same numbering `Sign`",
+              "    /// and `Parcel` use.  The tag is the build saying a snail may",
+              "    /// cross the row without dropping off the road; every one of",
+              "    /// them lies in a trampoline piece, where the bounce throws the",
+              "    /// snail out over a void and has to bring it back.",
+              "    static let noFall: [String: [Int]] = ["]
+    for k in sorted(nofall_map):
+        body = ", ".join(str(r) for r in nofall_map[k])
+        lines.append(f"        {swift_string(k)}: [{body}],")
+    lines += ["    ]", "",
               "    /// The tutorial's scripted lines, in the order its level file",
               "    /// lists them.  Entry `n` belongs to the piece the pool lays at",
               "    /// index `n`; an empty string leaves the previous line on",
-              "    /// screen.  The retail build pairs each line with a voice-over",
-              "    /// (`Voice/tut*.ogg`) and inline icon art, neither of which is",
-              "    /// bundled here, so the icons are spelled out as words.",
+              "    /// screen.  The retail script writes its hard line breaks as `>`",
+              "    /// and drops inline sprite art into the prose with the glyphs",
+              "    /// `{ } ~ [ ] ^ _ ;`; the breaks are `\\n` here and the glyphs are",
+              "    /// kept verbatim so the banner can draw the same icons.",
               "    static let tutorialScript: [String] = ["]
     lines += [f"        {swift_string(t)}," for t in scripts.get("tutorial", [])]
+    lines += ["    ]", "",
+              "    /// The voice-over each tutorial line names, keyed by the same index",
+              "    /// as `tutorialScript`.  The retail level file pairs line `n` with",
+              "    /// `Sample=\"Voice/tutN.ogg\"` and, at index 6, an out-of-order",
+              "    /// `tut18`; the blank lines carry no recording, so they are `nil`.",
+              "    static let tutorialVoice: [String?] = ["]
+    voiced = ", ".join(swift_string(v) if v else "nil"
+                       for v in voicesMap.get("tutorial", [])) + ","
+    lines += ["        " + line for line in textwrap.wrap(voiced, width=62)]
     lines += ["    ]", "",
               "    /// The `GalaxyText:` blurb every campaign level file carries: the",
               "    /// snail's log entry or an IPS (Intergalactic Postal Service) notice,",

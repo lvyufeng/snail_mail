@@ -599,6 +599,9 @@ enum TrackBuilder {
             var signs: [TrackData.Sign] = []
             /// The mid-air parcels the piece tags on this row.
             var parcels: [TrackData.Parcel] = []
+            /// The road band this piece's own `P` row declares for this
+            /// row, or `nil` for a row that carries no marker.
+            var band: TrackData.Band?
         }
         var slices: [Slice] = []
         slices.reserveCapacity(max(64, config.rows + 32))
@@ -641,13 +644,21 @@ enum TrackBuilder {
             for parcel in TrackData.parcel[name] ?? [] {
                 parcelsByRow[parcel.row, default: []].append(parcel)
             }
+            // The piece's own `P` row, where it has one: the columns the
+            // road runs on while the piece's family carries it off the
+            // grid. The glyphs on that row are the declaration, not road.
+            var bandsByRow: [Int: TrackData.Band] = [:]
+            for band in TrackData.band[name] ?? [] {
+                bandsByRow[band.row] = band
+            }
             for (n, row) in rows.enumerated() {
                 slices.append(Slice(cells: row, family: family,
                                     along: CGFloat(n) / span, step: 1 / span,
                                     flip: flip, angle: angle,
                                     jetpackOff: jetpackOff, script: scriptIndex,
                                     signs: signsByRow[n] ?? [],
-                                    parcels: parcelsByRow[n] ?? []))
+                                    parcels: parcelsByRow[n] ?? [],
+                                    band: bandsByRow[n]))
             }
         }
 
@@ -690,19 +701,33 @@ enum TrackBuilder {
 
         let count = slices.count
 
+        // The columns a slice's road covers, or `nil` where the row lays none.
+        // A piece whose family carries the road off the grid declares the band
+        // its own `P` row marks — the glyphs there are the declaration, not
+        // road, so that row's cells are never read as one. Every other row's
+        // band is the run from its first to its last non-`@`, non-blank cell.
+        func roadRun(_ s: Slice) -> (lo: Int, hi: Int, count: Int)? {
+            if let b = s.band { return (b.start, b.end, b.end - b.start + 1) }
+            let road = s.cells.indices.filter {
+                s.cells[$0] != "@" && s.cells[$0] != " "
+            }
+            guard let lo = road.first, let hi = road.last else { return nil }
+            return (lo, hi, road.count)
+        }
+
         // The plan view: the road's lane centre, carried forward over rows that
         // leave it blank, then smoothed so a one-column step reads as a bend
         // instead of a kink. Rows with no real band of road — the airborne gap
         // in a jump, or a row that holds a lone hazard marker — must not tug
-        // the centre sideways, so only a mostly intact row moves it.
+        // the centre sideways, so only a mostly intact row moves it. A band a
+        // piece declares itself is trusted at any width: a slalom's four
+        // columns and a hump's three are the whole road there.
         var plan = [CGFloat](repeating: 3.5, count: count)
         var centre: CGFloat = 3.5
         for i in 0..<count {
-            let road = slices[i].cells.indices.filter {
-                slices[i].cells[$0] != "@" && slices[i].cells[$0] != " "
-            }
-            if road.count >= 5, let lo = road.first, let hi = road.last {
-                centre = (CGFloat(lo) + CGFloat(hi)) / 2
+            if let run = roadRun(slices[i]),
+               slices[i].band != nil || run.count >= 5 {
+                centre = (CGFloat(run.lo) + CGFloat(run.hi)) / 2
             }
             var value = centre
             if let w = weave[slices[i].family] {
@@ -757,7 +782,8 @@ enum TrackBuilder {
 
             let row = slices[i].cells
             let road = row.indices.filter { row[$0] != "@" && row[$0] != " " }
-            let lo = road.first ?? 0, hi = road.last ?? 7
+            let metrics = roadRun(slices[i])
+            let lo = metrics?.lo ?? 0, hi = metrics?.hi ?? 7
             let laneCentre = (CGFloat(lo) + CGFloat(hi)) / 2
             let halfLane = max(0.5, (CGFloat(hi) - CGFloat(lo)) / 2)
 

@@ -254,6 +254,84 @@ enum TrackData {
         "loopbow.txt": [Parcel(row: 10, x: 0.0), Parcel(row: 11, x: 0.0), Parcel(row: 12, x: 0.0), Parcel(row: 13, x: 0.0), Parcel(row: 14, x: 0.0)],
     ]
 
+    /// The road band a piece's `P`/`p` row declares, as
+    /// `Band(row:start:end:)`.  `P` sits on exactly the columns the
+    /// row above lays road on and `p` on the columns it leaves
+    /// blank, so the run from `start` to `end` is where the road
+    /// runs while the piece's own family carries it off the grid: a
+    /// twister's crest is three columns, a toad's split road four,
+    /// and a piece that crosses the grid all eight.  `row` numbers
+    /// the rows that lay road, the way `Sign` and `Parcel` do.
+    struct Band {
+        let row: Int
+        let start: Int
+        let end: Int
+    }
+    static let band: [String: [Band]] = [
+        "cage2.txt": [Band(row: 27, start: 0, end: 2)],
+        "dodge dip.txt": [Band(row: 8, start: 3, end: 4)],
+        "double slalom.txt": [Band(row: 9, start: 2, end: 5)],
+        "final advanced segment 3.txt": [Band(row: 107, start: 0, end: 3), Band(row: 108, start: 4, end: 7)],
+        "final advanced segment 6.txt": [Band(row: 2, start: 2, end: 5)],
+        "final basic segment 6.txt": [Band(row: 2, start: 2, end: 5)],
+        "halfpipe.txt": [Band(row: 9, start: 0, end: 7)],
+        "halfpipe2.txt": [Band(row: 9, start: 0, end: 7), Band(row: 75, start: 0, end: 7), Band(row: 141, start: 0, end: 7)],
+        "halfpipe3.txt": [Band(row: 9, start: 0, end: 7), Band(row: 75, start: 0, end: 7), Band(row: 141, start: 0, end: 7)],
+        "hill.txt": [Band(row: 9, start: 0, end: 7)],
+        "hill4.txt": [Band(row: 9, start: 0, end: 3)],
+        "hill4c.txt": [Band(row: 9, start: 2, end: 5)],
+        "hump.txt": [Band(row: 9, start: 0, end: 2)],
+        "invert.txt": [Band(row: 9, start: 0, end: 7)],
+        "loop the loop.txt": [Band(row: 9, start: 0, end: 2)],
+        "loop the loop2.txt": [Band(row: 9, start: 0, end: 1)],
+        "loop the loop4.txt": [Band(row: 9, start: 0, end: 3)],
+        "loop the loopt2.txt": [Band(row: 9, start: 0, end: 1)],
+        "loop the loopt3.txt": [Band(row: 9, start: 0, end: 2)],
+        "loop the loopt4.txt": [Band(row: 9, start: 0, end: 3)],
+        "loopbow.txt": [Band(row: 9, start: 0, end: 3)],
+        "outer loop.txt": [Band(row: 9, start: 0, end: 3)],
+        "outer loop3.txt": [Band(row: 9, start: 0, end: 2)],
+        "screw.txt": [Band(row: 9, start: 3, end: 5)],
+        "slalom.txt": [Band(row: 9, start: 2, end: 5)],
+        "snake.txt": [Band(row: 9, start: 2, end: 5)],
+        "start.txt": [Band(row: 4, start: 0, end: 7)],
+        "supertramp.txt": [Band(row: 9, start: 3, end: 4)],
+        "supertramp2.txt": [Band(row: 9, start: 3, end: 4)],
+        "supertrampoline.txt": [Band(row: 9, start: 3, end: 4)],
+        "sweep.txt": [Band(row: 9, start: 0, end: 3)],
+        "toad.txt": [Band(row: 9, start: 0, end: 3), Band(row: 10, start: 4, end: 7)],
+        "toad2.txt": [Band(row: 9, start: 0, end: 3), Band(row: 45, start: 4, end: 7)],
+        "toad3.txt": [Band(row: 9, start: 0, end: 3), Band(row: 62, start: 0, end: 3)],
+        "turnover.txt": [Band(row: 9, start: 0, end: 3)],
+        "turnoverdouble.txt": [Band(row: 9, start: 0, end: 3)],
+        "turnunder.txt": [Band(row: 9, start: 4, end: 7)],
+        "twister.txt": [Band(row: 9, start: 0, end: 2), Band(row: 10, start: 5, end: 7)],
+        "twister2.txt": [Band(row: 9, start: 0, end: 2), Band(row: 10, start: 5, end: 7)],
+        "twister3.txt": [Band(row: 9, start: 0, end: 2)],
+        "under over small.txt": [Band(row: 24, start: 0, end: 2), Band(row: 25, start: 5, end: 7), Band(row: 57, start: 5, end: 7)],
+        "under over.txt": [Band(row: 24, start: 0, end: 2), Band(row: 25, start: 5, end: 7), Band(row: 57, start: 5, end: 7)],
+        "valley.txt": [Band(row: 9, start: 0, end: 7)],
+        "valley4.txt": [Band(row: 9, start: 0, end: 3)],
+        "valley4c.txt": [Band(row: 9, start: 2, end: 5)],
+        "wibble.txt": [Band(row: 9, start: 0, end: 7)],
+        "worm.txt": [Band(row: 8, start: 0, end: 7)],
+        "zigzag jump.txt": [Band(row: 11, start: 3, end: 5), Band(row: 45, start: 0, end: 2), Band(row: 77, start: 5, end: 7)],
+        "zigzag.txt": [Band(row: 11, start: 3, end: 5), Band(row: 32, start: 0, end: 2), Band(row: 55, start: 5, end: 7)],
+    ]
+
+    /// Rows a piece tags `NoFall`, in the same numbering `Sign`
+    /// and `Parcel` use.  The tag is the build saying a snail may
+    /// cross the row without dropping off the road; every one of
+    /// them lies in a trampoline piece, where the bounce throws the
+    /// snail out over a void and has to bring it back.
+    static let noFall: [String: [Int]] = [
+        "supertramp2.txt": [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57],
+        "trampoline jump 2.txt": [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131],
+        "trampoline jump.txt": [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84],
+        "trampoline.txt": [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
+        "trampolines.txt": [15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98],
+    ]
+
     /// The tutorial's scripted lines, in the order its level file
     /// lists them.  Entry `n` belongs to the piece the pool lays at
     /// index `n`; an empty string leaves the previous line on
