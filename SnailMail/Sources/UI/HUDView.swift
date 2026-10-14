@@ -28,8 +28,12 @@ struct HUDView: View {
                                 .font(.system(size: 20, weight: .heavy, design: .rounded))
                                 .foregroundStyle(Palette.gold)
                         }
-                        WeaponPips(level: state.weaponLevel, max: state.maxWeaponLevel)
-                        SuitLadder(step: state.suitStep)
+                        HStack(spacing: 6) {
+                            WeaponPips(level: state.weaponLevel, max: state.maxWeaponLevel)
+                            Text(state.weaponName)
+                                .font(.system(size: 11, weight: .black, design: .rounded))
+                                .foregroundStyle(Palette.cyan.opacity(0.85))
+                        }
                         Text(String(format: "%.0f km/h", state.speed / 40))
                             .font(.system(size: 12, weight: .semibold, design: .monospaced))
                             .foregroundStyle(Palette.ink.opacity(0.85))
@@ -156,35 +160,6 @@ private struct WeaponPips: View {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(i < level ? Palette.cyan : Palette.ink.opacity(0.2))
                     .frame(width: 16, height: 6)
-            }
-        }
-    }
-}
-
-/// The ♠♣♥♦ ladder, filled up to however many rungs the player has climbed.
-/// Completing it pays out the rocket tier.
-private struct SuitLadder: View {
-    let step: Int
-
-    private static let suits: [(String, Color)] = [
-        ("♠", Palette.cyan), ("♣", Palette.good),
-        ("♥", Palette.magenta), ("♦", Palette.gold),
-    ]
-
-    var body: some View {
-        HStack(spacing: 3) {
-            ForEach(Array(Self.suits.enumerated()), id: \.offset) { index, suit in
-                Text(suit.0)
-                    .font(.system(size: 13, weight: .black, design: .rounded))
-                    .foregroundStyle(index < step ? suit.1 : Palette.ink.opacity(0.22))
-                    .frame(width: 20, height: 20)
-                    .background(
-                        Circle().fill(index < step ? suit.1.opacity(0.20) : .clear)
-                    )
-                    .overlay(
-                        Circle().stroke(index < step ? suit.1.opacity(0.7) : .clear,
-                                        lineWidth: 1)
-                    )
             }
         }
     }

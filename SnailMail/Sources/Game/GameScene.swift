@@ -113,7 +113,6 @@ final class GameScene: SKScene {
         guard let i = args.firstIndex(of: "-weapon"), i + 1 < args.count,
               let level = Int(args[i + 1]) else { return }
         state.weaponLevel = max(1, min(level, state.maxWeaponLevel))
-        state.suitStep = min(level - 1, Suit.allCases.count - 1)
         debugAutoFire = true
     }
 #endif
@@ -599,8 +598,16 @@ final class GameScene: SKScene {
                     Sound.shared.play(.collect)
                     toRemove.append((seg, spec))
                 case .ringUpgrade:
-                    state.weaponLevel = min(state.maxWeaponLevel, state.weaponLevel + 1)
-                    Sound.shared.play(.upgrade)
+                    if state.weaponLevel < state.maxWeaponLevel {
+                        // The power-up ring is the only way up the weapon ladder:
+                        // blaster -> laser -> rocket launcher.
+                        state.weaponLevel += 1
+                        Sound.shared.play(.upgrade)
+                    } else {
+                        // Already at rockets; a spare ring pays out in points.
+                        state.sheet.bonus += 200
+                        Sound.shared.play(.collect)
+                    }
                     toRemove.append((seg, spec))
                 case .ringExplode:
                     state.sheet.ring += 200
@@ -608,25 +615,6 @@ final class GameScene: SKScene {
                 case .ringSlow:
                     currentSpeed *= 0.6
                     toRemove.append((seg, spec))
-                case .suitSpade, .suitClub, .suitHeart, .suitDiamond:
-                    guard let suit = spec.kind.suit else { break }
-                    if suit.rawValue == state.suitStep {
-                        // Correct next rung: climb the ladder.
-                        state.suitStep += 1
-                        state.sheet.bonus += 300
-                        state.postalMeter = min(state.maxMeter, state.postalMeter + 6)
-                        Sound.shared.play(.upgrade)
-                        if state.suitStep >= Suit.allCases.count {
-                            // Full ♠♣♥♦ climb pays out the top weapon tier.
-                            state.weaponLevel = state.maxWeaponLevel
-                            state.sheet.bonus += 1500
-                        }
-                        toRemove.append((seg, spec))
-                    } else if suit.rawValue > state.suitStep {
-                        // Skipped a rung: the gate zaps you and stays put.
-                        damage(6, seg: seg)
-                    }
-                    // A suit already climbed is inert scenery.
                 case .salt:
                     damage(10, seg: seg)
                     toRemove.append((seg, spec))

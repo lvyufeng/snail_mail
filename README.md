@@ -33,8 +33,10 @@ audio files either — the app bundle contains no images or sounds at all.
 - Pickups:
   - **Parcel** — counts toward the delivery quota
   - **Heart** — repairs the postal meter
-  - **Ring** — upgrades the weapon tier toward rockets (green), detonates
-    nearby hazards (gold) or slows you (violet)
+  - **Power-up ring** — the only way up the weapon ladder: blaster → laser →
+    rocket launcher. Rings past the top tier pay out in points (green)
+  - **Blast ring** — detonates nearby hazards (gold)
+  - **Slow ring** — drags the snail down (violet)
 
 ## Modes
 
