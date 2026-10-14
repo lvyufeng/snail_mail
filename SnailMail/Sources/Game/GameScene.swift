@@ -20,14 +20,12 @@ final class GameScene: SKScene {
     /// 0.9 × screenW across and the snail drops in over the same span.
     private let holeHalfWidth: CGFloat = 0.45
     /// How wide Turbo is drawn, as a fraction of the highway's full width at
-    /// his own row on screen. Measuring him against the road rather than the
-    /// screen keeps his proportions right on a tall portrait phone, where the
-    /// near highway fills the frame edge to edge: at his row the road spans
-    /// virtually the whole 402pt width, so this fraction is, in practice, how
-    /// wide he reads on screen. The retail build's landscape frame is 4:3, so
-    /// the same world size there reads smaller; 0.18 keeps him about a lane
-    /// wide and stops him dominating the portrait view.
-    private let snailRoadFraction: CGFloat = 0.18
+    /// his own row on screen. The build's `turbo-base` mesh measures 0.606 of
+    /// the nine units the road is across, so sizing him against the road keeps
+    /// the proportion the build modelled him at. Measuring him against the
+    /// screen instead would stretch him on a tall portrait phone, where the
+    /// near highway runs off both edges.
+    private let snailRoadFraction = Sprites.snailModelWidth / roadModelWidth
     /// Turbo's own width, in points, at the snapshot's screen scale.
     private var snailScale: CGFloat = 1
     /// Half the highway's on-screen width on Turbo's row, refreshed by
@@ -1676,19 +1674,28 @@ final class GameScene: SKScene {
                 let ex = p.screenX + spec.offset * p.screenW
                 let ey = fy(p.screenY)
                 node.position = CGPoint(x: ex, y: ey)
-                let widthFactor: CGFloat
+                // How much of the road the sprite covers. A pit and a sign
+                // carry their own width in the track data; everything else is
+                // drawn at the width its own model was built at, measured
+                // against the nine units the road is across.
+                let roadFraction: CGFloat
                 switch spec.kind {
-                case .postOffice: widthFactor = 1.1
-                case .hole:       widthFactor = spec.width > 0 ? spec.width : holeHalfWidth * 2
+                case .hole:
+                    roadFraction = spec.width > 0 ? spec.width : holeHalfWidth * 2
                 case .signBang, .signConstruction, .signStop:
-                    widthFactor = spec.width > 0 ? spec.width : 0.42
-                default:          widthFactor = 0.42
+                    let own = SignKind(entity: spec.kind)?.widthFraction ?? 0.42
+                    roadFraction = spec.width > 0 ? spec.width : CGFloat(own)
+                default:
+                    roadFraction = Sprites.entityModelWidth(spec.kind) / roadModelWidth
                 }
-                let spriteWidth = p.screenW * widthFactor
-                // A turret's tiers come out of its own artwork: every pillar is
-                // built at the same canvas width, so scaling it like the slim
-                // post lets the wider meshes fill their canvas and reach
-                // further across the road on their own.
+                // A road fraction is measured against the whole road, and
+                // `screenW` is half of it on screen, so it doubles.
+                let spriteWidth = roadFraction * p.screenW * 2
+                // Every body is built at its `entityBaseWidth`, so this scales
+                // the art to the road rather than the road to the art. A
+                // turret's tiers come out of their own artwork on top of this:
+                // all eight are baked into one canvas, so the wider meshes fill
+                // that canvas and reach further across the road on their own.
                 let scale = spriteWidth / Sprites.entityBaseWidth(spec.kind)
                 node.setScale(max(0.02, scale))
                 node.isHidden = false

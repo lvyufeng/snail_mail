@@ -92,6 +92,13 @@ struct CourseRandom: RandomNumberGenerator {
 
 // MARK: - Entities
 
+/// How wide the highway is in the engine's own units — the space every mesh the
+/// 2005 build ships and every `3DModel=` offset in its segment files is written
+/// in. A prop's own x-extent over this is the share of the road it covers, which
+/// is what the renderer sizes the props against so they keep the proportions
+/// they were modelled at.
+let roadModelWidth: CGFloat = 9
+
 /// Everything that can sit on the highway, mirroring the symbols in the
 /// original segment grid files (`s` salt, `M` meteor, `&` slug, `0` turret,
 /// `#` hole, plus parcels, hearts and the ring pickups).
@@ -169,10 +176,9 @@ enum SignKind {
         }
     }
 
-    /// The width the retail model gives the board, in the engine's own units
-    /// (the road is 9 wide there). The remake draws each sign in those units,
-    /// so this is both how wide the sprite is drawn and, over the road width,
-    /// how much of the track it spans.
+    /// The width the retail model gives the board, in the engine's own units.
+    /// The remake draws each sign in those units, so this is both how wide the
+    /// sprite is drawn and, over the road width, how much of the track it spans.
     var modelWidth: Double {
         switch self {
         case .bang: 7.9406          // two 1.94 panels, either side of the anchor
@@ -182,8 +188,8 @@ enum SignKind {
     }
 
     /// `modelWidth` as a fraction of the road, the way `EntitySpec.width`
-    /// and the renderer's `widthFactor` measure it.
-    var widthFraction: Double { modelWidth / 9 }
+    /// measures it.
+    var widthFraction: Double { modelWidth / Double(roadModelWidth) }
 }
 
 // MARK: - World geometry

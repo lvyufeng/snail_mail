@@ -79,6 +79,21 @@ enum Sprites {
         return node
     }
 
+    /// A retail billboard kept whole, for art that shares one canvas with its
+    /// siblings and carries its scale in the canvas rather than in its own
+    /// opaque bounds. Cropping it to those bounds would hand every sibling the
+    /// same size.
+    private static func baked(_ path: String, width: CGFloat,
+                              lift: CGFloat) -> SKNode? {
+        guard RetailAssets.installed, let tex = RetailAssets.texture(path) else { return nil }
+        let size = tex.size()
+        guard size.width > 0, size.height > 0 else { return nil }
+        let node = SKSpriteNode(texture: tex)
+        node.size = CGSize(width: width, height: width * size.height / size.width)
+        node.position = CGPoint(x: 0, y: node.size.height * lift)
+        return node
+    }
+
     /// The heavy rock billboards the retail build scatters across the highway.
     /// Four meshes ship, so pick one at random per rock to keep a field of them
     /// from looking stamped.
@@ -231,10 +246,10 @@ enum Sprites {
 
     /// Turbo's share of one animation frame, in the frame's own pixels: the
     /// `turbo-base` pose's opaque box is 137 of the frame's 384 pixels across
-    /// and 252 tall, its feet 360 rows down.
+    /// and 252 tall, its feet resting on row 357.2.
     fileprivate static let snailFrameArtWidth: CGFloat = 137.0 / 384.0
     fileprivate static let snailFrameArtHeight: CGFloat = 252.0 / 384.0
-    fileprivate static let snailFrameFeet: CGFloat = 360.0 / 384.0
+    fileprivate static let snailFrameFeet: CGFloat = 357.2 / 384.0
 
     /// The width an animation frame is drawn at. `bake_clips` stores the poses
     /// whole inside one shared window rather than trimming each one, so the node
@@ -243,6 +258,12 @@ enum Sprites {
     /// puts the same pose across 148 of its 152 pixels).
     static let snailFrameWidth: CGFloat =
         snailNativeWidth * (148.0 / 152.0) / snailFrameArtWidth
+
+    /// How wide Turbo stands in the engine's own units — the `turbo-base` mesh
+    /// runs x -0.303...0.302 — which are the units the road is nine across in.
+    /// Sizing him against the highway with this keeps the proportion the build
+    /// modelled him at, where a share of the screen would not.
+    static let snailModelWidth: CGFloat = 0.606
 
     /// Advance Turbo's animation by `dt` seconds while it plays `clip`. Asking
     /// for the clip already playing just carries it on, so a caller can name its
@@ -286,13 +307,17 @@ enum Sprites {
         // at every depth.
         let root = SKNode()
         // The shadow follows the drawn width, so a big pillar of a cage keeps
-        // its own footprint on the road rather than the slim post's.
+        // its own footprint on the road rather than the slim post's. It hangs a
+        // fixed share of the node's own width below the road point, which is
+        // where the art's base lands, because every body is built at its
+        // `entityBaseWidth`.
         let w = entityFootprint(kind, tier: tier)
+        let drop = entityBaseWidth(kind) * 0.18
         let shadow = SKShapeNode(ellipseOf: CGSize(width: w * 0.95, height: w * 0.30))
         shadow.fillColor = UIColor.black.withAlphaComponent(0.32)
         shadow.strokeColor = .clear
         shadow.zPosition = -1
-        shadow.position = CGPoint(x: 0, y: -w * 0.18)
+        shadow.position = CGPoint(x: 0, y: -drop)
         root.addChild(shadow)
         root.addChild(body)
         return root
@@ -332,15 +357,25 @@ enum Sprites {
     }
 
     /// The retail billboard for a road entity, or nil to fall back to the flat
-    /// drawing. Each sprite is sized to the width the renderer already scales
-    /// `entityBaseWidth` against, so swapping the art in does not move anything.
+    /// drawing. Each sprite is drawn at the width the renderer scales
+    /// `entityModelWidth` against, so it covers the stretch of road its mesh did.
+    ///
+    /// `lift` is where the model's own base sits in the art. The build models
+    /// everything in one space whose y = 0 is the road surface — the lazer
+    /// object is a flat quad there, the trampoline lies at y 0.03, and the sign
+    /// boards float a unit up — so an entity whose own base is off that line has
+    /// to be raised off the road point by the difference. `tools/bake_meshes.py`
+    /// rasterises each model to its own projected bounds, which makes the lift
+    /// `0.5 + pmin / span` of the model's projected bottom `pmin` and height
+    /// `span`; the values below are that fraction for each mesh.
     private static func makeRetailEntity(_ kind: EntityKind, tier: Int) -> SKNode? {
         let w = entityBaseWidth(kind)
         switch kind {
         case .parcel:
             return retail("Art/Sprites/parcel000.png", width: w)
         case .salt:
-            return retail("Art/Baked/salt.png", width: w)
+            // salt.x: bottom 0.401 of its 1.427-unit height below the road.
+            return retail("Art/Baked/salt.png", width: w, lift: 0.219)
         case .heart:
             return retail("Art/Sprites/health.png", width: w)
         case .asteroid:
@@ -350,10 +385,15 @@ enum Sprites {
         case .slug:
             return retail("Art/Sprites/slug000.png", width: w)
         case .turret:
-            return retail("Art/Baked/pillar-\(clampPillarTier(tier)).png",
-                          width: pillarCanvasWidth())
+            // The whole shared window rather than the post drawn inside it:
+            // every tier is baked into the same 8.6 units, so drawing the
+            // window at those 8.6 units of road lets each mesh's own width
+            // decide how far across the road its post reaches.
+            return baked("Art/Baked/pillar-\(clampPillarTier(tier)).png",
+                         width: w, lift: pillarCanvasLift)
         case .postOffice:
-            return retail("Art/Baked/postoffice.png", width: w)
+            // postofficestop.x: a 5.957-unit front standing 0.297 above the road.
+            return retail("Art/Baked/postoffice.png", width: w, lift: 0.550)
         case .ringUpgrade, .ringNormal:
             return retail("Art/Sprites/particlering-big.png", width: w)
         case .ringSlow:
@@ -369,15 +409,20 @@ enum Sprites {
         case .ramp:
             return retail("Art/Objects/ramp.png", width: w)
         case .trampoline:
-            return retail("Art/Baked/tramp.png", width: w)
+            // tramp.x: a flat mat lying on the road, so its own centre is the
+            // road point and its near edge is drawn below it.
+            return retail("Art/Baked/tramp.png", width: w, lift: 0)
         case .jetpack:
             return retail("Art/Sprites/jetpack000.png", width: w)
         case .signBang:
-            return retail("Art/Baked/signbang.png", width: w, lift: 0)
+            // signbang.x: two 1.94 panels held 1.03...2.97 units over the road.
+            return retail("Art/Baked/signbang.png", width: w, lift: 1.031)
         case .signConstruction:
-            return retail("Art/Baked/signconstruction.png", width: w, lift: 0)
+            // signconstruction.x: a 12-unit hoarding standing from y 1.
+            return retail("Art/Baked/signconstruction.png", width: w, lift: 0.583)
         case .signStop:
-            return retail("Art/Baked/signstop.png", width: w, lift: 0)
+            // signstop.x: an octagon straddling the road, y -0.72...1.14.
+            return retail("Art/Baked/signstop.png", width: w, lift: 0.112)
         case .barrier:
             return nil     // the retail fence is a tiled road texture, not a sprite
         }
@@ -460,9 +505,17 @@ enum Sprites {
     ]
     /// The window `tools/bake_meshes.py` renders all eight of them inside, in
     /// those same units. Because the window is shared, the post covers
-    /// `1.040 / 8.6` of the canvas it is drawn on — which is what turns the
-    /// canvas width below into the post's own footprint.
+    /// `1.040 / 8.6` of the canvas it is drawn on, which is what lets a post
+    /// reach as far across the road as its own mesh did.
     private static let pillarCanvasSpan: CGFloat = 8.6
+
+    /// Where the road runs through that canvas. The window is centred on the
+    /// post's projected middle, and the build stands the post with a unit of it
+    /// under the road surface, so the road line lies `0.354` of the way up the
+    /// canvas. `retail` raises a sprite by the share of its height that falls
+    /// below the road line, and the readouts are the same fraction for the art
+    /// drawn whole: `0.5 - 1.2545 / 8.6`.
+    private static let pillarCanvasLift: CGFloat = 0.3541
 
     /// A pillar tier outside what the build ships would have no mesh to draw,
     /// so clamp it to the eight there are.
@@ -478,18 +531,37 @@ enum Sprites {
         return pillarTierSpan[t - 1] / pillarTierSpan[0]
     }
 
-    /// The node size a pillar is built at. Because every tier is drawn inside
-    /// the same window, one node width keeps them all the same height and lets
-    /// each mesh's own proportions decide how far it reaches across the road.
-    private static func pillarCanvasWidth() -> CGFloat {
-        entityBaseWidth(.turret) * pillarCanvasSpan / pillarTierSpan[0]
+    /// How wide an entity stands in the engine's own units. Everything the
+    /// build ships a mesh for is measured from it, so a post reaches as far
+    /// across the road as its own mesh did, the trampoline lies as flat as it
+    /// was modelled and the post office front spans the width it was built at.
+    /// The props that exist only as 2D art keep the width the flat drawing gave
+    /// them, a little under a quarter of the road: hearts, rocks, slugs, the
+    /// rings, the arch, ramps and parcels.
+    static func entityModelWidth(_ kind: EntityKind) -> CGFloat {
+        switch kind {
+        case .salt:       return 1.212       // salt.x, x -0.495...0.717
+        case .turret:     return pillarCanvasSpan
+        case .postOffice: return 5.999       // postofficestop.x
+        case .trampoline: return 3.0         // tramp.x
+        case .jetpack:    return 1.617       // jetpack-base-000.x
+        // The build's fence is a nine-unit quad tiled along the road rather
+        // than a prop, so the stand-in post is sized to the one cell it marks.
+        case .barrier:    return roadModelWidth / 8
+        default:          return 2.0
+        }
     }
 
-    /// How much of the road an entity covers, which is what its shadow and
-    /// collision are cut to. A turret's tiers reach further across than the slim
-    /// post they start as.
+    /// How wide a road entity's contact shadow is drawn, in the same local
+    /// units `makeEntity` builds the body in. The renderer scales a whole
+    /// entity node by `entityModelWidth / entityBaseWidth`, so a shadow this
+    /// wide lands on the road exactly as wide as the art drawn over it. A
+    /// turret is drawn as the shared canvas its post sits in, so its shadow is
+    /// the post's own share of that canvas rather than the whole of it.
     static func entityFootprint(_ kind: EntityKind, tier: Int) -> CGFloat {
-        entityBaseWidth(kind) * (kind == .turret ? pillarWidthFactor(tier) : 1)
+        guard kind == .turret else { return entityBaseWidth(kind) }
+        let t = clampPillarTier(tier)
+        return entityBaseWidth(.turret) * pillarTierSpan[t - 1] / pillarCanvasSpan
     }
 
     private static func makePillar(tier: Int) -> SKNode {
