@@ -22,6 +22,12 @@ final class GameScene: SKScene {
     private let snailBaseScale: CGFloat = 1.15
     /// Seconds the snail spends tumbling down a hole before climbing out.
     private let fallDuration: CGFloat = 0.9
+    /// Where the muzzle sits, measured up the road from the camera. The snail
+    /// is drawn at a fixed screen height, so this is the distance whose
+    /// projection lands on the gun.
+    private let muzzleAhead: CGFloat = 380
+    /// How far a shot carries before it burns out.
+    private let bulletRange: CGFloat = 9000
 
     // MARK: - Data
 
@@ -75,10 +81,10 @@ final class GameScene: SKScene {
     private var wallRightPool: [SKShapeNode] = []
     private var entityPool: [EntityKind: [SKNode]] = [:]
     private var entityUse: [EntityKind: Int] = [:]
-    /// Bullets are pooled per weapon tier so an upgrade immediately swaps the
-    /// shared pool's look — a tier-1 pellet must never be reused as a rocket.
+    /// Idle bullets are pooled per weapon tier so an upgrade immediately swaps
+    /// the look — a tier-1 pellet must never come back as a rocket.
     private var bulletPool: [Int: [SKNode]] = [:]
-    private var bulletUse: [Int: Int] = [:]
+    private var bullets: [Bullet] = []
 
     // MARK: - Init
 
@@ -381,10 +387,11 @@ final class GameScene: SKScene {
                 fire()
             }
         }
-        updateBullets(fdt: fdt)
         handleCollisions()
         updateInvincibility()
         renderRoad()
+        // Shots are moved and resolved against this frame's projections.
+        updateBullets(fdt: fdt)
         publish()
     }
 
@@ -415,39 +422,135 @@ final class GameScene: SKScene {
 
     // MARK: - Shooting & collisions
 
-    private func fire() {
-        let bullet = obtainBullet()
-        let start = CGPoint(x: snail.position.x + 30, y: snail.position.y + 6)
-        bullet.position = start
-        bullet.isHidden = false
-        bullet.setScale(1)
-        bullet.zRotation = .pi / 2   // nose points up the road
-        bullet.removeAllActions()
-        bullet.run(.sequence([
-            .move(to: CGPoint(x: size.width * 0.5 + playerX * 60, y: size.height * 0.55), duration: 0.16),
-            .fadeOut(withDuration: 0.05),
-            .hide(),
-            .fadeIn(withDuration: 0),
-        ]))
-        Sound.shared.play(.shoot)
-        hitScan()
+    /// A shot in flight. It carries a place on the road — distance along the
+    /// track plus a lateral offset — instead of a screen position, so it
+    /// converges on the vanishing point and shrinks with distance exactly like
+    /// the world sprites. That is what makes it read as flying *down the road*
+    /// rather than climbing at the sky.
+    private struct Bullet {
+        let node: SKNode
+        let level: Int
+        var z: CGFloat
+        var offset: CGFloat
+        var travel: CGFloat
+        var lastPoint: CGPoint
     }
 
-    private func hitScan() {
-        let playerSegIndex = segmentIndex(at: positionZ + playerZ)
-        let range = 2...48
-        // Rockets have a wider warhead, so they reach a little further across the
-        // road than the early pellets.
+    private func fire() {
+        let node = obtainBullet()
+        node.isHidden = false
+        node.alpha = 1
+        node.setScale(1)
+        node.zRotation = .pi / 2   // nose points up the road
+        node.removeAllActions()
+        bullets.append(Bullet(node: node,
+                              level: state.weaponLevel,
+                              z: positionZ + playerZ + muzzleAhead,
+                              offset: playerX,
+                              travel: 0,
+                              lastPoint: .zero))
+        Sound.shared.play(.shoot)
+    }
+
+    /// Runs every shot forward, re-projects it on the road and resolves the
+    /// first thing it meets. Called after `renderRoad()`, so the segment
+    /// projections it reads belong to this frame.
+    private func updateBullets(fdt: CGFloat) {
+        guard !bullets.isEmpty else { return }
+        // A shot outruns the snail by a wide margin, so the target closes in
+        // on its own while the tracer is still travelling.
+        let step = max(currentSpeed, baseTargetSpeed) * 2.6 * fdt
+        for i in bullets.indices.reversed() {
+            var bullet = bullets[i]
+            let from = bullet.z
+            bullet.z += step
+            bullet.travel += step
+
+            if let (seg, spec, hitZ) = firstTarget(from: from, to: bullet.z,
+                                                   offset: bullet.offset) {
+                // Stop the tracer on the target, then pop it.
+                bullet.z = hitZ
+                place(&bullet)
+                bullets[i] = bullet
+                destroy(spec, in: seg)
+                spawnBurst(at: bullet.node.position)
+                retireBullet(at: i)
+                continue
+            }
+
+            if bullet.travel > bulletRange {
+                retireBullet(at: i)
+                continue
+            }
+            place(&bullet)
+            bullets[i] = bullet
+        }
+    }
+
+    /// The first shootable thing between two points along the track. The whole
+    /// span is swept, so a shot can never tunnel through a target at speed.
+    private func firstTarget(from z0: CGFloat, to z1: CGFloat,
+                             offset: CGFloat) -> (RoadSegment, EntitySpec, CGFloat)? {
+        guard !segments.isEmpty else { return nil }
+        // Rockets carry a wider warhead than the early pellets.
         let reach: CGFloat = state.weaponLevel >= 3 ? 0.30 : 0.22
-        for d in range {
-            let seg = segments[(playerSegIndex + d) % segments.count]
+        let first = segmentIndex(at: z0)
+        let last = segmentIndex(at: z1)
+        var idx = first
+        var segStart = z0 - percentRemaining(z0, segmentLength) * segmentLength
+        while true {
+            let seg = segments[idx]
             for spec in seg.sprites where spec.kind.isShootable {
-                if abs(spec.offset - playerX) < reach {
-                    destroy(spec, in: seg)
-                    return
+                if abs(spec.offset - offset) < reach {
+                    return (seg, spec, segStart)
                 }
             }
+            if idx == last { break }
+            idx = (idx + 1) % segments.count
+            segStart += segmentLength
         }
+        return nil
+    }
+
+    /// Moves a shot's node to its place on the road this frame.
+    private func place(_ bullet: inout Bullet) {
+        guard let p = roadPoint(z: bullet.z, offset: bullet.offset) else {
+            bullet.node.isHidden = true
+            return
+        }
+        bullet.node.isHidden = false
+        bullet.node.position = p.point
+        // 1.0 at the muzzle, tapering with distance the same way the sprites do.
+        let muzzleHalfWidth = size.width * 0.5
+        let taper = muzzleHalfWidth > 0 ? p.halfWidth / muzzleHalfWidth : 0
+        bullet.node.setScale(min(1.6, max(0.12, taper * 1.5)))
+        // Burn out rather than blink off at the horizon.
+        let fade = (bullet.travel / bulletRange - 0.6) / 0.4
+        bullet.node.alpha = 1 - 0.85 * max(0, min(1, fade))
+        if bullet.lastPoint != .zero {
+            let dx = p.point.x - bullet.lastPoint.x
+            let dy = p.point.y - bullet.lastPoint.y
+            if abs(dx) + abs(dy) > 0.5 {
+                bullet.node.zRotation = atan2(dy, dx)
+            }
+        }
+        bullet.lastPoint = p.point
+    }
+
+    /// Projects a point sitting on the road surface `z` units along the track,
+    /// `offset` across it (−1...1), using the perspective the sprites use.
+    private func roadPoint(z: CGFloat, offset: CGFloat) -> (point: CGPoint, halfWidth: CGFloat)? {
+        guard !segments.isEmpty, segmentLength > 0 else { return nil }
+        let base = segmentIndex(at: positionZ)
+        let f = (z - CGFloat(base) * segmentLength) / segmentLength
+        guard f >= 0, f < CGFloat(drawDistance - 1) else { return nil }
+        let d = Int(f)
+        let pct = f - CGFloat(d)
+        let seg = segments[(base + d) % segments.count]
+        let sx = interpolate(seg.p1.screenX, seg.p2.screenX, pct)
+        let sy = interpolate(seg.p1.screenY, seg.p2.screenY, pct)
+        let sw = interpolate(seg.p1.screenW, seg.p2.screenW, pct)
+        return (CGPoint(x: sx + offset * sw, y: fy(sy)), sw)
     }
 
     private func destroy(_ spec: EntitySpec, in seg: RoadSegment) {
@@ -456,7 +559,6 @@ final class GameScene: SKScene {
         case .slug: state.sheet.slug += 400
         default:    state.sheet.garbage += 200
         }
-        spawnBurst(atSegment: seg.index)
     }
 
     private func handleCollisions() {
@@ -531,8 +633,14 @@ final class GameScene: SKScene {
         }
         for (seg, spec) in toRemove {
             seg.sprites.removeAll { $0.kind == spec.kind && $0.offset == spec.offset }
-            spawnBurst(atSegment: seg.index)
+            spawnBurst(at: playerPoint())
         }
+    }
+
+    /// Where the snail itself sits on screen, for effects that fire on it.
+    private func playerPoint() -> CGPoint {
+        roadPoint(z: positionZ + playerZ, offset: playerX)?.point
+            ?? CGPoint(x: size.width * 0.5, y: size.height * 0.2)
     }
 
     private func damage(_ amount: Double, seg: RoadSegment) {
@@ -557,8 +665,9 @@ final class GameScene: SKScene {
         guard fallTimer < 0, state.phase == .running else { return }
         fallTimer = 0
         fallOffset = offset
+        clearBullets()
         Sound.shared.play(.fall)
-        spawnBurst(atSegment: segmentIndex(at: positionZ + playerZ))
+        spawnBurst(at: playerPoint())
     }
 
     private func updateFall(fdt: CGFloat) {
@@ -604,31 +713,36 @@ final class GameScene: SKScene {
 
     private func obtainBullet() -> SKNode {
         let level = state.weaponLevel
-        var arr = bulletPool[level] ?? []
-        let index = bulletUse[level] ?? 0
-        if index < arr.count {
-            bulletUse[level] = index + 1
-            return arr[index]
+        var idle = bulletPool[level] ?? []
+        if let node = idle.popLast() {
+            bulletPool[level] = idle
+            return node
         }
         let node = Sprites.makeBullet(level: level)
         node.zPosition = 25
         fxLayer.addChild(node)
-        arr.append(node)
-        bulletPool[level] = arr
-        bulletUse[level] = index + 1
         return node
     }
 
-    private func updateBullets(fdt: CGFloat) {
-        bulletUse.removeAll()
+    private func retireBullet(at index: Int) {
+        let bullet = bullets.remove(at: index)
+        bullet.node.removeAllActions()
+        bullet.node.isHidden = true
+        bullet.node.alpha = 1
+        bullet.node.setScale(1)
+        bulletPool[bullet.level, default: []].append(bullet.node)
     }
 
-    private func spawnBurst(atSegment index: Int) {
+    private func clearBullets() {
+        for i in bullets.indices.reversed() { retireBullet(at: i) }
+    }
+
+    private func spawnBurst(at point: CGPoint) {
         let burst = SKShapeNode(circleOfRadius: 20)
         burst.fillColor = UIColor(hex: "#FFD24C").withAlphaComponent(0.7)
         burst.strokeColor = .white
         burst.lineWidth = 3
-        burst.position = CGPoint(x: size.width * 0.5, y: size.height * 0.22)
+        burst.position = point
         burst.zPosition = 26
         fxLayer.addChild(burst)
         burst.run(.sequence([
