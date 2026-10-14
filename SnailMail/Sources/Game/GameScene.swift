@@ -9,8 +9,22 @@ final class GameScene: SKScene {
 
     // MARK: - Tunables
 
-    private let cameraHeight: CGFloat = 1000
+    /// How high the camera rides over the highway. This, not the lens, is what
+    /// sets how fast the road fans out down the frame: the highway on screen
+    /// row `r` runs `roadWidth * (r - horizonRow) / cameraHeight` of a screen
+    /// wide, half to each side of the centre. The retail courses are shot from a
+    /// low, wide camera: their lanes widen at a steady screen-width per
+    /// screen-height and are already most of the frame across by two thirds of
+    /// the way down, which 1500 units above a 1500-unit highway reproduces.
+    private let cameraHeight: CGFloat = 1500
     private let cameraDepth: CGFloat = 1.0 / tan((100.0 / 2.0) * .pi / 180.0) // ≈ 0.84
+    /// The row the highway's vanishing point sits on, as a fraction of the
+    /// screen height, counted from the top. A level camera would put it on the
+    /// middle row, which leaves the near highway too short and everything that
+    /// stands on it oversized. Rather than tilt the camera — which would shear
+    /// every billboard and bend the lanes — the projection simply moves its
+    /// centre up onto this row, the shift a rising-front lens makes.
+    private let horizonRow: CGFloat = 0.30
     private let roadWidth = TrackBuilder.roadWidth
     private let segmentLength = TrackBuilder.segmentLength
     private let drawDistance = 220
@@ -456,7 +470,7 @@ final class GameScene: SKScene {
                 star.strokeColor = .clear
                 star.position = CGPoint(x: CGFloat.random(in: 0...size.width,
                                                           using: &starRandom),
-                                        y: CGFloat.random(in: size.height * 0.45...size.height,
+                                        y: CGFloat.random(in: size.height * (1 - horizonRow)...size.height,
                                                           using: &starRandom))
                 layer.addChild(star)
             }
@@ -473,14 +487,16 @@ final class GameScene: SKScene {
         fogNode.removeFromParent()
         fogNode = SKNode()
         fogNode.zPosition = 8
+        let fogBand = size.height * 0.5
         let fog = SKSpriteNode(texture: Sprites.gradientTexture(
-            size: CGSize(width: 8, height: size.height * 0.5),
+            size: CGSize(width: 8, height: fogBand),
             colors: [fogColour.withAlphaComponent(0),
                      fogColour.withAlphaComponent(0.96),
                      fogColour.withAlphaComponent(0)],
             locations: [0, 0.5, 1]))
-        fog.size = CGSize(width: size.width, height: size.height * 0.5)
-        fog.position = CGPoint(x: size.width / 2, y: size.height * 0.5)
+        fog.size = CGSize(width: size.width, height: fogBand)
+        // Centred on the horizon, where the far highway dissolves into the sky.
+        fog.position = CGPoint(x: size.width / 2, y: (1 - horizonRow) * size.height)
         fogNode.addChild(fog)
         addChild(fogNode)
     }
@@ -816,7 +832,7 @@ final class GameScene: SKScene {
             let s = (i == 0 ? 20.0 : 60.0) * speed
             for star in layer.children {
                 star.position.y -= CGFloat(s) * fdt
-                if star.position.y < size.height * 0.4 {
+                if star.position.y < size.height * (1 - horizonRow) {
                     star.position.y = size.height + 4
                     star.position.x = CGFloat.random(in: 0...size.width, using: &sceneRandom)
                 }
@@ -2051,10 +2067,20 @@ final class GameScene: SKScene {
         p.camera.x = p.world.x - cameraX
         p.camera.y = p.world.y - cameraY
         p.camera.z = p.world.z - cameraZ
-        let z = max(p.camera.z, 0.0001)
-        p.scale = cameraDepth / z
+        guard p.camera.z > 0.0001 else {
+            // Behind the camera: park it off-screen with no width so neither the
+            // highway nor a billboard is drawn from it.
+            p.scale = 0
+            p.screenX = size.width / 2
+            p.screenY = -size.height * 8
+            p.screenW = 0
+            return
+        }
+        p.scale = cameraDepth / p.camera.z
         p.screenX = size.width / 2 + p.scale * p.camera.x * size.width / 2
-        p.screenY = size.height / 2 - p.scale * p.camera.y * size.height / 2
+        // The principal point sits on `horizonRow`, so anything level with the
+        // camera and infinitely far off converges there instead of mid-frame.
+        p.screenY = size.height * horizonRow - p.scale * p.camera.y * size.height / 2
         p.screenW = p.scale * roadWidth * size.width / 2
     }
 
