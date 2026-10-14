@@ -90,6 +90,8 @@ final class GameScene: SKScene {
     /// The skid sound is played at most this often, so a twitchy drag does not
     /// turn into a wall of tyre noise.
     private var skidUntil: CGFloat = 0
+    /// Counts down to the next puff of tyre smoke while a skid is running.
+    private var skidClock: CGFloat = 0
     private var elapsed: CGFloat = 0
     /// This frame's slice of time, handed to Turbo's animation. Zero while the
     /// race is paused so he holds his pose.
@@ -699,6 +701,7 @@ final class GameScene: SKScene {
         // Shots are moved and resolved against this frame's projections.
         updateBullets(fdt: fdt)
         updateEnemyFire(fdt: fdt)
+        updateSkid(fdt: fdt)
         publish()
     }
 
@@ -836,7 +839,11 @@ final class GameScene: SKScene {
                 place(&bullet)
                 bullets[i] = bullet
                 destroy(spec, in: seg)
-                spawnBurst(at: bullet.node.position)
+                // A shot that lands far up the road covers a few pixels, so it
+                // takes the small starburst; one on the snail is already scaled
+                // up and takes the big one.
+                spawnBurst(at: bullet.node.position, small: bullet.node.xScale < 0.55)
+                if spec.kind == .slug { spawnGoo(at: bullet.node.position) }
                 retireBullet(at: i)
                 continue
             }
@@ -846,6 +853,15 @@ final class GameScene: SKScene {
                 continue
             }
             place(&bullet)
+            // The rocket's warhead leaves a thinning trail of exhaust behind
+            // it. Laid down every so many units of travel rather than every
+            // frame, so the trail's grain does not change with the frame rate.
+            if bullet.level >= 3,
+               bullet.travel.truncatingRemainder(dividingBy: 24) < step {
+                spawnSmoke(at: bullet.node.position,
+                           width: 15 * max(0.3, bullet.node.xScale),
+                           drift: CGPoint(x: 0, y: 4), life: 0.35)
+            }
             bullets[i] = bullet
         }
     }
@@ -1249,6 +1265,27 @@ final class GameScene: SKScene {
         state.invincible = invincible
     }
 
+    /// Tyres scrubbing the road through a hard drag. The retail build keeps a
+    /// dedicated `skidstop` pose for the moment, and this lays the smoke that
+    /// goes with it on the road behind the snail.
+    private func updateSkid(fdt: CGFloat) {
+        guard elapsed < skidUntil else {
+            skidClock = 0
+            return
+        }
+        skidClock -= fdt
+        guard skidClock <= 0 else { return }
+        skidClock = 0.055
+        // He is drawn at his own road point with his tail toward the camera, so
+        // the puff starts under him and drifts further down the screen.
+        let outward = targetX - playerX
+        spawnSmoke(at: CGPoint(x: snail.position.x - outward * 26,
+                               y: snail.position.y + 6),
+                   width: 26,
+                   drift: CGPoint(x: -outward * 26, y: -14),
+                   life: 0.4)
+    }
+
     // MARK: - Bullets
 
     private func obtainBullet() -> SKNode {
@@ -1389,16 +1426,73 @@ final class GameScene: SKScene {
         for i in enemyBullets.indices.reversed() { retireEnemyBullet(at: i) }
     }
 
-    private func spawnBurst(at point: CGPoint) {
-        let burst = SKShapeNode(circleOfRadius: 20)
-        burst.fillColor = UIColor(hex: "#FFD24C").withAlphaComponent(0.7)
-        burst.strokeColor = .white
-        burst.lineWidth = 3
-        burst.position = point
-        burst.zPosition = 26
-        fxLayer.addChild(burst)
-        burst.run(.sequence([
-            .group([.scale(to: 2.4, duration: 0.22), .fadeOut(withDuration: 0.22)]),
+    /// The pop of a hit: the build's own starburst thrown from the impact
+    /// point, grown as it fades, with a few of its sparkles tumbling out of it.
+    /// The installer draws the starburst at two sizes, so a hit resolved far up
+    /// the road takes the small one rather than a blast-sized flash that would
+    /// read as if it landed on the bonnet.
+    private func spawnBurst(at point: CGPoint, small: Bool = false) {
+        if let flash = Sprites.makeParticle(small ? "particleexplode-small"
+                                                  : "particleexplode-big",
+                                            width: small ? 26 : 74) {
+            flash.position = point
+            flash.zPosition = 26
+            flash.zRotation = CGFloat.random(in: 0...(2 * .pi), using: &sceneRandom)
+            fxLayer.addChild(flash)
+            flash.run(.sequence([
+                .group([.scale(to: 1.8, duration: 0.26), .fadeOut(withDuration: 0.26)]),
+                .removeFromParent(),
+            ]))
+        }
+        spawnSparks(at: point, count: small ? 3 : 6, spread: small ? 11 : 27)
+    }
+
+    /// A handful of the build's four-point sparkles flying out of a hit.
+    private func spawnSparks(at point: CGPoint, count: Int, spread: CGFloat) {
+        guard count > 0 else { return }
+        for i in 0..<count {
+            guard let spark = Sprites.makeParticle("spark", width: 13) else { return }
+            let angle = CGFloat(i) / CGFloat(count) * 2 * .pi
+                + CGFloat.random(in: -0.4...0.4, using: &sceneRandom)
+            let reach = spread * CGFloat.random(in: 0.7...1.3, using: &sceneRandom)
+            spark.position = point
+            spark.zPosition = 26
+            fxLayer.addChild(spark)
+            spark.run(.sequence([
+                .group([.moveBy(x: cos(angle) * reach, y: sin(angle) * reach, duration: 0.3),
+                        .scale(to: 0.4, duration: 0.3),
+                        .fadeOut(withDuration: 0.3)]),
+                .removeFromParent(),
+            ]))
+        }
+    }
+
+    /// A puff of the build's smoke, for tyres scrubbing the road and for the
+    /// exhaust trailing a shot.
+    private func spawnSmoke(at point: CGPoint, width: CGFloat,
+                            drift: CGPoint = .zero, life: TimeInterval = 0.45) {
+        guard let puff = Sprites.makeParticle("smoke", width: width, alpha: 0.8) else { return }
+        puff.position = point
+        puff.zPosition = 24
+        puff.zRotation = CGFloat.random(in: 0...(2 * .pi), using: &sceneRandom)
+        fxLayer.addChild(puff)
+        puff.run(.sequence([
+            .group([.moveBy(x: drift.x, y: drift.y, duration: life),
+                    .scale(to: 1.9, duration: life),
+                    .fadeOut(withDuration: life)]),
+            .removeFromParent(),
+        ]))
+    }
+
+    /// What a slug leaves where it was shot.
+    private func spawnGoo(at point: CGPoint) {
+        guard let goo = Sprites.makeParticle("sluggoo", width: 26, alpha: 0.95) else { return }
+        goo.position = point
+        goo.zPosition = 25
+        goo.zRotation = CGFloat.random(in: 0...(2 * .pi), using: &sceneRandom)
+        fxLayer.addChild(goo)
+        goo.run(.sequence([
+            .group([.scale(to: 1.6, duration: 0.5), .fadeOut(withDuration: 0.5)]),
             .removeFromParent(),
         ]))
     }

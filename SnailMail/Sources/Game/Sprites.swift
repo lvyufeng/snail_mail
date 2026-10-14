@@ -107,6 +107,29 @@ enum Sprites {
     /// How many faces a rock is drawn from.
     static let rockFaces = 4
 
+    // MARK: - Retail particles
+
+    /// One frame of the build's own particle art, sized so the drawing spans
+    /// `width` points. The installer renders every effect at two sizes — a
+    /// 256-pixel `-big` and a 32-pixel `-small` — and the two drawing sizes of
+    /// each are the same picture, so a caller picks whichever matches how much
+    /// of the screen the effect covers. Nil on a checkout without the retail
+    /// folder, which leaves the caller on its procedural drawing.
+    static func makeParticle(_ name: String, width: CGFloat,
+                             alpha: CGFloat = 1) -> SKSpriteNode? {
+        guard RetailAssets.installed,
+              let tex = RetailAssets.billboard("Art/Sprites/\(name).png") else { return nil }
+        let size = tex.size()
+        guard size.width > 0, size.height > 0 else { return nil }
+        // Opaque white and not a clear tint: a three-argument initialiser with
+        // a see-through colour multiplies the texture away entirely.
+        let node = SKSpriteNode(texture: tex, color: .white,
+                                size: CGSize(width: width,
+                                             height: width * size.height / size.width))
+        node.alpha = alpha
+        return node
+    }
+
     // MARK: - Turbo the snail (seen from behind as it races away)
 
     static func makeSnail() -> SKNode {
@@ -643,14 +666,40 @@ enum Sprites {
     /// A fence post with two rails: the blue highway barrier, the cage pillars
     /// and the rail fences the retail grids place across the road. Solid to the
     /// touch, so it is drawn to read as a hard object rather than a pickup.
+    ///
+    /// The build paints this out of one eight-pixel texture — a dark-to-bright
+    /// blue gradient it stretches along the rail — so the post wears that same
+    /// gradient instead of a colour invented for it.
     private static func makeBarrier() -> SKNode {
         let root = SKNode()
-        root.addChild(roundRect(14, 96, CGPoint(x: 0, y: 0), radius: 5, fill: metal, line: 3))
-        root.addChild(roundRect(46, 14, CGPoint(x: 0, y: 22), radius: 4, fill: cyan, line: 3))
-        root.addChild(roundRect(46, 14, CGPoint(x: 0, y: -18), radius: 4, fill: cyan, line: 3))
-        root.addChild(circle(6, CGPoint(x: 0, y: 44), fill: gold, stroke: ink, line: 2))
+        let rail = barrierGradient
+        let parts: [(CGFloat, CGFloat, CGPoint, CGFloat)] = [
+            (14, 96, .zero, 5),          // the post itself
+            (46, 14, CGPoint(x: 0, y: 22), 4),
+            (46, 14, CGPoint(x: 0, y: -18), 4),
+        ]
+        for (w, h, centre, radius) in parts {
+            let bar = roundRect(w, h, centre, radius: radius,
+                                fill: rail == nil ? cyan : .white,
+                                stroke: ink, line: 3)
+            bar.fillTexture = rail
+            root.addChild(bar)
+        }
         return root
     }
+
+    /// The retail `Barrier` texture — eight pixels of dark-to-bright blue the
+    /// build tiles over a rail — stretched into a strip a drawn bar can wear.
+    private static let barrierGradient: SKTexture? = {
+        guard RetailAssets.installed,
+              let img = RetailAssets.image("Art/Objects/barrier_barrier.png") else { return nil }
+        let strip = CGSize(width: img.size.width, height: 32)
+        let renderer = UIGraphicsImageRenderer(size: strip)
+        let out = renderer.image { _ in
+            img.draw(in: CGRect(origin: .zero, size: strip))
+        }
+        return SKTexture(image: out)
+    }()
 
     /// The "evil" the tutorial warns about: a spiky pest that rams the snail
     /// off the highway. Angular dark spikes and a hot magenta core make it read
