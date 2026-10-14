@@ -22,6 +22,8 @@ final class GameScene: SKScene {
     private let snailBaseScale: CGFloat = 1.15
     /// Seconds the snail spends tumbling down a hole before climbing out.
     private let fallDuration: CGFloat = 0.9
+    /// Seconds the snail spends airborne after hitting a ramp or trampoline.
+    private let hopDuration: CGFloat = 0.7
     /// Where the muzzle sits, measured up the road from the camera. The snail
     /// is drawn at a fixed screen height, so this is the distance whose
     /// projection lands on the gun.
@@ -65,6 +67,11 @@ final class GameScene: SKScene {
     private var fallTimer: CGFloat = -1
     /// Where the pit sat across the road, so the snail climbs out beside it.
     private var fallOffset: CGFloat = 0
+    /// >= 0 while the snail is flying off a ramp; -1 the rest of the time.
+    private var hopTimer: CGFloat = -1
+    private var hopPower: CGFloat = 0
+    /// Left while the jetpack carries the snail over everything on the road.
+    private var jetpackUntil: CGFloat = 0
 
     // MARK: - Nodes
 
@@ -311,6 +318,9 @@ final class GameScene: SKScene {
         invincibleUntil = 0
         fallTimer = -1
         fallOffset = 0
+        hopTimer = -1
+        hopPower = 0
+        jetpackUntil = 0
         fireCooldown = 0
         clearBullets()
         snail.setScale(snailBaseScale)
@@ -401,6 +411,10 @@ final class GameScene: SKScene {
                 fire()
             }
         }
+        if hopTimer >= 0 {
+            hopTimer += fdt
+            if hopTimer >= hopDuration { hopTimer = -1 }
+        }
         handleCollisions()
         updateInvincibility()
         renderRoad()
@@ -411,7 +425,8 @@ final class GameScene: SKScene {
 
     private func updateSpeed(fdt: CGFloat) {
         var target = baseTargetSpeed
-        if elapsed < boostUntil { target = baseTargetSpeed * 1.4 }
+        if elapsed < jetpackUntil { target = baseTargetSpeed * 1.5 }
+        else if elapsed < boostUntil { target = baseTargetSpeed * 1.4 }
         currentSpeed += (target - currentSpeed) * min(1, fdt * 0.7)
     }
 
@@ -627,10 +642,43 @@ final class GameScene: SKScene {
                 case .slug:
                     damage(12, seg: seg)
                     toRemove.append((seg, spec))
+                case .enemy:
+                    // The highway pest shoves the snail toward the edge of the
+                    // road as well as denting the meter.
+                    damage(14, seg: seg)
+                    targetX = max(-1, min(1, playerX + (playerX >= 0 ? 0.45 : -0.45)))
+                    toRemove.append((seg, spec))
+                case .barrier:
+                    // A fence or cage pillar: cut the speed and nudge the snail
+                    // off it, but leave the barrier standing.
+                    currentSpeed *= 0.35
+                    damage(8, seg: seg)
+                    let push: CGFloat = playerX >= spec.offset ? 0.3 : -0.3
+                    targetX = max(-1, min(1, playerX + push))
                 case .turret:
                     damage(14, seg: seg)
                 case .hole:
-                    beginFall(offset: spec.offset)
+                    // A ramp launch or a jetpack carries the snail over a pit.
+                    if hopTimer < 0 && elapsed >= jetpackUntil {
+                        beginFall(offset: spec.offset)
+                    }
+                case .ramp:
+                    launch(power: 1.0)
+                case .trampoline:
+                    launch(power: 1.5)
+                case .jetpack:
+                    jetpackUntil = elapsed + 3.5
+                    invincibleUntil = max(invincibleUntil, jetpackUntil)
+                    Sound.shared.play(.boost)
+                    toRemove.append((seg, spec))
+                case .ringNormal:
+                    state.sheet.ring += 150
+                    currentSpeed = min(baseTargetSpeed * 1.5,
+                                       currentSpeed + baseTargetSpeed * 0.35)
+                    Sound.shared.play(.collect)
+                    toRemove.append((seg, spec))
+                case .arch:
+                    break
                 case .postOffice:
                     break
                 }
@@ -663,6 +711,19 @@ final class GameScene: SKScene {
     }
 
     // MARK: - Falling into a hole
+
+    /// Fly off a ramp or trampoline: a short hop that clears pits and hazards,
+    /// with a burst of speed for the landing.
+    private func launch(power: CGFloat) {
+        guard fallTimer < 0, hopTimer < 0 else { return }
+        hopTimer = 0
+        hopPower = power
+        invincibleUntil = max(invincibleUntil, elapsed + hopDuration + 0.15)
+        currentSpeed = min(baseTargetSpeed * 1.6,
+                           currentSpeed + baseTargetSpeed * 0.5 * power)
+        boostUntil = max(boostUntil, elapsed + 0.5)
+        Sound.shared.play(.boost)
+    }
 
     /// Drop the snail into a pit. Contact damage is suppressed while falling —
     /// the plunge itself is the punishment, and it is applied on the way out.
@@ -823,10 +884,17 @@ final class GameScene: SKScene {
             snail.position = CGPoint(x: size.width * 0.5, y: size.height * 0.17)
             snail.zRotation = -playerX * 0.22
             snail.setScale(snailBaseScale)
-            Sprites.setBoost(snail, on: elapsed < boostUntil || currentSpeed > baseTargetSpeed * 1.05)
+            Sprites.setBoost(snail, on: elapsed < boostUntil || elapsed < jetpackUntil
+                             || currentSpeed > baseTargetSpeed * 1.05)
             // Blink while the post-hit invulnerability is active.
             snail.alpha = elapsed < invincibleUntil ? 0.45 + 0.55 * abs(sin(elapsed * 22)) : 1
             snail.position.y += sin(elapsed * 14) * 2
+            // Riding a ramp: arc the snail up and over the road.
+            if hopTimer >= 0 {
+                let p = hopTimer / hopDuration
+                snail.position.y += sin(p * .pi) * 70 * hopPower
+                snail.zRotation += sin(p * .pi) * 0.3 * hopPower
+            }
         }
         if let shadow = childNode(withName: "snailshadow") {
             shadow.position = CGPoint(x: snail.position.x, y: snail.position.y - 34)

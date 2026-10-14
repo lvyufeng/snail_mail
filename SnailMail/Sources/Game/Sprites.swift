@@ -161,7 +161,8 @@ enum Sprites {
 
     /// Kinds that sit on the road and therefore want a contact shadow.
     private static let groundKinds: Set<EntityKind> = [
-        .parcel, .salt, .asteroid, .slug, .turret, .heart
+        .parcel, .salt, .asteroid, .slug, .turret, .heart,
+        .barrier, .enemy, .ramp, .trampoline, .jetpack
     ]
 
     private static func makeEntityBody(_ kind: EntityKind, fringe: UIColor) -> SKNode {
@@ -176,7 +177,14 @@ enum Sprites {
         case .ringUpgrade: return makeRing(color: good)
         case .ringSlow:    return makeRing(color: UIColor(hex: "#7A5CFF"))
         case .ringExplode: return makeRing(color: gold)
+        case .ringNormal:  return makeRing(color: UIColor(hex: "#EAF2FF"))
+        case .arch:        return makeArch()
         case .hole:        return makeHole()
+        case .barrier:     return makeBarrier()
+        case .enemy:       return makeEnemy()
+        case .ramp:        return makeRamp()
+        case .trampoline:  return makeTrampoline()
+        case .jetpack:     return makeJetpackPickup()
         }
     }
 
@@ -313,6 +321,103 @@ enum Sprites {
         return root
     }
 
+    /// A fence post with two rails: the blue highway barrier, the cage pillars
+    /// and the rail fences the retail grids place across the road. Solid to the
+    /// touch, so it is drawn to read as a hard object rather than a pickup.
+    private static func makeBarrier() -> SKNode {
+        let root = SKNode()
+        root.addChild(roundRect(14, 96, CGPoint(x: 0, y: 0), radius: 5, fill: metal, line: 3))
+        root.addChild(roundRect(46, 14, CGPoint(x: 0, y: 22), radius: 4, fill: cyan, line: 3))
+        root.addChild(roundRect(46, 14, CGPoint(x: 0, y: -18), radius: 4, fill: cyan, line: 3))
+        root.addChild(circle(6, CGPoint(x: 0, y: 44), fill: gold, stroke: ink, line: 2))
+        return root
+    }
+
+    /// The "evil" the tutorial warns about: a spiky pest that rams the snail
+    /// off the highway. Angular dark spikes and a hot magenta core make it read
+    /// as hostile next to the round, friendly pickups.
+    private static func makeEnemy() -> SKNode {
+        let root = SKNode()
+        let spikes = 8
+        let p = CGMutablePath()
+        for i in 0..<(spikes * 2) {
+            let a = CGFloat(i) / CGFloat(spikes * 2) * .pi * 2
+            let r: CGFloat = i % 2 == 0 ? 40 : 22
+            let pt = CGPoint(x: cos(a) * r, y: sin(a) * r)
+            if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+        }
+        p.closeSubpath()
+        root.addChild(shape(p, fill: UIColor(hex: "#8A1B52"), line: 4))
+        root.addChild(circle(15, .zero, fill: magenta, line: 3))
+        root.addChild(circle(5, CGPoint(x: -5, y: 3), fill: ink, stroke: .clear, line: 0))
+        root.addChild(circle(5, CGPoint(x: 5, y: 3), fill: ink, stroke: .clear, line: 0))
+        return root
+    }
+
+    /// A launch ramp: a gold wedge with a bright chevron, so the player reads
+    /// "hit this to fly" at a glance.
+    private static func makeRamp() -> SKNode {
+        let root = SKNode()
+        let p = CGMutablePath()
+        p.addLines(between: [CGPoint(x: -44, y: -22), CGPoint(x: 44, y: -22), CGPoint(x: 0, y: 34)])
+        p.closeSubpath()
+        root.addChild(shape(p, fill: gold, line: 4))
+        for dy in [CGFloat(0), -16] {
+            let chevron = CGMutablePath()
+            chevron.addLines(between: [CGPoint(x: -18, y: -4 + dy),
+                                       CGPoint(x: 0, y: 12 + dy),
+                                       CGPoint(x: 18, y: -4 + dy)])
+            let n = SKShapeNode(path: chevron)
+            n.strokeColor = ink
+            n.lineWidth = 5
+            n.lineCap = .round
+            root.addChild(n)
+        }
+        return root
+    }
+
+    /// A trampoline pad: a stretchy cyan deck on a coil, the springier cousin
+    /// of the ramp.
+    private static func makeTrampoline() -> SKNode {
+        let root = SKNode()
+        for i in 0..<3 {
+            let w = 52 - CGFloat(i) * 14
+            root.addChild(shape(CGPath(ellipseIn: CGRect(x: -w / 2, y: -26 + CGFloat(i) * 8,
+                                                         width: w, height: 16), transform: nil),
+                                fill: metalLo, line: 2))
+        }
+        root.addChild(roundRect(76, 18, CGPoint(x: 0, y: 6), radius: 9, fill: cyan, line: 3))
+        root.addChild(line(from: CGPoint(x: -20, y: 6), to: CGPoint(x: 20, y: 6), width: 3,
+                           color: .white.withAlphaComponent(0.7)))
+        return root
+    }
+
+    /// The jetpack pickup: a stubby pack with a live exhaust, matching the one
+    /// already strapped to Turbo.
+    private static func makeJetpackPickup() -> SKNode {
+        let root = SKNode()
+        root.addChild(roundRect(46, 52, CGPoint(x: 0, y: 0), radius: 10, fill: metal, line: 3))
+        root.addChild(roundRect(24, 30, CGPoint(x: 0, y: 2), radius: 6, fill: metalLo, line: 2))
+        for sgn in [-1.0, 1.0] as [CGFloat] {
+            root.addChild(line(from: CGPoint(x: sgn * 15, y: -26), to: CGPoint(x: sgn * 15, y: -40),
+                               width: 8, color: metalLo))
+            root.addChild(circle(6, CGPoint(x: sgn * 15, y: -44), fill: gold, stroke: ink, line: 2))
+        }
+        return root
+    }
+
+    /// A decorative arch — the `Ring=None` rows. It hangs over the road and does
+    /// nothing, so it is drawn faint and does not pulse like a live pickup.
+    private static func makeArch() -> SKNode {
+        let root = SKNode()
+        let ring = SKShapeNode(circleOfRadius: 40)
+        ring.fillColor = .clear
+        ring.strokeColor = UIColor(hex: "#CFB8FF").withAlphaComponent(0.5)
+        ring.lineWidth = 6
+        root.addChild(ring)
+        return root
+    }
+
     // MARK: - Projectiles
 
     /// The three weapons the pickup ladder climbs: the blaster's pellet, the
@@ -420,8 +525,12 @@ enum Sprites {
         case .hole: 120
         case .slug: 70
         case .turret: 80
-        case .ringUpgrade, .ringSlow, .ringExplode: 88
+        case .ringUpgrade, .ringSlow, .ringExplode, .ringNormal, .arch: 88
         case .asteroid: 80
+        case .enemy: 76
+        case .ramp: 80
+        case .trampoline: 84
+        case .barrier: 44
         default: 48
         }
     }

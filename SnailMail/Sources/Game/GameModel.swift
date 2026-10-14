@@ -71,20 +71,27 @@ enum EntityKind: CaseIterable {
     case ringUpgrade   // power-up ring: raises the weapon tier toward rockets
     case ringSlow      // a dark ring that slows you (avoid)
     case ringExplode   // yellow ring that detonates nearby enemies
+    case ringNormal    // plain scoring ring on the route
+    case arch          // decorative ring, no effect
+    case barrier       // fence / wall piece: solid, dents the meter
+    case enemy         // the highway "evil", shootable, knocks you aside
+    case ramp          // launches the snail clean over a gap
+    case trampoline    // a springier launch
+    case jetpack       // pickup: brief burst of flight
     case turret        // immobile, cannot be destroyed, steer around
     case hole          // gap in the road; falling costs health
     case postOffice    // the finish line
 
     var isShootable: Bool {
         switch self {
-        case .asteroid, .slug: true
+        case .asteroid, .slug, .enemy: true
         default: false
         }
     }
 
     var hurtsOnContact: Bool {
         switch self {
-        case .salt, .slug, .turret, .hole, .ringSlow: true
+        case .salt, .slug, .turret, .hole, .ringSlow, .barrier, .enemy: true
         default: false
         }
     }
@@ -534,6 +541,12 @@ enum TrackBuilder {
 
             var sprites: [EntitySpec] = []
             var saltCount = 0
+            // A row wall-to-wall of one fence character is the lip of a ledge
+            // the road runs across, not a fence to weave through, so it must
+            // stay passable. Only a fence that leaves a gap to thread counts.
+            let band = row[lo...hi]
+            let fenceChars: Set<Character> = ["|", "=", "-", "{", "}"]
+            let solidRow = band.allSatisfy { fenceChars.contains($0) }
             var col = 0
             while col < 8 {
                 let ch = row[col]
@@ -566,8 +579,31 @@ enum TrackBuilder {
                     sprites.append(EntitySpec(kind: .ringSlow, offset: 0, depth: 0.5))
                 case ">":
                     sprites.append(EntitySpec(kind: .ringExplode, offset: 0, depth: 0.5))
+                case "!":
+                    sprites.append(EntitySpec(kind: .ringNormal, offset: 0, depth: 0.5))
+                case "o":
+                    sprites.append(EntitySpec(kind: .arch, offset: 0, depth: 0.5))
                 case "*":
                     sprites.append(EntitySpec(kind: .parcel, offset: 0, depth: 0.5))
+                case "$":
+                    sprites.append(EntitySpec(kind: .parcel, offset: across(col), depth: 0.5))
+                case "|", "=", "-", "{", "}":
+                    // Fences, rails and the pillars of a cage: solid pieces the
+                    // snail has to thread between. A full-width row is a ledge
+                    // lip, so it is left clear.
+                    if !solidRow {
+                        sprites.append(EntitySpec(kind: .barrier, offset: across(col),
+                                                  depth: 0.5))
+                    }
+                case "<", "R":
+                    sprites.append(EntitySpec(kind: .ramp, offset: across(col), depth: 0.5))
+                case "(":
+                    sprites.append(EntitySpec(kind: .trampoline, offset: across(col),
+                                              depth: 0.5))
+                case "[":
+                    sprites.append(EntitySpec(kind: .enemy, offset: across(col), depth: 0.5))
+                case "J":
+                    sprites.append(EntitySpec(kind: .jetpack, offset: across(col), depth: 0.5))
                 default:
                     break
                 }

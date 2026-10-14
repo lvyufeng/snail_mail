@@ -50,8 +50,14 @@ d0 32 12 70 4c a6 86 b4 a8 da ca e8 e4 fe fe fc
 """
 KEY = bytes.fromhex(_KEY_HEX)
 
+# A `Ring=` row draws a pickup ring, but the glyph sitting in the grid
+# (`>`, `<`, `{`, `}`, `(`, `)`, `R`) only describes how it is oriented on the
+# road. The attribute names the effect, so fold every glyph to a token the
+# renderer can act on: power-up, slow, blast, a plain scoring ring, and a
+# decorative arch that does nothing.
+RING_GLYPHS = set("><{}()R")
 RING = {"powerup": "+", "slow": "~", "explode": ">", "explosive": ">",
-        "normal": ">", "none": "-"}
+        "normal": "!", "none": "o"}
 
 
 def deobfuscate(data):
@@ -124,31 +130,28 @@ def parse_level(txt):
 
 
 def parse_segment(txt):
-    """Return (grid, path) for one segment: its rows plus its `Path=` family."""
-    rows, rings, path = [], [], ""
+    """Return (grid, path) for one segment: its rows plus its `Path=` family.
+
+    A row tagged `Ring=<effect>` is folded so each of its orientation glyphs
+    becomes the token naming that ring's effect (see `RING`). `Parcel=` rows
+    carry a single parcel's 3D position as metadata on an otherwise blank row;
+    the parcels the player actually grabs are the `$` cells in the grid, so
+    the metadata row is left blank rather than expanded into a band of parcels.
+    """
+    rows, path = [], ""
     for line in txt.splitlines():
         m = re.match(r"^@(.{8})@(.*)$", line)
         if m:
             row, attr = m.group(1), m.group(2)
             ring = re.search(r"Ring=(\w+)", attr)
             if ring:
-                rings.append((len(rows), RING.get(ring.group(1).lower(), "-")))
-            parcel = re.search(r"Parcel=(\d+)", attr)
-            if parcel and int(parcel.group(1)) > 0:
-                row = "*" * 8
+                token = RING.get(ring.group(1).lower(), "-")
+                row = "".join(token if c in RING_GLYPHS else c for c in row)
             rows.append(row)
         p = re.search(r"Path=(\S+)", line)
         if p:
             path = p.group(1)
-    # Fold the ring kind into its `>` cell. A `>` row with no `Ring=` within a
-    # row is a decorative arch, not a pickup, and folds to `-`.
-    out = []
-    for i, row in enumerate(rows):
-        if ">" in row:
-            near = [t for (j, t) in rings if abs(j - i) <= 1]
-            row = row.replace(">", near[0] if near else "-")
-        out.append(row)
-    return "".join(out), path
+    return "".join(rows), path
 
 
 def swift_string(s):
@@ -210,10 +213,12 @@ def main():
         "//",
         "// The grids are 8 columns wide per row, concatenated into one string per",
         "// segment (so `grid[key]!.count / 8` is the row count).  Characters:",
-        "//   `.`/`_` road (smooth/rough), `@` wall, ` ` off-road, `#` pit, `s` salt,",
-        "//   `M` meteor, `&` slug, `0` turret, `1`-`3` enemies, `*` parcel, `>` ring",
-        "//   (explosive), `+` power-up ring, `~` slow ring, `R` ramp, `J` jetpack,",
-        "//   `P`/`p` path marker, `$`/`o`/`O`/`|`/`=`/`{`/`}`/`<`/`(`/`)` decoration.",
+        "//   `.`/`_` road (smooth/rough), `@` side wall, ` ` off-road/airborne gap,",
+        "//   `#` pit, `s` salt, `M` meteor, `&` slug, `0` turret, `1`-`3` enemies,",
+        "//   `$` parcel, `>` blast ring, `+` power-up ring, `~` slow ring,",
+        "//   `!` plain scoring ring, `o` decorative arch, `<`/`R` ramp,",
+        "//   `(` trampoline, `J` jetpack, `[` highway enemy,",
+        "//   `|`/`=`/`-`/`{`/`}` fence or wall pieces, `P`/`p` path-centre markers.",
         "",
         "enum TrackData {",
         "",
