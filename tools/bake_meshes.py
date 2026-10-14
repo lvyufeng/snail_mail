@@ -212,6 +212,14 @@ def trim(img, path, margin=2):
     img.save(path)
 
 
+# The one window all eight pillars are rendered in: `(centre x, centre y,
+# span)` in projected model units, with the model drawn at unit zoom so the
+# canvas is exactly this many units across. Every pillar spans y -1.000...7.273
+# and differs only in half-width 0.520...3.999, so this window holds the tallest
+# and widest of them with a little air while leaving the tier-1 post the same
+# pixel height the trimmed `pillar.png` billboard used to carry.
+PILLAR_FRAME = (0.0, 3.0455, 8.6)
+
 # model file -> (output name, view). The angles were chosen by eye so each
 # object shows the face the chase camera sees: signs and the post office look
 # straight at the player, the snail and props are tipped to match the road's
@@ -221,7 +229,19 @@ BAKE = [
     ("turbo-damaged-000.x", "snail-damage", dict(yaw=0.0, pitch=-0.34)),
     ("turbo-base-000.x", "snail-invincible", dict(yaw=0.0, pitch=-0.34)),
     ("salt.x", "salt", dict(yaw=-0.5, pitch=-0.5)),
-    ("pillar1.x", "pillar", dict(yaw=0.0, pitch=-0.18)),
+    # The eight pillar meshes the build ships (`X/PILLAR1..8.X2`) are the same
+    # post modelled at eight widths, which is how a course turns a slim turret
+    # into one big enough to close the road. They are drawn inside one shared
+    # window so the same node width keeps every tier the same height and lets
+    # each tier's own model decide how far it reaches across the road.
+    ("pillar1.x", "pillar-1", dict(yaw=0.0, pitch=-0.18, zoom=1.0, frame=PILLAR_FRAME)),
+    ("pillar2.x", "pillar-2", dict(yaw=0.0, pitch=-0.18, zoom=1.0, frame=PILLAR_FRAME)),
+    ("pillar3.x", "pillar-3", dict(yaw=0.0, pitch=-0.18, zoom=1.0, frame=PILLAR_FRAME)),
+    ("pillar4.x", "pillar-4", dict(yaw=0.0, pitch=-0.18, zoom=1.0, frame=PILLAR_FRAME)),
+    ("pillar5.x", "pillar-5", dict(yaw=0.0, pitch=-0.18, zoom=1.0, frame=PILLAR_FRAME)),
+    ("pillar6.x", "pillar-6", dict(yaw=0.0, pitch=-0.18, zoom=1.0, frame=PILLAR_FRAME)),
+    ("pillar7.x", "pillar-7", dict(yaw=0.0, pitch=-0.18, zoom=1.0, frame=PILLAR_FRAME)),
+    ("pillar8.x", "pillar-8", dict(yaw=0.0, pitch=-0.18, zoom=1.0, frame=PILLAR_FRAME)),
     ("tramp.x", "tramp", dict(yaw=0.0, pitch=-0.55)),
     ("postofficestop.x", "postoffice", dict(yaw=0.0, pitch=-0.12)),
     ("signbang.x", "signbang", dict(yaw=0.0, pitch=-0.1)),
@@ -346,7 +366,14 @@ def bake_all(x_dir, tex_dir, out_dir, size=256, log=print):
         try:
             img = render(src, tex_dir, size=size,
                          tex_override=OVERRIDE_TEX.get(name), **view)
-            trim(img, os.path.join(out_dir, name + ".png"))
+            dst = os.path.join(out_dir, name + ".png")
+            # Anything drawn inside an explicit `frame` is saved whole: the
+            # window is what gives the picture its scale, so cropping it to the
+            # model's own bounds would undo the shared framing.
+            if view.get("frame") is None:
+                trim(img, dst)
+            else:
+                img.save(dst)
             written += 1
         except Exception as exc:                      # noqa: BLE001
             log("bake: %s failed: %s" % (model, exc))

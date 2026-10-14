@@ -278,14 +278,16 @@ enum Sprites {
 
     // MARK: - Entities
 
-    static func makeEntity(_ kind: EntityKind, fringe: UIColor) -> SKNode {
-        let body = makeEntityBody(kind, fringe: fringe)
+    static func makeEntity(_ kind: EntityKind, fringe: UIColor, tier: Int = 0) -> SKNode {
+        let body = makeEntityBody(kind, fringe: fringe, tier: tier)
         guard groundKinds.contains(kind) else { return body }
         // A soft contact shadow so road objects read as sitting on the track
         // instead of floating. It scales with the sprite, so it stays correct
         // at every depth.
         let root = SKNode()
-        let w = entityBaseWidth(kind)
+        // The shadow follows the drawn width, so a big pillar of a cage keeps
+        // its own footprint on the road rather than the slim post's.
+        let w = entityFootprint(kind, tier: tier)
         let shadow = SKShapeNode(ellipseOf: CGSize(width: w * 0.95, height: w * 0.30))
         shadow.fillColor = UIColor.black.withAlphaComponent(0.32)
         shadow.strokeColor = .clear
@@ -302,15 +304,15 @@ enum Sprites {
         .barrier, .enemy, .ramp, .trampoline, .jetpack
     ]
 
-    private static func makeEntityBody(_ kind: EntityKind, fringe: UIColor) -> SKNode {
-        if let retail = makeRetailEntity(kind) { return retail }
+    private static func makeEntityBody(_ kind: EntityKind, fringe: UIColor, tier: Int) -> SKNode {
+        if let retail = makeRetailEntity(kind, tier: tier) { return retail }
         switch kind {
         case .parcel:      return makeParcel()
         case .salt:        return makeSalt()
         case .heart:       return makeHeart()
         case .asteroid:    return makeAsteroid()
         case .slug:        return makeSlug()
-        case .turret:      return makePillar()
+        case .turret:      return makePillar(tier: tier)
         case .postOffice:  return makePostOffice()
         case .ringUpgrade: return makeRing(color: good)
         case .ringSlow:    return makeRing(color: UIColor(hex: "#7A5CFF"))
@@ -332,7 +334,7 @@ enum Sprites {
     /// The retail billboard for a road entity, or nil to fall back to the flat
     /// drawing. Each sprite is sized to the width the renderer already scales
     /// `entityBaseWidth` against, so swapping the art in does not move anything.
-    private static func makeRetailEntity(_ kind: EntityKind) -> SKNode? {
+    private static func makeRetailEntity(_ kind: EntityKind, tier: Int) -> SKNode? {
         let w = entityBaseWidth(kind)
         switch kind {
         case .parcel:
@@ -348,7 +350,8 @@ enum Sprites {
         case .slug:
             return retail("Art/Sprites/slug000.png", width: w)
         case .turret:
-            return retail("Art/Baked/pillar.png", width: w)
+            return retail("Art/Baked/pillar-\(clampPillarTier(tier)).png",
+                          width: pillarCanvasWidth())
         case .postOffice:
             return retail("Art/Baked/postoffice.png", width: w)
         case .ringUpgrade, .ringNormal:
@@ -448,11 +451,56 @@ enum Sprites {
         return root
     }
 
-    private static func makePillar() -> SKNode {
+    /// The retail build models its turrets as the same post at eight widths
+    /// (`X/PILLAR1..8.X2`), which is how a course raises a slim pillar into one
+    /// wide enough to block the road. Every tier spans the same height and the
+    /// same depth; these are the widths they stand at, straight from the meshes.
+    private static let pillarTierSpan: [CGFloat] = [
+        1.040, 1.711, 2.739, 3.654, 4.855, 5.826, 6.853, 7.998,
+    ]
+    /// The window `tools/bake_meshes.py` renders all eight of them inside, in
+    /// those same units. Because the window is shared, the post covers
+    /// `1.040 / 8.6` of the canvas it is drawn on — which is what turns the
+    /// canvas width below into the post's own footprint.
+    private static let pillarCanvasSpan: CGFloat = 8.6
+
+    /// A pillar tier outside what the build ships would have no mesh to draw,
+    /// so clamp it to the eight there are.
+    private static func clampPillarTier(_ tier: Int) -> Int {
+        max(1, min(pillarTierSpan.count, tier))
+    }
+
+    /// How much wider a pillar of `tier` stands than the slim tier-1 post, as
+    /// the ratio of their meshes. The renderer scales the pillar's footprint
+    /// and its collision with this, so what is drawn is what the snail hits.
+    static func pillarWidthFactor(_ tier: Int) -> CGFloat {
+        let t = clampPillarTier(tier)
+        return pillarTierSpan[t - 1] / pillarTierSpan[0]
+    }
+
+    /// The node size a pillar is built at. Because every tier is drawn inside
+    /// the same window, one node width keeps them all the same height and lets
+    /// each mesh's own proportions decide how far it reaches across the road.
+    private static func pillarCanvasWidth() -> CGFloat {
+        entityBaseWidth(.turret) * pillarCanvasSpan / pillarTierSpan[0]
+    }
+
+    /// How much of the road an entity covers, which is what its shadow and
+    /// collision are cut to. A turret's tiers reach further across than the slim
+    /// post they start as.
+    static func entityFootprint(_ kind: EntityKind, tier: Int) -> CGFloat {
+        entityBaseWidth(kind) * (kind == .turret ? pillarWidthFactor(tier) : 1)
+    }
+
+    private static func makePillar(tier: Int) -> SKNode {
+        // The stand-in for a checkout without the retail meshes: the flat post
+        // from the procedural art, thickening with the tier so the course still
+        // reads the way it plays.
+        let f = pillarWidthFactor(tier)
         let root = SKNode()
-        root.addChild(roundRect(34, 90, CGPoint(x: 0, y: 0), radius: 8, fill: metal, line: 3))
-        root.addChild(roundRect(52, 26, CGPoint(x: 0, y: 40), radius: 8, fill: metalLo, line: 3))
-        root.addChild(circle(7, CGPoint(x: 0, y: 40), fill: danger, stroke: ink, line: 2))
+        root.addChild(roundRect(34 * f, 90, CGPoint(x: 0, y: 0), radius: 8, fill: metal, line: 3))
+        root.addChild(roundRect(52 * f, 26, CGPoint(x: 0, y: 40), radius: 8, fill: metalLo, line: 3))
+        root.addChild(circle(7 * f, CGPoint(x: 0, y: 40), fill: danger, stroke: ink, line: 2))
         return root
     }
 

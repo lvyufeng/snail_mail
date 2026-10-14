@@ -103,6 +103,16 @@ final class GameScene: SKScene {
     /// shell and stays there for the results screen.
     private var slugged = false
     private var lastUpdate: TimeInterval = 0
+    /// Screenshot hooks: a stream pinned by `-seed N`, so a scene lays its
+    /// drifting stars out identically twice in a row, and `-freeze N`, which
+    /// stops the clock after N frames so two captures of a running race show
+    /// the same instant of the same course.
+    private var sceneRandom = CourseRandom.launched()
+    private var framesToFreeze = -1
+    private var framesRun = 0
+    /// `-turret N`: the tier of the pillar the debug hook keeps parked ahead.
+    private var debugTurretTier: Int?
+    private var debugTurretSegment: Int?
     /// >= 0 while the snail is dropping into a hole; -1 the rest of the time.
     private var fallTimer: CGFloat = -1
     /// Where the pit sat across the road, so the snail climbs out beside it.
@@ -166,8 +176,14 @@ final class GameScene: SKScene {
     private let detailMinHeight: CGFloat = 4
     private var wallLeftPool: [SKShapeNode] = []
     private var wallRightPool: [SKShapeNode] = []
-    private var entityPool: [EntityKind: [SKNode]] = [:]
-    private var entityUse: [EntityKind: Int] = [:]
+    /// Entities are pooled per kind. A turret also pools per size tier, because
+    /// the build ships eight pillar meshes and one course can raise all of them.
+    private struct EntityKey: Hashable {
+        let kind: EntityKind
+        let tier: Int
+    }
+    private var entityPool: [EntityKey: [SKNode]] = [:]
+    private var entityUse: [EntityKey: Int] = [:]
     /// Idle bullets are pooled per weapon tier so an upgrade immediately swaps
     /// the look — a tier-1 pellet must never come back as a rocket.
     private var bulletPool: [Int: [SKNode]] = [:]
@@ -212,6 +228,10 @@ final class GameScene: SKScene {
     /// Screenshot hooks: `-weapon N` starts at a weapon tier with autofire enabled.
     private func applyDebugArguments() {
         let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-freeze"), i + 1 < args.count,
+           let frames = Int(args[i + 1]) {
+            framesToFreeze = frames
+        }
         guard let i = args.firstIndex(of: "-weapon"), i + 1 < args.count,
               let level = Int(args[i + 1]) else { return }
         state.weaponLevel = max(1, min(level, state.maxWeaponLevel))
@@ -291,6 +311,16 @@ final class GameScene: SKScene {
             segments[idx].sprites.removeAll { $0.kind == .jetpack }
             segments[idx].sprites.append(EntitySpec(kind: .jetpack, offset: 0, depth: 0.5))
         }
+        let launchArgs = ProcessInfo.processInfo.arguments
+        if let arg = launchArgs.firstIndex(of: "-turret"), arg + 1 < launchArgs.count,
+           let tier = Int(launchArgs[arg + 1]) {
+            startRace()
+            // Keep a pillar of the given tier just ahead of the snail, so one of
+            // the eight meshes can be looked at from close range without driving
+            // a course that happens to spell that digit.
+            debugTurretTier = tier
+            parkDebugTurret()
+        }
         #endif
     }
 
@@ -356,11 +386,15 @@ final class GameScene: SKScene {
         for _ in 0..<2 {
             let layer = SKNode()
             for _ in 0..<60 {
-                let star = SKShapeNode(circleOfRadius: CGFloat.random(in: 0.8...2.4))
-                star.fillColor = UIColor(white: 1, alpha: CGFloat.random(in: 0.3...0.95))
+                let star = SKShapeNode(circleOfRadius: CGFloat.random(in: 0.8...2.4,
+                                                                     using: &sceneRandom))
+                star.fillColor = UIColor(white: 1, alpha: CGFloat.random(in: 0.3...0.95,
+                                                                        using: &sceneRandom))
                 star.strokeColor = .clear
-                star.position = CGPoint(x: CGFloat.random(in: 0...size.width),
-                                        y: CGFloat.random(in: size.height * 0.45...size.height))
+                star.position = CGPoint(x: CGFloat.random(in: 0...size.width,
+                                                          using: &sceneRandom),
+                                        y: CGFloat.random(in: size.height * 0.45...size.height,
+                                                          using: &sceneRandom))
                 layer.addChild(star)
             }
             starLayers.append(layer)
@@ -565,7 +599,21 @@ final class GameScene: SKScene {
     override func update(_ currentTime: TimeInterval) {
         defer { lastUpdate = currentTime }
         guard lastUpdate > 0 else { return }
-        let dt = min(currentTime - lastUpdate, 1.0 / 30.0)
+        #if DEBUG
+        // `-freeze N` runs N frames and then holds: the scene stops ticking, so
+        // a screenshot taken seconds later still shows the same instant.
+        if framesToFreeze >= 0 {
+            if framesRun >= framesToFreeze {
+                isPaused = true
+                return
+            }
+            framesRun += 1
+        }
+        #endif
+        // A frozen capture steps on a fixed clock: the race the Nth frame draws
+        // then depends only on N, so two launches land on the same instant of
+        // the same course instead of drifting apart with the machine's hitches.
+        let dt = framesToFreeze >= 0 ? 1.0 / 60.0 : min(currentTime - lastUpdate, 1.0 / 30.0)
         let fdt = CGFloat(dt)
 
         scrollStars(fdt: fdt)
@@ -622,12 +670,34 @@ final class GameScene: SKScene {
         updateGapFlight()
         handleCollisions()
         updateInvincibility()
+        #if DEBUG
+        parkDebugTurret()
+        #endif
         renderRoad()
         // Shots are moved and resolved against this frame's projections.
         updateBullets(fdt: fdt)
         updateEnemyFire(fdt: fdt)
         publish()
     }
+
+    #if DEBUG
+    /// Keeps the `-turret N` pillar a fixed number of segments ahead of the
+    /// snail, re-parking it as he advances rather than leaving it on the start
+    /// line, so a frozen capture always shows it from the same close range.
+    private func parkDebugTurret() {
+        guard let tier = debugTurretTier else { return }
+        let ahead = 3 * segmentLength
+        let idx = segmentIndex(at: positionZ + playerZ + ahead)
+        guard idx != debugTurretSegment else { return }
+        if let old = debugTurretSegment, old >= 0, old < segments.count {
+            segments[old].sprites.removeAll { $0.kind == .turret }
+        }
+        segments[idx].sprites.removeAll { $0.kind == .turret }
+        segments[idx].sprites.append(EntitySpec(kind: .turret, offset: 0,
+                                                depth: 0.5, tier: tier))
+        debugTurretSegment = idx
+    }
+    #endif
 
     private func updateSpeed(fdt: CGFloat) {
         var target = baseTargetSpeed
@@ -649,7 +719,7 @@ final class GameScene: SKScene {
                 star.position.y -= CGFloat(s) * fdt
                 if star.position.y < size.height * 0.4 {
                     star.position.y = size.height + 4
-                    star.position.x = CGFloat.random(in: 0...size.width)
+                    star.position.x = CGFloat.random(in: 0...size.width, using: &sceneRandom)
                 }
             }
         }
@@ -845,11 +915,18 @@ final class GameScene: SKScene {
         for idx in window {
             let seg = segments[((idx % segments.count) + segments.count) % segments.count]
             for spec in seg.sprites {
-                // A pit is as wide as it looks; everything else is a point-sized
-                // pick-up or hazard with a slim footprint.
-                let tolerance = spec.kind == .hole
-                    ? (spec.width > 0 ? spec.width : holeHalfWidth * 2) / 2 * 0.93
-                    : 0.16
+                // A pit is as wide as it looks, and a turret widens with its
+                // own mesh; everything else is a point-sized pick-up or hazard
+                // with a slim footprint.
+                let tolerance: CGFloat
+                switch spec.kind {
+                case .hole:
+                    tolerance = (spec.width > 0 ? spec.width : holeHalfWidth * 2) / 2 * 0.93
+                case .turret:
+                    tolerance = 0.16 * Sprites.pillarWidthFactor(spec.tier)
+                default:
+                    tolerance = 0.16
+                }
                 guard abs(spec.offset - playerX) < tolerance else { continue }
                 switch spec.kind {
                 case .parcel:
@@ -1595,7 +1672,7 @@ final class GameScene: SKScene {
             let p = seg.p1
             guard p.scale > 0, !p.screenW.isNaN else { continue }
             for spec in seg.sprites {
-                let node = obtainEntity(spec.kind)
+                let node = obtainEntity(EntityKey(kind: spec.kind, tier: spec.tier))
                 let ex = p.screenX + spec.offset * p.screenW
                 let ey = fy(p.screenY)
                 node.position = CGPoint(x: ex, y: ey)
@@ -1608,6 +1685,10 @@ final class GameScene: SKScene {
                 default:          widthFactor = 0.42
                 }
                 let spriteWidth = p.screenW * widthFactor
+                // A turret's tiers come out of its own artwork: every pillar is
+                // built at the same canvas width, so scaling it like the slim
+                // post lets the wider meshes fill their canvas and reach
+                // further across the road on their own.
                 let scale = spriteWidth / Sprites.entityBaseWidth(spec.kind)
                 node.setScale(max(0.02, scale))
                 node.isHidden = false
@@ -1615,27 +1696,27 @@ final class GameScene: SKScene {
             }
         }
         // Hide unused pooled entities.
-        for (kind, nodes) in entityPool {
-            let used = entityUse[kind] ?? 0
+        for (key, nodes) in entityPool {
+            let used = entityUse[key] ?? 0
             if used < nodes.count {
                 for i in used..<nodes.count { nodes[i].isHidden = true }
             }
         }
     }
 
-    private func obtainEntity(_ kind: EntityKind) -> SKNode {
-        var arr = entityPool[kind] ?? []
-        let idx = entityUse[kind] ?? 0
+    private func obtainEntity(_ key: EntityKey) -> SKNode {
+        var arr = entityPool[key] ?? []
+        let idx = entityUse[key] ?? 0
         if idx < arr.count {
-            entityUse[kind] = idx + 1
+            entityUse[key] = idx + 1
             return arr[idx]
         }
-        let node = Sprites.makeEntity(kind, fringe: fringe)
+        let node = Sprites.makeEntity(key.kind, fringe: fringe, tier: key.tier)
         node.zPosition = 6
         entityLayer.addChild(node)
         arr.append(node)
-        entityPool[kind] = arr
-        entityUse[kind] = idx + 1
+        entityPool[key] = arr
+        entityUse[key] = idx + 1
         return node
     }
 

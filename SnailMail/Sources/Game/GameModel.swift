@@ -51,6 +51,45 @@ enum GamePhase: Equatable {
     case finished(won: Bool)
 }
 
+/// The random stream a course is laid out from.
+///
+/// Every draw the builder makes — which free slice a hazard lands on, where
+/// across the road it sits, how a hill is shaped — comes from one of these, so
+/// seeding it fixes a whole level. A race normally seeds itself from the system
+/// and no two runs lay out alike; the debug hook `-seed N` pins it instead,
+/// which is what makes a screenshot of a course worth comparing with another.
+struct CourseRandom: RandomNumberGenerator {
+    private var state: UInt64
+
+    init(seed: UInt64) {
+        // Any seed will do; mixing it once here keeps neighbouring seeds from
+        // opening with near-identical draws.
+        state = seed &* 0x9E37_79B9_7F4A_7C15 &+ 0x2545_F491_4F6C_DD1D
+        if state == 0 { state = 0x9E37_79B9_7F4A_7C15 }
+    }
+
+    /// One splitmix64 step: cheap, and mixed enough that consecutive seeds lay
+    /// out unrelated courses.
+    mutating func next() -> UInt64 {
+        state = state &+ 0x9E37_79B9_7F4A_7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+        return z ^ (z >> 31)
+    }
+
+    /// The stream a fresh scene draws from: `-seed N` when the launch arguments
+    /// pin one, and a system draw otherwise.
+    static func launched() -> CourseRandom {
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-seed"), i + 1 < args.count,
+           let seed = UInt64(args[i + 1]) {
+            return CourseRandom(seed: seed)
+        }
+        return CourseRandom(seed: UInt64.random(in: .min ... .max))
+    }
+}
+
 // MARK: - Entities
 
 /// Everything that can sit on the highway, mirroring the symbols in the
@@ -175,6 +214,10 @@ struct EntitySpec {
     /// How much of the road the entity covers, as a fraction of the full width.
     /// Zero means "use the kind's own footprint" (see `GameScene`).
     var width: CGFloat = 0
+    /// Which pillar mesh a turret wears. The retail build models eight posts of
+    /// growing width and the course grid spells the one it wants with the digit
+    /// `0`...`3`; everything else uses the slim first tier.
+    var tier: Int = 1
 }
 
 /// One slice of road. The list of these forms the whole course, exactly like
@@ -402,6 +445,7 @@ struct ScoreSheet: Equatable {
 enum TrackBuilder {
 
     static let segmentLength: CGFloat = 200
+
     static let rumbleLength = 3
     static let roadWidth: CGFloat = 1500
 
@@ -594,7 +638,7 @@ enum TrackBuilder {
         }
 
         let budget = max(24, config.rows)
-        var rng = SystemRandomNumberGenerator()
+        var rng = CourseRandom.launched()
         appendSegment(route[0])
         if !pool.isEmpty {
             // Retail's `Length:` scales the speed and the clock, not the slice
@@ -748,8 +792,13 @@ enum TrackBuilder {
                 case "&":
                     sprites.append(EntitySpec(kind: .slug, offset: across(col), depth: 0.5))
                 case "0", "1", "2", "3":
-                    sprites.append(EntitySpec(kind: ch == "0" ? .turret : .asteroid,
-                                              offset: across(col), depth: 0.5))
+                    // The digits are the turrets, and which digit it is says how
+                    // big a pillar the piece wants: the build ships the same
+                    // post modelled at eight widths, so `0` is the slim one to
+                    // weave past and each step up stands wider across the road.
+                    sprites.append(EntitySpec(kind: .turret, offset: across(col),
+                                              depth: 0.5,
+                                              tier: (ch.wholeNumberValue ?? 0) + 1))
                 case "#":
                     // A pit is as wide as the run of cells it covers, so it can
                     // be steered around exactly like the original's.
@@ -923,7 +972,7 @@ enum TrackBuilder {
     /// them has to add this layer itself.
     private static func scatterHazards(_ segments: inout [RoadSegment],
                                        config: LevelConfig,
-                                       rng: inout SystemRandomNumberGenerator) {
+                                       rng: inout CourseRandom) {
         guard !config.guided, segments.count > 60 else { return }
 
         // Fill only the slices the grids left empty, so a scattered hazard
@@ -963,7 +1012,7 @@ enum TrackBuilder {
 
     static func build(_ config: LevelConfig) -> [RoadSegment] {
         var segments: [RoadSegment] = []
-        var rng = SystemRandomNumberGenerator()
+        var rng = CourseRandom.launched()
 
         func lastY() -> CGFloat { segments.last?.p2.world.y ?? 0 }
 
@@ -1030,7 +1079,7 @@ enum TrackBuilder {
         return segments
     }
 
-    private static func scatterEntities(_ segments: inout [RoadSegment], config: LevelConfig, rng: inout SystemRandomNumberGenerator) {
+    private static func scatterEntities(_ segments: inout [RoadSegment], config: LevelConfig, rng: inout CourseRandom) {
         guard segments.count > 60 else { return }
         let usable = Array(segments[20..<(segments.count - 30)])
 
