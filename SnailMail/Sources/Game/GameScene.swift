@@ -72,6 +72,9 @@ final class GameScene: SKScene {
     private var hopPower: CGFloat = 0
     /// Left while the jetpack carries the snail over everything on the road.
     private var jetpackUntil: CGFloat = 0
+    /// How far the snail has got through `TrackData.tutorialScript`, or -1
+    /// while it is still on the pieces before the first scripted line.
+    private var tutorialStep = -1
     /// World z of the `JetPackOff` piece that ends the current jetpack flight,
     /// or 0 while it is a plain timed flight. The levels always drop the
     /// switch-off piece just past the gaps the jetpack is meant to clear, so
@@ -362,6 +365,8 @@ final class GameScene: SKScene {
         gapArc = 0
         jetpackUntil = 0
         jetpackOffZ = 0
+        tutorialStep = -1
+        state.tutorialMessage = ""
         fireCooldown = 0
         clearBullets()
         snail.setScale(snailBaseScale)
@@ -437,6 +442,7 @@ final class GameScene: SKScene {
         positionZ += move
         state.distance = Double(positionZ)
         state.speed = Double(currentSpeed)
+        updateTutorialScript()
 
         if positionZ >= trackLength {
             positionZ = trackLength
@@ -800,6 +806,21 @@ final class GameScene: SKScene {
     }
 
     // MARK: - Falling into a hole
+
+    /// Show the tutorial's scripted line for the furthest piece it has reached.
+    /// The level file lists one line per segment in the order it lays them, so
+    /// the snail walking the track walks the script: a piece that carries no
+    /// line of its own (`Tutorial 4.txt` appears twice in a row) leaves the
+    /// last line up until the next one arrives.
+    private func updateTutorialScript() {
+        let script = TrackData.tutorialScript
+        guard mode == .tutorial, !script.isEmpty, !segments.isEmpty else { return }
+        let step = segments[segmentIndex(at: positionZ + playerZ)].script
+        if step >= 0 && step < script.count { tutorialStep = max(tutorialStep, step) }
+        guard tutorialStep >= 0 else { return }
+        let line = script[tutorialStep]
+        if !line.isEmpty { state.tutorialMessage = line }
+    }
 
     /// The jump pieces leave the road out for a run of blank rows. The snail
     /// takes that void as a ramp and arcs across it, the same screen-space hop

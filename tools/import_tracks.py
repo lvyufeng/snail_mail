@@ -59,9 +59,33 @@ RING_GLYPHS = set("><{}()R")
 RING = {"powerup": "+", "slow": "~", "explode": ">", "explosive": ">",
         "normal": "!", "none": "o"}
 
+# The tutorial's `Message=` lines sprinkle the same inline icon glyphs the
+# grids use, standing in for the picture the retail HUD drew beside the text.
+# None of that artwork is bundled here, so each glyph becomes the word it
+# depicts; the icon is dropped where the sentence already names it (so
+# "Salt ^ burns me!" reads "Salt burns me!").
+TUTORIAL_GLYPHS = {"}": "", "{": "packages", "]": "", "_": "hearts",
+                   "^": "salt", "[": "enemies", ";": "slow", "~": "power-ups"}
+
 
 def deobfuscate(data):
     return bytes(b ^ KEY[i % 256] for i, b in enumerate(data))
+
+
+def tutorial_message(raw):
+    """Turn a retail `Message=` string into the text the remake shows.
+
+    `>` is the retail line break, and the icon glyphs become words (see
+    `TUTORIAL_GLYPHS`). A glyph sitting next to the word it depicts — the `^`
+    in "Salt ^ burns me!" — would then repeat that word, so a doubled word
+    collapses back to one and the spacing is tidied for a sentence.
+    """
+    text = "".join("\n" if ch == ">" else TUTORIAL_GLYPHS.get(ch, ch)
+                   for ch in raw)
+    text = re.sub(r"\b([A-Za-z]+)( +)\1\b", r"\1", text, flags=re.I)
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\s+([.!?,])", r"\1", text)
+    return "\n".join(line.strip() for line in text.split("\n")).strip()
 
 
 def load_archive(path):
@@ -110,7 +134,7 @@ def by_folder(files, folder, suffix):
 
 def parse_level(txt):
     txt = re.sub(r"/\*.*?\*/", "", txt, flags=re.S)
-    segs = []
+    segs, script = [], []
     body = re.search(r"Segments Begin:(.*?)Segments End:", txt, flags=re.S)
     if body:
         for line in body.group(1).splitlines():
@@ -122,11 +146,16 @@ def parse_level(txt):
                 name = os.path.basename(m.group(1))
                 attrs = dict(re.findall(r"(\w+)=(-?[\d.]+)", m.group(2)))
                 segs.append((name, attrs))
+                # The tutorial scripts an on-screen line per pool entry; every
+                # other level leaves the list empty.
+                msg = re.search(r'Message="([^"]*)"', m.group(2))
+                script.append(tutorial_message(msg.group(1)) if msg else "")
     first = re.search(r"First:.*?\n\s*(.*?\.txt)", txt, flags=re.S)
     last = re.search(r"Last:.*?\n\s*(.*?\.txt)", txt, flags=re.S)
     return (os.path.basename(first.group(1)) if first else "Start.txt",
             segs,
-            os.path.basename(last.group(1)) if last else "Finish.txt")
+            os.path.basename(last.group(1)) if last else "Finish.txt",
+            script)
 
 
 def parse_segment(txt):
@@ -160,7 +189,8 @@ def parse_segment(txt):
 
 
 def swift_string(s):
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return ('"' + s.replace("\\", "\\\\").replace('"', '\\"')
+            .replace("\n", "\\n") + '"')
 
 
 def main():
@@ -175,7 +205,7 @@ def main():
     segments = by_folder(files, "segments", ".txt")
 
     # Level routes: arcade0..arcade50, tutorial and challenge.
-    routes, need, random_keys = {}, set(), set()
+    routes, need, random_keys, scripts = {}, set(), set(), {}
     for key, name in ([(f"arcade{i}", f"arcade{i:03d}.txt") for i in range(51)]
                       + [("tutorial", "tutorial.txt"), ("challenge", "challenge000.txt")]):
         if name not in levels:
@@ -183,8 +213,9 @@ def main():
             continue
         if re.search(r"Random:\s*yes", levels[name], re.I):
             random_keys.add(key)
-        first, segs, last = parse_level(levels[name])
+        first, segs, last, script = parse_level(levels[name])
         routes[key] = (first, segs, last)
+        scripts[key] = script
         need.update([first.lower(), last.lower()])
         need.update(n.lower() for n, _ in segs)
 
@@ -250,6 +281,15 @@ def main():
               "    /// as the gaps it has to clear instead of a fixed spell.",
               "    static let jetpackOff: Set<String> = ["]
     lines += [f"        {swift_string(k)}," for k in sorted(jetpacks_off)]
+    lines += ["    ]", "",
+              "    /// The tutorial's scripted lines, in the order its level file",
+              "    /// lists them.  Entry `n` belongs to the piece the pool lays at",
+              "    /// index `n`; an empty string leaves the previous line on",
+              "    /// screen.  The retail build pairs each line with a voice-over",
+              "    /// (`Voice/tut*.ogg`) and inline icon art, neither of which is",
+              "    /// bundled here, so the icons are spelled out as words.",
+              "    static let tutorialScript: [String] = ["]
+    lines += [f"        {swift_string(t)}," for t in scripts.get("tutorial", [])]
     lines += ["    ]", "",
               "    /// Ordered segment list for each level.  Level keys are `arcade0`-",
               "    /// `arcade50`, plus `tutorial` and `challenge`.  Each entry names a",

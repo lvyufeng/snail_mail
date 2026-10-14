@@ -206,6 +206,38 @@ enum TrackData {
         "jetpackoff.txt",
     ]
 
+    /// The tutorial's scripted lines, in the order its level file
+    /// lists them.  Entry `n` belongs to the piece the pool lays at
+    /// index `n`; an empty string leaves the previous line on
+    /// screen.  The retail build pairs each line with a voice-over
+    /// (`Voice/tut*.ogg`) and inline icon art, neither of which is
+    /// bundled here, so the icons are spelled out as words.
+    static let tutorialScript: [String] = [
+        "Hi! I'm Turbo the Snail.\nSteer with the mouse!",
+        "The blue barriers prevent\nme from falling off the\nsides of the highway.",
+        "I work for Snail Mail. Help\nme collect Packages.",
+        "Asteroids slow me down.\nHold the Mouse Button\nto shoot",
+        "Don't let me fall through\nthe holes in the highway!",
+        "Salt burns me! I can't\nshoot salt I have to avoid it!",
+        "More salt! If I take\ntoo much damage I go postal!",
+        "Hearts restore my Postal\nMeter located on the right.",
+        "Look Out! Evil enemies try to\nknock me off the highway",
+        "I get better weapons\nwhen I go through power-ups!",
+        "",
+        "Lasers or Rockets,\nI can destroy enemies",
+        "",
+        "If I have Lasers shoot the enemies",
+        "Steer clear of slow rings\nThey slow me down!",
+        "Yellow Rings they\nblow up my enemies!",
+        "I can't blow up Turrets\nso guide me around them!",
+        "If I grab enough power-ups\nI will become invincible!",
+        "",
+        "",
+        "",
+        "I can plow through enemies\nwhen I'm invincible.",
+        "Excellent. Time to\nhit the Post Office.",
+    ]
+
     /// Ordered segment list for each level.  Level keys are `arcade0`-
     /// `arcade50`, plus `tutorial` and `challenge`.  Each entry names a
     /// grid the same way `grid` is keyed, and may carry an `@<angle>`

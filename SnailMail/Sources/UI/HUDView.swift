@@ -60,11 +60,13 @@ struct HUDView: View {
             .padding(.horizontal, 16)
             .padding(.top, 8)
 
-            if mode == .tutorial, state.phase == .running {
-                Text(tutorialHint)
+            if mode == .tutorial, state.phase == .running,
+               !state.tutorialMessage.isEmpty {
+                Text(state.tutorialMessage)
                     .font(.system(size: 13, weight: .bold, design: .rounded))
                     .foregroundStyle(Palette.ink)
                     .multilineTextAlignment(.center)
+                    .lineSpacing(2)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .background(Capsule().fill(Color.black.opacity(0.45)))
@@ -96,15 +98,6 @@ struct HUDView: View {
         .animation(.easeInOut(duration: 0.2), value: state.phase)
     }
 
-    private var tutorialHint: String {
-        switch state.progress {
-        case ..<0.18: "① Drag left / right to steer"
-        case ..<0.4: "② Hold the screen to fire"
-        case ..<0.62: "③ Fly through parcels to collect"
-        case ..<0.85: "④ Grab rings to upgrade your weapon"
-        default: "⑤ Reach the post office to deliver"
-        }
-    }
 }
 
 /// Vertical postal meter: a neon tube that fills from the bottom, tinted by how

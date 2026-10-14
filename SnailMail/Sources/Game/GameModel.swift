@@ -157,6 +157,9 @@ final class RoadSegment {
     /// True on the piece that switches a jetpack back off (`JetPackOff.txt`),
     /// which the levels drop in after the gaps the jetpack is meant to clear.
     var jetpackOff = false
+    /// Index into `TrackData.tutorialScript` for the pool entry this slice came
+    /// from, or -1 where the run has no script — every level but the tutorial.
+    var script = -1
 
     init(index: Int) { self.index = index }
 }
@@ -321,6 +324,10 @@ struct RaceState: Equatable {
 
     var invincible: Bool = false
     var sheet = ScoreSheet()
+    /// The tutorial line on screen: the script entry of the furthest piece the
+    /// snail has reached (`TrackData.tutorialScript`), or empty when the run
+    /// has no script.
+    var tutorialMessage: String = ""
     var elapsed: Double = 0
     var phase: GamePhase = .ready
 
@@ -490,12 +497,14 @@ enum TrackBuilder {
             var angle: CGFloat?
             /// Whether this piece is a `JetPackOff` switch.
             var jetpackOff: Bool
+            /// Index into `TrackData.tutorialScript` for this entry, or -1.
+            var script: Int
         }
         var slices: [Slice] = []
         slices.reserveCapacity(max(64, config.rows + 32))
         var familyCount: [String: Int] = [:]
 
-        func appendSegment(_ entry: String) {
+        func appendSegment(_ entry: String, script scriptIndex: Int = -1) {
             let parts = entry.split(separator: "@", maxSplits: 1)
             let name = String(parts[0])
             let angle = parts.count > 1 ? CGFloat(Double(parts[1]) ?? 0) : nil
@@ -523,7 +532,7 @@ enum TrackBuilder {
                 slices.append(Slice(cells: row, family: family,
                                     along: CGFloat(n) / span, step: 1 / span,
                                     flip: flip, angle: angle,
-                                    jetpackOff: jetpackOff))
+                                    jetpackOff: jetpackOff, script: scriptIndex))
             }
         }
 
@@ -551,7 +560,12 @@ enum TrackBuilder {
             } else {
                 var n = 0
                 while (n < minDraws || slices.count < budget - 8) && n < 4000 {
-                    appendSegment(pool[n % pool.count])
+                    // The tutorial scripts a line per pool entry, so it needs
+                    // to know which entry a piece came from. Its pool is long
+                    // enough (1140 rows against a 700 budget) to be laid down
+                    // exactly once, in order, which is what the script wants.
+                    appendSegment(pool[n % pool.count],
+                                  script: key == "tutorial" ? n : -1)
                     n += 1
                 }
             }
@@ -645,6 +659,7 @@ enum TrackBuilder {
                 && row.allSatisfy { $0 == " " || $0 == "@" || $0 == "M" }
             seg.airborne = airborne
             seg.jetpackOff = slices[i].jetpackOff
+            seg.script = slices[i].script
 
             /// Map a grid column to a position across the road.
             func across(_ col: Int) -> CGFloat {
