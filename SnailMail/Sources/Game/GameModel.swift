@@ -6,6 +6,7 @@ import CoreGraphics
 /// The original modes: 教学 Tutorial, 练习 Practice, 时速 Speed, 挑战
 /// Challenge, plus the mobile-only 挑战+ (Pro Challenge).
 enum GameMode: String, CaseIterable, Identifiable {
+    case arcade
     case tutorial
     case practice
     case speedRun
@@ -16,6 +17,7 @@ enum GameMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .arcade: "Arcade"
         case .tutorial: "Tutorial"
         case .practice: "Practice"
         case .speedRun: "Speed"
@@ -27,6 +29,7 @@ enum GameMode: String, CaseIterable, Identifiable {
     /// Original Chinese menu label, shown alongside the title.
     var chinese: String {
         switch self {
+        case .arcade: "战役"
         case .tutorial: "教学"
         case .practice: "练习"
         case .speedRun: "时速"
@@ -37,6 +40,7 @@ enum GameMode: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
+        case .arcade: "The original galaxy campaign, star by star"
         case .tutorial: "Learn to steer, fire and deliver"
         case .practice: "Free drive, hazards do no damage"
         case .speedRun: "Finish the route, fastest wins"
@@ -139,6 +143,7 @@ struct LevelConfig {
     var speed: CGFloat            // 0...100
     var salt: CGFloat             // 0...100 probability
     var trash: CGFloat            // 0...100 probability (asteroids/garbage/slugs)
+    var slug: CGFloat             // 0...100 slug probability, where the level sets one
     var parcels: Int
     var quota: Int
     var length: Int               // approximate number of segments
@@ -149,18 +154,39 @@ struct LevelConfig {
 
     static func forMode(_ mode: GameMode, level: Int) -> LevelConfig {
         switch mode {
+        case .arcade:
+            // The campaign levels come straight from the original data file, so
+            // each star plays with its own speed, hazards, parcel count and route.
+            let star = LevelCatalog.arcade[max(0, min(level, LevelCatalog.arcade.count - 1))]
+            return LevelConfig(
+                name: star.name,
+                mode: .arcade,
+                speed: CGFloat(star.speed),
+                salt: CGFloat(star.salt),
+                trash: CGFloat(star.trash),
+                slug: CGFloat(star.slug),
+                parcels: star.parcels,
+                quota: star.quota,
+                length: star.segments,
+                background: star.background,
+                fringe: star.fringe,
+                damageEnabled: true,
+                guided: false
+            )
         case .tutorial:
+            let t = LevelCatalog.tutorial
             return LevelConfig(
                 name: "Tutorial",
                 mode: .tutorial,
-                speed: 24,
-                salt: 0,
-                trash: 0,
-                parcels: 14,
-                quota: 10,
-                length: 170,
-                background: "SpaceBlue",
-                fringe: SIMD3(88, 225, 255),
+                speed: CGFloat(t.speed),
+                salt: CGFloat(t.salt),
+                trash: CGFloat(t.trash),
+                slug: 0,
+                parcels: t.parcels,
+                quota: t.quota,
+                length: Int(Double(t.route) * 0.4),
+                background: t.background,
+                fringe: t.fringe,
                 damageEnabled: false,
                 guided: true
             )
@@ -171,6 +197,7 @@ struct LevelConfig {
                 speed: 48,
                 salt: 22,
                 trash: 34,
+                slug: 12,
                 parcels: 20,
                 quota: 12,
                 length: 260,
@@ -186,6 +213,7 @@ struct LevelConfig {
                 speed: 82,
                 salt: 14,
                 trash: 26,
+                slug: 9,
                 parcels: 24,
                 quota: 16,
                 length: 340,
@@ -195,17 +223,19 @@ struct LevelConfig {
                 guided: false
             )
         case .challenge:
+            let c = LevelCatalog.challenge
             return LevelConfig(
                 name: "Challenge",
                 mode: .challenge,
-                speed: 60,
-                salt: 12,
-                trash: 52,
-                parcels: 40,
-                quota: 24,
-                length: 4000,
-                background: "SpacePurple",
-                fringe: SIMD3(190, 80, 240),
+                speed: CGFloat(c.speed),
+                salt: CGFloat(c.salt),
+                trash: CGFloat(c.trash),
+                slug: 0,
+                parcels: c.parcels,
+                quota: c.quota,
+                length: Int(Double(c.route) * 0.4),
+                background: c.background,
+                fringe: c.fringe,
                 damageEnabled: true,
                 guided: false
             )
@@ -216,6 +246,7 @@ struct LevelConfig {
                 speed: 74,
                 salt: 22,
                 trash: 70,
+                slug: 24,
                 parcels: 60,
                 quota: 36,
                 length: 6000,
@@ -443,7 +474,10 @@ enum TrackBuilder {
         if !config.guided {
             place(.salt, count: Int(CGFloat(hazardCount) * config.salt / 100), minGap: 10, avoiding: ringSegments)
             place(.asteroid, count: Int(CGFloat(hazardCount) * config.trash / 200), minGap: 8, avoiding: ringSegments)
-            place(.slug, count: Int(CGFloat(hazardCount) * config.trash / 300), minGap: 12, avoiding: ringSegments)
+            // Levels that name their own slug probability use it; the rest fall
+            // back to a share of the garbage rate, as before.
+            let slugRate = config.slug > 0 ? config.slug : config.trash / 3
+            place(.slug, count: Int(CGFloat(hazardCount) * slugRate / 100), minGap: 12, avoiding: ringSegments)
             place(.turret, count: usable.count / 130, minGap: 60, avoiding: ringSegments)
             // Holes are drawn across the middle of the road, so they must sit
             // there logically too: a random offset would put the pit the player

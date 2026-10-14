@@ -44,13 +44,25 @@ struct MenuView: View {
                         }
                         .padding(.horizontal, 20)
 
-                        NavigationLink {
-                            GameView(mode: selected)
-                        } label: {
-                            ArcadeLabel(title: "PLAY", tint: Palette.good, icon: "▶")
+                        // The campaign opens on the galaxy map so the player
+                        // picks a star; every other mode starts its own route.
+                        if selected == .arcade {
+                            NavigationLink {
+                                LevelSelectView()
+                            } label: {
+                                ArcadeLabel(title: "SELECT STAR", tint: Palette.good, icon: "★")
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 60)
+                        } else {
+                            NavigationLink {
+                                GameView(mode: selected)
+                            } label: {
+                                ArcadeLabel(title: "PLAY", tint: Palette.good, icon: "▶")
+                            }
+                            .buttonStyle(.plain)
+                            .padding(.horizontal, 60)
                         }
-                        .buttonStyle(.plain)
-                        .padding(.horizontal, 60)
 
                         Text("Drag to steer · hold to fire · dodge salt & meteors")
                             .font(.system(size: 13, weight: .medium, design: .rounded))

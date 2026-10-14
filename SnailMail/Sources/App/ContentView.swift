@@ -13,14 +13,36 @@ struct ContentView: View {
         #endif
     }
 
+    /// Debug hook matching `-autostart`: `-level N` selects a campaign star.
+    private var autoLevel: Int {
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        guard let i = args.firstIndex(of: "-level"), i + 1 < args.count,
+              let value = Int(args[i + 1]) else { return 0 }
+        return value
+        #else
+        return 0
+        #endif
+    }
+
     var body: some View {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-showgalaxy") {
+            NavigationStack { LevelSelectView() }
+        } else if let mode = autoMode {
+            GameView(mode: mode, level: autoLevel)
+        } else {
+            NavigationStack { MenuView() }
+        }
+        #else
         if let mode = autoMode {
-            GameView(mode: mode)
+            GameView(mode: mode, level: autoLevel)
         } else {
             NavigationStack {
                 MenuView()
             }
         }
+        #endif
     }
 }
 

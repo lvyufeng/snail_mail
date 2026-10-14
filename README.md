@@ -10,6 +10,15 @@ the project ships **no art extracted from the retail game**. The remake is
 built for a portrait phone: the pseudo-3D road, the vertical postal meter and
 the mode menu are all laid out for one hand.
 
+The one thing that *does* come from the retail data file is the campaign's
+balance data. `SnailMail.dat` stores its scripts behind a byte-wise XOR with a
+256-byte repeating key, and once peeled back it is a plain 601-entry archive:
+per-level speed, hazard probabilities, parcel counts, route length, backdrop and
+fringe colour for the 51 arcade levels, plus the tutorial and challenge tuning.
+Those numbers (and the level/galaxy names that go with them) are what the
+campaign screen and `LevelConfig` now use. No textures, audio or other assets
+are extracted — only the small configuration scripts.
+
 The soundtrack is generated at runtime with `AVAudioEngine` (a looping
 chiptune plus shoot / collect / hit / boost effects), so there are no bundled
 audio files either — the app bundle contains no images or sounds at all.
@@ -23,6 +32,10 @@ audio files either — the app bundle contains no images or sounds at all.
 | Speed | Challenge | Pro Challenge |
 | --- | --- | --- |
 | ![speed](docs/screenshots/speed.png) | ![challenge](docs/screenshots/challenge.png) | ![pro](docs/screenshots/pro.png) |
+
+| Galaxy map | | |
+| --- | --- | --- |
+| ![galaxy](docs/screenshots/galaxy.png) | | |
 
 ## Gameplay
 
@@ -46,6 +59,10 @@ with an extra mobile-only Pro Challenge:
 - **教学 Tutorial** — guided, damage-free. On-screen prompts walk through
   steering, firing, collecting parcels, grabbing upgrade rings and delivering
   to the post office.
+- **战役 Arcade** — the original campaign: ten galaxies of five stars each,
+  played from a galaxy map. Every star uses its own tuning from the retail data
+  file, so the early teaching levels are gentle and "40 Gph" through "100 Gph"
+  ramp the speed, salt, garbage and slug density right up.
 - **练习 Practice** — free driving at a relaxed pace; hazards are seeded but
   do no damage, so you can learn the road.
 - **时速 Speed** — a shorter route at high speed; reach the post office and
