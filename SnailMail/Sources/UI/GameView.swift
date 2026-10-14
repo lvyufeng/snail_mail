@@ -5,6 +5,7 @@ struct GameView: View {
     let mode: GameMode
     let level: Int
     @StateObject private var model: GameViewModel
+    @Environment(\.dismiss) private var dismiss
 
     init(mode: GameMode, level: Int = 0) {
         self.mode = mode
@@ -36,9 +37,9 @@ struct GameView: View {
                 })
 
                 if case .finished(let won) = model.state.phase {
-                    ResultOverlay(won: won, state: model.state) {
-                        model.restart()
-                    }
+                    ResultOverlay(won: won, state: model.state,
+                                  onReplay: { model.restart() },
+                                  onMenu: { dismiss() })
                 }
             }
             .onAppear {

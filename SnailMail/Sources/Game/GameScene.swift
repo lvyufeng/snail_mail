@@ -128,6 +128,12 @@ final class GameScene: SKScene {
         applyDebugArguments()
         #endif
         if autoStart { startRace() }
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-forcefinish") {
+            startRace()
+            finish(won: true)
+        }
+        #endif
     }
 
     override func didChangeSize(_ oldSize: CGSize) {

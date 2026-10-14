@@ -4,7 +4,7 @@ struct ResultOverlay: View {
     let won: Bool
     let state: RaceState
     let onReplay: () -> Void
-    @Environment(\.dismiss) private var dismiss
+    let onMenu: () -> Void
 
     var body: some View {
         ZStack {
@@ -32,7 +32,7 @@ struct ResultOverlay: View {
 
                     HStack(spacing: 14) {
                         ArcadeButton(title: "REPLAY", tint: Palette.good, icon: "↻", action: onReplay)
-                        ArcadeButton(title: "MENU", tint: Palette.cyan, icon: "⌂") { dismiss() }
+                        ArcadeButton(title: "MENU", tint: Palette.cyan, icon: "⌂", action: onMenu)
                     }
                 }
             }
