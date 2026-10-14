@@ -828,11 +828,61 @@ enum TrackBuilder {
         topUp(.parcel, to: max(6, max(config.parcels, config.quota + 4)), minGap: 5)
         topUp(.ringUpgrade, to: 4, minGap: 60)
         topUp(.heart, to: max(2, segments.count / 120), minGap: 40)
+        scatterHazards(&segments, config: config, rng: &rng)
 
         if let last = segments.last {
             last.sprites.append(EntitySpec(kind: .postOffice, offset: 0, depth: 0.5))
         }
         return segments
+    }
+
+    /// Sprinkle the level's own hazard rates over a course.
+    ///
+    /// The retail level file sets `Salt:`, `Slug:` and the garbage rate as
+    /// 0-100 percentages, and the salt and slug managers spawn against them, so
+    /// a level like "Sodium Chloride" (`Salt:70`) is genuinely drowned in salt
+    /// and "Sodium Squared" (`Salt:100`) worse still, while the tutorial
+    /// (`Salt:0`, `Trash:0`) stays clean. The segment grids only carry the
+    /// fixed pieces the piece author placed, so a course laid straight from
+    /// them has to add this layer itself.
+    private static func scatterHazards(_ segments: inout [RoadSegment],
+                                       config: LevelConfig,
+                                       rng: inout SystemRandomNumberGenerator) {
+        guard !config.guided, segments.count > 60 else { return }
+
+        // Fill only the slices the grids left empty, so a scattered hazard
+        // never lands on top of a piece's own obstacle or pickup.
+        func place(_ kind: EntityKind, count: Int, minGap: Int,
+                   offset: ClosedRange<CGFloat> = -0.8...0.8) {
+            guard count > 0 else { return }
+            var candidates = Array(12..<(segments.count - 6))
+            candidates.shuffle(using: &rng)
+            var chosen: [Int] = []
+            for index in candidates {
+                if chosen.count >= count { break }
+                guard segments[index].sprites.isEmpty,
+                      !segments[index].airborne,
+                      chosen.allSatisfy({ abs($0 - index) >= minGap }) else { continue }
+                segments[index].sprites.append(EntitySpec(
+                    kind: kind,
+                    offset: CGFloat.random(in: offset, using: &rng),
+                    depth: CGFloat.random(in: 0...1, using: &rng)))
+                chosen.append(index)
+            }
+        }
+
+        let hazardCount = segments.count / 6
+        place(.salt, count: Int(CGFloat(hazardCount) * config.salt / 100), minGap: 10)
+        place(.asteroid, count: Int(CGFloat(hazardCount) * config.trash / 200), minGap: 8)
+        // Levels that name their own slug probability use it; the rest fall back
+        // to a share of the garbage rate.
+        let slugRate = config.slug > 0 ? config.slug : config.trash / 3
+        place(.slug, count: Int(CGFloat(hazardCount) * slugRate / 100), minGap: 12)
+        place(.turret, count: segments.count / 130, minGap: 60)
+        // A pit is drawn across the middle of the road, so it has to sit there
+        // logically too: a random offset would put the pit the player sees and
+        // the pit they fall into in different places.
+        place(.hole, count: segments.count / 150, minGap: 60, offset: -0.1...0.1)
     }
 
     static func build(_ config: LevelConfig) -> [RoadSegment] {
