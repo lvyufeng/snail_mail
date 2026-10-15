@@ -153,6 +153,15 @@ from the chase camera's angle into flat, toon-shaded PNG billboards under
 `Art/Baked`, which is how SpriteKit shows them. `tools/make_app_icon.py` builds
 the app icon from the same palette.
 
+The road surfaces are the one place the remake does not follow the retail build
+all the way. It registers `Objects/TrackN.tga` and `Objects/SlideN.tga` as a
+pair, and `Slide` is one of the five per-segment material tags its track builder
+picks from, but which of the two a slide segment gets is kept in the renderer's
+own cache state: no level script, segment script or data table in the
+executable names it, and the eight material handles the loader fills are never
+read again. The remake paves every cell of a segment with the `TrackN` the
+level file does give.
+
 ## Art direction
 
 One shared palette and drawing style runs through the menu, HUD, results and
