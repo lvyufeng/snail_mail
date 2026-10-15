@@ -51,6 +51,18 @@ struct HUDView: View {
 
                 bottomStack(scale: s, vScale: sy)
 
+                // The fail-safe's own line, at the place the build draws it:
+                // x=0 (centred) and y=200 in the 640x480 frame, in the same
+                // font as the results page's headline (`0x445e70`).
+                if state.timedOut {
+                    Text("Time's Up")
+                        .font(.retail(30, weight: .black))
+                        .foregroundStyle(Palette.ink)
+                        .shadow(color: .black.opacity(0.85), radius: 10)
+                        .position(x: geo.size.width / 2, y: geo.size.height * 200 / 480)
+                        .transition(.opacity)
+                }
+
                 if state.phase == .ready {
                     VStack(spacing: 12) {
                         Text("DRAG to steer * HOLD to fire")

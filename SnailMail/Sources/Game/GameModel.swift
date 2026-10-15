@@ -540,6 +540,12 @@ struct RaceState: Equatable {
     /// has no script.
     var tutorialMessage: String = ""
     var elapsed: Double = 0
+    /// Set once the retail build's own fail-safe has ended the run: the shared
+    /// run clock passed its limit (`0x43d1c8`, 21 000 frames — about 350
+    /// seconds), which the build announces with a `Time's Up` line (`0x445e70`)
+    /// and then ends the race on, in every mode. The results page prints the
+    /// same line where any other loss prints its own.
+    var timedOut: Bool = false
     var phase: GamePhase = .ready
 
     var score: Int { sheet.total }

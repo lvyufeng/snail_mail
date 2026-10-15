@@ -108,7 +108,9 @@ struct ResultOverlay: View {
     }
 
     private var headline: String {
-        if !won { return "GONE POSTAL" }
+        // The fail-safe's own loss line, which the build also prints over the
+        // road before it ends the race (`Time's Up`, 0x4a512c).
+        if !won { return state.timedOut ? "Time's Up" : "GONE POSTAL" }
         // `0x404b5e`: the arcade campaign's win line is the pre-baked
         // "PERFECT SCORE!>50,000 Bonus Points" (0x4a11fc) whatever the postal
         // meter came through at; every other mode prints "LEVEL COMPLETE!>"

@@ -137,6 +137,25 @@ final class GameScene: SKScene {
     /// `-ignoretnf`: debug only — pretend no row carries the `NoFall` tag, so a
     /// capture pair can show what the tag holds up.
     private var debugIgnoreNoFall = false
+    /// Seconds into the fail-safe's `Time's Up` ramp, or -1 while no run has
+    /// run out of time.
+    private var timeUpAt: CGFloat = -1
+    /// The build's fail-safe limit, in seconds of race clock: `0x43d1c8` fires
+    /// when the shared run counter reaches 21 000 frames, and the build runs
+    /// that counter once a frame at 60 Hz. `-timelimit N` shortens it for a
+    /// screenshot.
+    private var timeLimit: CGFloat {
+        let args = ProcessInfo.processInfo.arguments
+        if let i = args.firstIndex(of: "-timelimit"), i + 1 < args.count,
+           let seconds = Double(args[i + 1]) {
+            return CGFloat(seconds)
+        }
+        return 350
+    }
+    /// How long `Time's Up` stays on the screen before the race ends: the
+    /// ramp at `0xc(%esi)` climbs 0.00556 a frame, so the build holds the line
+    /// for about three seconds and then tears it down (`0x445e00`).
+    private let timeUpHold: CGFloat = 3
     /// Where the pit sat across the road, so the snail climbs out beside it.
     private var fallOffset: CGFloat = 0
     /// >= 0 while the snail is flying off a ramp; -1 the rest of the time.
@@ -635,6 +654,7 @@ final class GameScene: SKScene {
         invincibleUntil = 0
         hurtUntil = 0
         slugged = false
+        timeUpAt = -1
         fallTimer = -1
         fallOffset = 0
         hopTimer = -1
@@ -741,6 +761,20 @@ final class GameScene: SKScene {
 
         elapsed += fdt
         state.elapsed = Double(elapsed)
+
+        // The build's own fail-safe, whatever the mode: once the shared run
+        // clock has been through its 21 000 frames it puts `Time's Up` on the
+        // screen and ends the race on it (`0x43d1c8`).
+        if timeUpAt < 0, elapsed >= timeLimit {
+            timeUpAt = elapsed
+            state.timedOut = true
+        }
+        if timeUpAt >= 0 {
+            updateTimeUp(fdt: fdt)
+            renderRoad()
+            publish()
+            return
+        }
 
         // Mid-fall the snail has no control and no forward drive: it plunges,
         // then climbs back out behind the pit.
@@ -1413,6 +1447,17 @@ final class GameScene: SKScene {
             }
         }
         invincibleUntil = elapsed + 1.4
+    }
+
+    /// The fail-safe's own three seconds. The build draws `Time's Up` over the
+    /// road, lets its ramp climb to full and only then tears the line down and
+    /// ends the race (`0x445e00`); the snail coasts to a stop under it.
+    private func updateTimeUp(fdt: CGFloat) {
+        currentSpeed = max(0, currentSpeed - fdt * 9000)
+        state.speed = Double(currentSpeed)
+        positionZ = min(trackLength, positionZ + currentSpeed * fdt)
+        state.distance = Double(positionZ)
+        if elapsed - timeUpAt >= timeUpHold { finish(won: false) }
     }
 
     private func updateInvincibility() {
