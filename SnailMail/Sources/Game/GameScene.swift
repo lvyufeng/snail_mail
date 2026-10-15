@@ -136,12 +136,12 @@ final class GameScene: SKScene {
     /// drifting stars out identically twice in a row, and `-freeze N`, which
     /// stops the clock after N frames so two captures of a running race show
     /// the same instant of the same course.
-    private var sceneRandom = CourseRandom.launched()
+    private var sceneRandom: CourseRandom
     /// The seed the backdrop is laid out from. `didChangeSize` rebuilds it, so
     /// it opens a fresh stream from this rather than carrying on the scene's
     /// own, which would scatter the stars a little differently every time the
     /// view was resized.
-    private let sceneSeed = CourseRandom.launchedSeed()
+    private let sceneSeed: UInt64
     private var framesToFreeze = -1
     private var framesRun = 0
     /// `-meterlock F`: debug only — the fraction of the postal tube the race is
@@ -213,6 +213,21 @@ final class GameScene: SKScene {
 
     // MARK: - Nodes
 
+    // MARK: - Replay
+
+    /// Set while the scene is playing a recording back rather than taking a
+    /// live drag. A replay never files a recording of its own.
+    private(set) var isReplay = false
+    private var replayTrace: ReplayTrace?
+    private var replayCursor = 0
+    /// The snail's line through the live run, written while the mode records.
+    private var recordedSamples: [ReplayTrace.Sample] = []
+    private var lastSampleZ = -CGFloat.greatestFiniteMagnitude
+    /// True on the one mode the retail build keeps a replay buffer for.
+    var recordsReplay: Bool { mode == .speedRun }
+    /// Handed the finished run so it can be filed for `Watch Replay`.
+    var onReplayRecorded: ((ReplayTrace) -> Void)?
+
     private let roadLayer = SKNode()
     private let entityLayer = SKNode()
     private let fxLayer = SKNode()
@@ -282,10 +297,19 @@ final class GameScene: SKScene {
 
     // MARK: - Init
 
-    init(mode: GameMode, level: Int, size: CGSize) {
+    /// `seed` and `track` pin the course, which is what a replay hands back so
+    /// it meets the road and the hazards it was recorded on. `replay` plays a
+    /// recording back instead of taking a live drag.
+    init(mode: GameMode, level: Int, size: CGSize,
+         seed: UInt64? = nil, track: Int? = nil, replay: ReplayTrace? = nil) {
         self.mode = mode
         self.level = level
-        self.config = LevelConfig.forMode(mode, level: level)
+        self.config = LevelConfig.forMode(mode, level: level, track: track ?? replay?.track)
+        let launchSeed = replay?.seed ?? seed ?? CourseRandom.launchedSeed()
+        self.sceneSeed = launchSeed
+        self.sceneRandom = CourseRandom(seed: launchSeed)
+        self.replayTrace = replay
+        self.isReplay = replay != nil
         self.playerZ = cameraHeight * (1.0 / tan((100.0 / 2.0) * .pi / 180.0))
         let tint = UIColor(
             red: config.fringe.x / 255,
@@ -669,6 +693,9 @@ final class GameScene: SKScene {
         segments = TrackBuilder.build(config, mode: mode, level: level)
         trackLength = CGFloat(segments.count) * segmentLength
 
+        recordedSamples.removeAll(keepingCapacity: true)
+        lastSampleZ = -CGFloat.greatestFiniteMagnitude
+        replayCursor = 0
         state = RaceState()
         state.maxSpeed = Double(baseSpeed(for: config.speed))
         state.trackLength = Double(trackLength)
@@ -756,6 +783,56 @@ final class GameScene: SKScene {
 
     func setTouching(_ touching: Bool) { self.touching = touching }
 
+    // MARK: - Replay
+
+    /// How far apart the samples of a recording sit. At a Time Trial's pace
+    /// this is a handful of frames, close enough that the line between two of
+    /// them is a straight one, and it keeps a whole route down to a few
+    /// hundred entries.
+    private let replaySampleSpacing: CGFloat = 24
+
+    /// Writes the current frame of a live run. Called once per frame while the
+    /// mode records, but only commits a sample once the snail has covered
+    /// `replaySampleSpacing`.
+    private func recordReplaySample() {
+        guard positionZ - lastSampleZ >= replaySampleSpacing else { return }
+        guard recordedSamples.count < 20_000 else { return }
+        lastSampleZ = positionZ
+        recordedSamples.append(ReplayTrace.Sample(distance: Double(positionZ),
+                                                  lateral: Double(playerX),
+                                                  firing: touching))
+    }
+
+    /// Hands the finished run to the store, which keeps the best one.
+    private func fileReplay() {
+        guard !recordedSamples.isEmpty else { return }
+        let trace = ReplayTrace(mode: mode.rawValue, level: level,
+                                track: config.track, seed: sceneSeed,
+                                score: state.score, samples: recordedSamples)
+        onReplayRecorded?(trace)
+    }
+
+    /// Drives the snail from the recording: his place across the road and
+    /// whether he was firing, both read by how far up the route he has got.
+    /// Position comes from the recording rather than from the steering
+    /// integrator, so the replay retraces the very line that was saved.
+    private func applyReplaySample() {
+        guard let trace = replayTrace, !trace.samples.isEmpty else { return }
+        let distance = Double(positionZ)
+        while replayCursor + 1 < trace.samples.count,
+              trace.samples[replayCursor + 1].distance <= distance {
+            replayCursor += 1
+        }
+        let a = trace.samples[replayCursor]
+        let b = replayCursor + 1 < trace.samples.count ? trace.samples[replayCursor + 1] : a
+        let span = b.distance - a.distance
+        let t = span > 0 ? max(0, min(1, (distance - a.distance) / span)) : 0
+        let lateral = CGFloat(a.lateral + (b.lateral - a.lateral) * t)
+        playerX = lateral
+        targetX = lateral
+        touching = a.firing
+    }
+
     // MARK: - Update
 
     override func update(_ currentTime: TimeInterval) {
@@ -825,11 +902,16 @@ final class GameScene: SKScene {
         }
 
         updateSpeed(fdt: fdt)
-        updateSteering(fdt: fdt)
+        if isReplay {
+            applyReplaySample()
+        } else {
+            updateSteering(fdt: fdt)
+        }
         updateRoadEdge()
 
         let move = currentSpeed * fdt
         positionZ += move
+        if recordsReplay && !isReplay { recordReplaySample() }
         state.distance = Double(positionZ)
         state.speed = Double(currentSpeed)
         updateTutorialScript()
@@ -843,6 +925,16 @@ final class GameScene: SKScene {
         if positionZ >= trackLength {
             positionZ = trackLength
             finish(won: state.quotaMet, handedOver: true)
+            renderRoad()
+            return
+        }
+
+        // A replay is as long as the recording was. Once the snail is past the
+        // last sample the run is over, whether the original ended by reaching
+        // the post office or by being stopped short of it.
+        if isReplay, let trace = replayTrace,
+           positionZ > CGFloat(trace.length) + segmentLength * 3 {
+            finish(won: positionZ >= trackLength, handedOver: positionZ >= trackLength)
             renderRoad()
             return
         }
@@ -2321,6 +2413,7 @@ final class GameScene: SKScene {
         if handedOver { Sound.shared.play(.deliver) }
         Sound.shared.play(won ? (state.perfect ? .perfect : .win) : .lose)
         Sound.shared.speak(signOff ?? (won ? .victory : .dying))
+        if recordsReplay && !isReplay { fileReplay() }
         publish()
         onFinish?(won)
     }

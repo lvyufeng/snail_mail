@@ -277,3 +277,52 @@ private struct StatRow: View {
         }
     }
 }
+
+/// The marker a played-back run wears, so a recording is never mistaken for a
+/// live one — there is no drag to steer with while it runs.
+struct ReplayBadge: View {
+    var body: some View {
+        VStack {
+            HStack {
+                Text("REPLAY")
+                    .font(.retail(13, weight: .black))
+                    .tracking(1.5)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(Palette.magenta.opacity(0.85)))
+                    .overlay(Capsule().stroke(.white.opacity(0.6), lineWidth: 1.2))
+                Spacer()
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 10)
+        .allowsHitTesting(false)
+    }
+}
+
+/// Shown when a recording runs out. A replay is not a run of the player's own,
+/// so it files no score and shows no results page: it simply hands the player
+/// back to the screen it was started from.
+struct ReplayOverlay: View {
+    let onDone: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.6).ignoresSafeArea()
+
+            NeonPanel(border: Palette.cyan) {
+                VStack(spacing: 18) {
+                    Text("REPLAY FINISHED")
+                        .font(.retail(24, weight: .black))
+                        .foregroundStyle(Palette.cyan)
+                        .multilineTextAlignment(.center)
+                    ArcadeButton(title: "BACK", tint: Palette.cyan, action: onDone)
+                        .frame(maxWidth: 240)
+                }
+            }
+            .padding(.horizontal, 40)
+        }
+    }
+}

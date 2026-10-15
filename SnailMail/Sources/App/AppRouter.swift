@@ -12,6 +12,9 @@ enum AppRoute: Hashable {
     /// the way the original prints it before a route starts.
     case briefing(mode: GameMode, level: Int)
     case game(mode: GameMode, level: Int)
+    /// The Time Trial screen's `Watch Replay` row (`0x4a3778`): plays the
+    /// recording the store is holding back over a fresh course.
+    case replay
     /// The menu's side screens, matching the original's button list.
     case help
     case options
@@ -61,6 +64,7 @@ final class AppRouter: ObservableObject {
         if let i = args.firstIndex(of: "-screen"), i + 1 < args.count {
             switch args[i + 1] {
             case "modes": return [.modes]
+            case "replay": return [.replay]
             case "help": return [.help]
             case "options": return [.options]
             case "highscores": return [.highScores]

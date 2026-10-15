@@ -301,7 +301,9 @@ struct LevelConfig {
     var damageEnabled: Bool       // false in Tutorial
     var guided: Bool              // shows step-by-step Tutorial hints
 
-    static func forMode(_ mode: GameMode, level: Int) -> LevelConfig {
+    /// `track` pins the `Track:` number a mode would otherwise draw at random,
+    /// which is what lets a replay meet the road surface it was recorded on.
+    static func forMode(_ mode: GameMode, level: Int, track pinnedTrack: Int? = nil) -> LevelConfig {
         switch mode {
         case .arcade:
             // The campaign levels come straight from the original data file, so
@@ -359,7 +361,7 @@ struct LevelConfig {
                 length: 340,
                 rows: 0,
                 background: "SpaceRed",
-                track: Int.random(in: 0...3),
+                track: pinnedTrack ?? Int.random(in: 0...3),
                 fringe: SIMD3(255, 150, 70),
                 damageEnabled: true,
                 guided: false
@@ -379,7 +381,7 @@ struct LevelConfig {
                 rows: c.route,
                 background: c.background,
                 // The retail challenge script asks for `Track:random`.
-                track: Int.random(in: 0...3),
+                track: pinnedTrack ?? Int.random(in: 0...3),
                 fringe: c.fringe,
                 damageEnabled: true,
                 guided: false

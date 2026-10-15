@@ -75,8 +75,12 @@ struct ModeSelectView: View {
     /// The retail order: Tutorial first, then the modes in their own table.
     private let order: [GameMode] = [.tutorial, .arcade, .speedRun, .challenge]
 
+    /// Whether there is a Time Trial on file to play back. The build only puts
+    /// its `Watch Replay` row up while its buffer holds one (`0x416151`).
+    private var hasReplay: Bool { ReplayStore.shared.hasReplay(for: .speedRun) }
+
     var body: some View {
-        MenuScaffold {
+        MenuScaffold(compact: true) {
             NeonPanel(border: Palette.magenta) {
                 VStack(spacing: 10) {
                     ForEach(order) { mode in
@@ -119,6 +123,19 @@ struct ModeSelectView: View {
                             settings.stepDifficulty(by: 1)
                             Sound.shared.play(.select)
                         }
+                    }
+                }
+                .padding(.horizontal, 20)
+
+                // The same screen's `Watch Replay` entry (`0x4a3778`), which
+                // the build shows only once a trial has been run.
+                NeonPanel(border: Palette.cyan) {
+                    MenuRow(title: "Watch Replay", chinese: "观看回放",
+                            subtitle: hasReplay
+                                ? "Play back your best Time Trial"
+                                : "Finish a Time Trial to record one",
+                            icon: "▶", enabled: hasReplay) {
+                        router.push(.replay)
                     }
                 }
                 .padding(.horizontal, 20)
@@ -168,6 +185,9 @@ struct ModeSelectView: View {
 /// backdrop, the game's masthead, the mute control and a scrolling column.
 private struct MenuScaffold<Content: View>: View {
     @State private var muted = Sound.shared.muted
+    /// Drops the mascot and shrinks the lockup, for the screens that carry a
+    /// long list and would otherwise have to scroll.
+    var compact = false
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -207,15 +227,16 @@ private struct MenuScaffold<Content: View>: View {
     }
 
     private var masthead: some View {
-        VStack(spacing: 18) {
-            SnailMascot()
-                .frame(width: 170, height: 130)
-                .shadow(color: Palette.magenta.opacity(0.5), radius: 18, y: 6)
-                .padding(.top, 34)
+        VStack(spacing: compact ? 6 : 18) {
+            if !compact {
+                SnailMascot()
+                    .frame(width: 170, height: 130)
+                    .shadow(color: Palette.magenta.opacity(0.5), radius: 18, y: 6)
+            }
 
             VStack(spacing: 2) {
                 Text("SNAIL MAIL")
-                    .font(.retail(46, weight: .black))
+                    .font(.retail(compact ? 30 : 46, weight: .black))
                     .tracking(1)
                     .foregroundStyle(
                         LinearGradient(colors: [Palette.gold, Palette.goldDeep],
@@ -223,10 +244,11 @@ private struct MenuScaffold<Content: View>: View {
                     )
                     .shadow(color: .black.opacity(0.8), radius: 6, y: 3)
                 Text("蜗牛竞速 · Intergalactic Delivery")
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .font(.system(size: compact ? 12 : 14, weight: .semibold, design: .rounded))
                     .foregroundStyle(Palette.ink.opacity(0.8))
             }
         }
+        .padding(.top, compact ? 14 : 34)
     }
 }
 
@@ -317,6 +339,9 @@ private struct MenuRow: View {
     let chinese: String
     let subtitle: String
     let icon: String
+    /// Greyed out and untappable, the way the build leaves a row it has
+    /// nothing to show for.
+    var enabled: Bool = true
     let action: () -> Void
 
     var body: some View {
@@ -324,27 +349,28 @@ private struct MenuRow: View {
             HStack(spacing: 12) {
                 Text(icon)
                     .font(.system(size: 17, weight: .black))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.white.opacity(enabled ? 1 : 0.4))
                     .frame(width: 34, height: 34)
                     .background(Circle().fill(Palette.cyan.opacity(0.28)))
-                    .overlay(Circle().stroke(Palette.cyan.opacity(0.8), lineWidth: 1.2))
+                    .overlay(Circle().stroke(Palette.cyan.opacity(enabled ? 0.8 : 0.3),
+                                             lineWidth: 1.2))
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
                         Text(title)
                             .font(.retail(18, weight: .heavy))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.white.opacity(enabled ? 1 : 0.45))
                         Text(chinese)
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(Palette.gold)
+                            .foregroundStyle(Palette.gold.opacity(enabled ? 1 : 0.45))
                     }
                     Text(subtitle)
                         .font(.retail(11, weight: .medium))
-                        .foregroundStyle(Palette.ink.opacity(0.6))
+                        .foregroundStyle(Palette.ink.opacity(enabled ? 0.6 : 0.35))
                 }
                 Spacer(minLength: 8)
                 Text("›")
                     .font(.system(size: 22, weight: .black))
-                    .foregroundStyle(Palette.cyan.opacity(0.9))
+                    .foregroundStyle(Palette.cyan.opacity(enabled ? 0.9 : 0.3))
             }
             .padding(.horizontal, 14)
             .frame(maxWidth: .infinity, minHeight: 56)
@@ -358,5 +384,6 @@ private struct MenuRow: View {
             )
         }
         .buttonStyle(.plain)
+        .disabled(!enabled)
     }
 }

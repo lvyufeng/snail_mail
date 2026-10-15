@@ -20,6 +20,10 @@ struct ContentView: View {
                             BriefingView(mode: mode, level: level)
                         case .game(let mode, let level):
                             GameView(mode: mode, level: level, onMenu: { router.pop() })
+                        case .replay:
+                            GameView(mode: ReplayStore.recordedMode, level: 0,
+                                     replay: ReplayStore.shared.trace,
+                                     onMenu: { router.pop() })
                         case .help:
                             HelpView()
                         case .options:

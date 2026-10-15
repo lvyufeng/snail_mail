@@ -4,6 +4,10 @@ import SpriteKit
 struct GameView: View {
     let mode: GameMode
     let level: Int
+    /// The recording to play back, when this screen is the retail build's
+    /// `Watch Replay` (`0x4a3778`). A replay runs to the end of the recording
+    /// and then hands the player back to the screen below.
+    let replay: ReplayTrace?
     /// Leaves the race for the screen below it. Supplied by the navigation
     /// stack so the results screen's MENU works even when the race is the root.
     let onMenu: () -> Void
@@ -20,11 +24,14 @@ struct GameView: View {
         #endif
     }()
 
-    init(mode: GameMode, level: Int = 0, onMenu: @escaping () -> Void) {
+    init(mode: GameMode, level: Int = 0, replay: ReplayTrace? = nil,
+         onMenu: @escaping () -> Void) {
         self.mode = mode
         self.level = level
+        self.replay = replay
         self.onMenu = onMenu
-        _model = StateObject(wrappedValue: GameViewModel(mode: mode, level: level))
+        _model = StateObject(wrappedValue: GameViewModel(mode: mode, level: level,
+                                                         replay: replay))
     }
 
     var body: some View {
@@ -60,7 +67,9 @@ struct GameView: View {
                 })
 
                 if case .finished(let won) = model.state.phase {
-                    if showingThanks {
+                    if replay != nil {
+                        ReplayOverlay { onMenu() }
+                    } else if showingThanks {
                         ThanksOverlay(mode: mode) {
                             showingThanks = false
                             onMenu()
@@ -74,6 +83,10 @@ struct GameView: View {
                                       },
                                       onMenu: { showingThanks = true })
                     }
+                }
+
+                if replay != nil {
+                    ReplayBadge()
                 }
             }
             .onAppear {
@@ -100,11 +113,16 @@ final class GameViewModel: ObservableObject {
     @Published var state = RaceState()
     let scene: GameScene
 
-    init(mode: GameMode, level: Int) {
-        scene = GameScene(mode: mode, level: level, size: CGSize(width: 800, height: 360))
+    init(mode: GameMode, level: Int, replay: ReplayTrace? = nil) {
+        scene = GameScene(mode: mode, level: level,
+                          size: CGSize(width: 800, height: 360), replay: replay)
+        if replay != nil { scene.autoStart = true }
         #if DEBUG
-        scene.autoStart = ProcessInfo.processInfo.arguments.contains("-autostart")
+        if replay == nil {
+            scene.autoStart = ProcessInfo.processInfo.arguments.contains("-autostart")
+        }
         #endif
+        scene.onReplayRecorded = { ReplayStore.shared.offer($0) }
         scene.onStateChange = { [weak self] newState in
             DispatchQueue.main.async { self?.state = newState }
         }
