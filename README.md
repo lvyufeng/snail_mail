@@ -83,14 +83,14 @@ The 2005 PC build shipped four modes, and this remake keeps exactly those:
 - **教学 Tutorial** — guided, damage-free. On-screen prompts walk through
   steering, firing, collecting parcels, grabbing upgrade rings and delivering
   to the post office.
-- **战役 Postal** — the original campaign (its level files are the
+- **战役 Postal Mode** — the original campaign (its level files are the
   `Arcade*.txt` set): ten galaxies of five stars each,
   played from a galaxy map. Every star uses its own tuning from the retail data
   file, so the early teaching levels are gentle and "40 Gph" through "100 Gph"
   ramp the speed, salt, garbage and slug density right up.
 - **时速 Time Trial** — a shorter route at high speed; reach the post office
   and the clock is the score.
-- **挑战 Challenge** — a long, densely seeded survival highway. The retail
+- **挑战 Challenge Mode** — a long, densely seeded survival highway. The retail
   level file marks it `Random:yes`, so its 51-piece pool is drawn as a shuffled
   deck and laid out differently every run.
 
@@ -222,8 +222,8 @@ docs/
 
 ## Status
 
-Playable portrait remake of the retail four modes — Tutorial, Postal (the
-ten-galaxy / 50-star campaign), Time Trial and Challenge — with procedural art,
+Playable portrait remake of the retail four modes — Tutorial, Postal Mode (the
+ten-galaxy / 50-star campaign), Time Trial and Challenge Mode — with procedural art,
 procedural audio and a guided tutorial that speaks the retail voice-over.
 Around a race it keeps the original's side screens: the per-level `GalaxyText:`
 briefing before each star, Help, Options, saved Postal and Challenge high-score

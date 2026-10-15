@@ -10,8 +10,8 @@ struct HighScoreEntry: Identifiable, Codable, Equatable {
     var level: String
 }
 
-/// The two score tables the original keeps — Postal and Challenge — each
-/// trimmed to a top five and stored between launches.
+/// The two score tables the original keeps — Postal and Challenge — stored
+/// between launches, ten places deep.
 final class HighScores: ObservableObject {
     static let shared = HighScores()
 
@@ -46,7 +46,12 @@ final class HighScores: ObservableObject {
             }
         }
 
-        var limit: Int { 5 }
+        /// How many places a table holds and shows. The retail score screen
+        /// draws a list of ten (`movl $0xa` into the table's count at 0x416a1e
+        /// and 0x416a7b), and its save routine walks eleven slots
+        /// (`movl $0xb` at 0x41794a) — ten ranked rows plus the entry being
+        /// typed into the "Enter your name here!" field.
+        var limit: Int { 10 }
     }
 
     @Published private(set) var postal: [HighScoreEntry]
