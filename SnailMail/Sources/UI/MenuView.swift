@@ -54,16 +54,16 @@ struct MenuView: View {
                         if selected == .arcade {
                             NeonPanel(border: Palette.cyan) {
                                 VStack(spacing: 8) {
-                                    CycleRow(title: "Select Speed", value: settings.speedLabel,
-                                             detail: "速度") {
+                                    SteppedRow(title: "Select Speed", value: settings.speedLabel,
+                                               detail: "速度") {
                                         settings.stepSpeed(by: -1)
                                         Sound.shared.play(.select)
                                     } next: {
                                         settings.stepSpeed(by: 1)
                                         Sound.shared.play(.select)
                                     }
-                                    CycleRow(title: "Select Difficulty", value: settings.difficultyLabel,
-                                             detail: "难度") {
+                                    SteppedRow(title: "Select Difficulty", value: settings.difficultyLabel,
+                                               detail: "难度") {
                                         settings.stepDifficulty(by: -1)
                                         Sound.shared.play(.select)
                                     } next: {
@@ -240,53 +240,6 @@ private struct ModeRow: View {
                     .stroke(isSelected ? Palette.cyan.opacity(0.9) : Palette.ink.opacity(0.15),
                             lineWidth: isSelected ? 2 : 1)
             )
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-/// A labelled value the player steps through with `<` / `>`, the way the
-/// original's `Select Speed >` and `Select Difficulty >` rows cycle.
-private struct CycleRow: View {
-    let title: String
-    let value: String
-    let detail: String
-    let previous: () -> Void
-    let next: () -> Void
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Text(title)
-                .font(.retail(13, weight: .heavy))
-                .foregroundStyle(Palette.ink.opacity(0.85))
-            Spacer(minLength: 8)
-            StepButton(icon: "<", action: previous)
-            VStack(spacing: 0) {
-                Text(value)
-                    .font(.retail(15, weight: .black))
-                    .foregroundStyle(Palette.gold)
-                Text(detail)
-                    .font(.retail(10, weight: .semibold))
-                    .foregroundStyle(Palette.ink.opacity(0.55))
-            }
-            .frame(minWidth: 76)
-            StepButton(icon: ">", action: next)
-        }
-    }
-}
-
-private struct StepButton: View {
-    let icon: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(icon)
-                .font(.retail(20, weight: .black))
-                .foregroundStyle(.white)
-                .frame(width: 34, height: 34)
-                .background(Circle().fill(Palette.cyan.opacity(0.28)))
-                .overlay(Circle().stroke(Palette.cyan.opacity(0.8), lineWidth: 1.2))
         }
         .buttonStyle(.plain)
     }
