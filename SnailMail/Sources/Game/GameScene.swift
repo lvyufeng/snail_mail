@@ -67,22 +67,20 @@ final class GameScene: SKScene {
     /// stretch him on a tall portrait phone, where the near highway runs off
     /// both edges.
     ///
-    /// Taken straight off that mesh, though, he covers 6.7% of the road and
-    /// reads half again as wide as the build's own screenshots show him. Two
-    /// things push him out. The baked frames hang his eye stalks and the gear
-    /// bolted to his shell outside the mesh box, so sizing the mesh fills the
-    /// share with his shell alone; and on the portrait frame the road at his
-    /// row is wider than the screen, so the same share covers more of the
-    /// view. The retail captures put the whole creature — shell, stalks and
-    /// gear — at about a twentieth of the frame across (`ma_5` of the screen
-    /// set, where he spans 32 of the 640 columns, and the road there already
-    /// runs off both edges as it does here). How far the road runs past the
-    /// edges is what the share has to be discounted by. With the camera at
+    /// Taken straight off that mesh he would cover 6.7% of the road, which on
+    /// this frame is a tenth of the width of the display — the share the build
+    /// gives a highway nine units across means him to be read at the distance
+    /// the camera stands, not blown up to fill a phone.
+    ///
+    /// The share here is set so the creature comes out about 28 points across,
+    /// a fourteenth of the portrait frame and comfortably legible on a phone,
+    /// which is two thirds of the mesh's own share: with the camera at
     /// `cameraHeight` his row sits 0.30 of the height below the horizon, so the
-    /// road under him is 1.61 screens across and the mesh's share of it is cut
-    /// to about a third, which leaves him a twentieth of the frame.
+    /// road under him is 1.61 screens across and 6.7% of it is 44 points.
+    /// Sizing him at a fixed fraction of the screen instead would stretch him
+    /// on a tall portrait phone, where the near highway runs off both edges.
     private let snailRoadFraction: CGFloat =
-        Sprites.snailModelWidth / roadModelWidth * 0.36
+        Sprites.snailModelWidth / roadModelWidth * 0.64
     /// Turbo's own width, in points, at the snapshot's screen scale.
     private var snailScale: CGFloat = 1
     /// Half the highway's on-screen width on Turbo's row, refreshed by
