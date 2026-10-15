@@ -361,7 +361,12 @@ struct LevelConfig {
                 length: 340,
                 rows: 0,
                 background: "SpaceRed",
-                track: pinnedTrack ?? Int.random(in: 0...3),
+                // Speed Run is the remake's own mode, and the retail build ships
+                // no script for it. It plays the highway the campaign opens on —
+                // the warm tan road (track 0) — so the mode has one settled look
+                // instead of a surface drawn at random per run. Challenge keeps
+                // the random draw, which is what `Challenge000.txt` asks for.
+                track: pinnedTrack ?? 0,
                 fringe: SIMD3(255, 150, 70),
                 damageEnabled: true,
                 guided: false

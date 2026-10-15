@@ -1021,6 +1021,30 @@ enum Sprites {
         return SKTexture(image: img)
     }
 
+    /// The strip a roadside wall wears: the fringe colour fading out as it
+    /// rises, nearly clear at the top and almost solid where it meets the road.
+    ///
+    /// The retail `Fringe` art is four pixels of white whose alpha climbs that
+    /// way, which is what makes the wall glow at its base and dissolve into the
+    /// sky above; the remake draws the same ramp itself so the wall reads as a
+    /// wall rather than a flat band of colour down each side of the highway.
+    static func fringeGradient(_ color: UIColor) -> SKTexture {
+        let h: CGFloat = 64
+        let renderer = UIGraphicsImageRenderer(size: CGSize(width: 4, height: h))
+        let img = renderer.image { ctx in
+            let cg = ctx.cgContext
+            let space = CGColorSpaceCreateDeviceRGB()
+            let grad = CGGradient(colorsSpace: space,
+                                  colors: [color.withAlphaComponent(0.04).cgColor,
+                                           color.withAlphaComponent(0.55).cgColor,
+                                           color.withAlphaComponent(0.96).cgColor] as CFArray,
+                                  locations: [0, 0.55, 1])!
+            cg.drawLinearGradient(grad, start: .zero,
+                                  end: CGPoint(x: 0, y: h), options: [])
+        }
+        return SKTexture(image: img)
+    }
+
     // MARK: - Base widths (world units the renderer scales against)
 
     static func entityBaseWidth(_ kind: EntityKind) -> CGFloat {
@@ -1238,5 +1262,18 @@ extension UIColor {
         let g = CGFloat((value & 0x00FF00) >> 8) / 255
         let b = CGFloat(value & 0x0000FF) / 255
         self.init(red: r, green: g, blue: b, alpha: 1)
+    }
+
+    /// `other` mixed in by `fraction` of the result: 0 keeps this colour, 1
+    /// returns `other`. Used to wash a backdrop's own fog colour down into the
+    /// deep base tone instead of painting it at full strength.
+    func blended(with other: UIColor, fraction: CGFloat) -> UIColor {
+        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+        guard getRed(&r1, green: &g1, blue: &b1, alpha: &a1),
+              other.getRed(&r2, green: &g2, blue: &b2, alpha: &a2) else { return self }
+        let f = max(0, min(1, fraction))
+        return UIColor(red: r1 + (r2 - r1) * f, green: g1 + (g2 - g1) * f,
+                       blue: b1 + (b2 - b1) * f, alpha: a1 + (a2 - a1) * f)
     }
 }

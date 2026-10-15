@@ -20,10 +20,10 @@ names that go with them) are what the campaign screen and `LevelConfig` use.
 The archive also holds the 2005 build's own **artwork and audio** — its
 textures, sprites, sky backdrops, music, effects and the snail's spoken lines.
 `tools/import_art.py` decodes those into `SnailMail/Resources/Retail`, which is
-gitignored, and when that folder is present the game draws the retail art and
-plays the retail soundtrack instead of the procedural stand-ins. Run it once
-against your own copy of the installer to get the pixel-level look; a clone
-that skips it still builds and runs on the procedural art. See
+gitignored. The remake never draws or plays them: it ships its own art and
+audio, and the imported files exist so a screen can be held up against the
+original. A build is only allowed to use them when it is launched with
+`-retailart`, which is how the two are compared side by side. See
 [Retail assets](#retail-assets).
 
 The same scripts carry the words the original prints around a race: each level's
@@ -31,9 +31,10 @@ The same scripts carry the words the original prints around a race: each level's
 gaps and ramps ahead) and the opening-crawl and credits text, all of which the
 remake shows on its own screens.
 
-With the retail folder in place the app plays the original music, effects and
-voice-over; without it, `AVAudioEngine` synthesises a looping chiptune and the
-effect cues at runtime. The shipped repository contains no images or sounds.
+The app plays its own soundtrack: `AVAudioEngine` synthesises a looping
+chiptune and the effect cues at runtime. `-retailart` swaps in the original
+music, effects and voice-over for comparison. The shipped repository contains
+no images or sounds.
 
 ## Screenshots
 
@@ -141,11 +142,13 @@ python3 tools/import_art.py path/to/蜗牛竞速.zip      # or path/to/SnailMail
 ```
 
 A build phase copies `SnailMail/Resources/Retail` into the app bundle when it
-exists, so a clean checkout still builds and simply falls back. `RetailAssets`
-is the single switch: every lookup returns `nil` when the folder is absent and
-the procedural drawing takes over. It covers the road surfaces, the sky, the
-snail and its damage/invincible skins, the weapon tiers, the pickups and
-hazards, the UI backdrops and the star map.
+exists. `RetailAssets` is the single switch, and it is shut by default: every
+art and audio lookup funnels through `RetailAssets.url(_:)`, which returns
+`nil` unless the app was launched with `-retailart`. That covers the road
+surfaces, the sky, the snail and its damage/invincible skins, the weapon tiers,
+the pickups and hazards, the UI backdrops and the star map, plus every retail
+recording. So a checkout with the folder imported still runs entirely on the
+remake's own art, and `-retailart` is there to compare the two.
 
 `tools/bake_meshes.py` (normally run by the importer) rasterises the `.x` meshes
 — the snail, salt shakers, turret pillars, roadside signs, the post office —
@@ -170,21 +173,20 @@ fills, a deep-space purple gradient, a ringed planet and drifting stars. The
 menu backdrop and the in-game sky are generated from the same code
 (`UI/Theme.swift` for SwiftUI, `Game/Sprites.swift` for SpriteKit), and the menu
 mascot is drawn from the same coordinates as the racer itself. When the retail
-folder is installed those procedural drawings are replaced by the originals —
-the desert / grass / ice / nebula road surfaces, the sun-baked snail skins, the
-sky backdrops and the HUD chrome — so the same code reads either way.
+originals are switched on with `-retailart` they replace those drawings — the
+desert / grass / ice / nebula road surfaces, the sun-baked snail skins, the sky
+backdrops and the HUD chrome — so the same code reads either way.
 
 ## Audio
 
-`Game/Sound.swift` plays the retail music, effects and voice-over when the
-imported assets are present, and otherwise synthesises everything with
+`Game/Sound.swift` synthesises everything with
 `AVAudioEngine` into in-memory PCM buffers: a looping four-bar chiptune plus
 `shoot`, `collect`, `upgrade`, `hit`, `boost`, `select`, `win` and `lose` cues.
-The snail's spoken lines are the retail recordings, played through a pooled bus
-with the original's volume table (`_VOICE.TXT`) and a limiter so the chatter
-never overlaps or cuts itself off; the tutorial speaks each scripted prompt as
-the track reaches it. It fails silently if audio is unavailable, and the menu
-and HUD both expose a mute toggle.
+Under `-retailart` the snail's spoken lines become the retail recordings, played
+through a pooled bus with the original's volume table (`_VOICE.TXT`) and a
+limiter so the chatter never overlaps or cuts itself off; the tutorial speaks
+each scripted prompt as the track reaches it. It fails silently if audio is
+unavailable, and the menu and HUD both expose a mute toggle.
 
 ## Requirements
 
@@ -224,13 +226,14 @@ docs/
 
 Playable portrait remake of the retail four modes — Tutorial, Postal Mode (the
 ten-galaxy / 50-star campaign), Time Trial and Challenge Mode — with procedural art,
-procedural audio and a guided tutorial that speaks the retail voice-over.
+procedural audio and a guided tutorial that walks through steering, firing and
+delivering.
 Around a race it keeps the original's side screens: the per-level `GalaxyText:`
 briefing before each star, Help, Options, saved Postal and Challenge high-score
 boards (with the "Enter your name here!" prompt) and the intro crawl and
 credits. A perfect run pays the original's 50,000-point bonus. Run
-`tools/import_art.py` to swap the procedural art and audio for the retail
-originals.
+`tools/import_art.py` and launch with `-retailart` to hold the remake's art and
+audio up against the originals.
 
 ---
 Snail Mail is a trademark of its respective owners. This is an independent,

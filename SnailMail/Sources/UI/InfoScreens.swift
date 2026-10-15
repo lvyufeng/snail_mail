@@ -123,7 +123,7 @@ struct OptionsView: View {
                     Sound.shared.play(.select)
                 }
 
-                Text("The original's own music, effects and voice play when the retail assets are installed. Without them the app falls back to synthesised audio.")
+                Text("Music and effects are the remake's own, synthesised on the device.")
                     .font(.retail(11, weight: .medium))
                     .foregroundStyle(Palette.ink.opacity(0.6))
                     .multilineTextAlignment(.center)

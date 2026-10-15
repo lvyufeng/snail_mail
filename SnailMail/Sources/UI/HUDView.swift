@@ -263,13 +263,18 @@ private struct PostalMeter: View {
                     }
                 } else {
                     // Without the art the meter still reads: the same line
-                    // between the spent tube and the pink below it.
+                    // between the spent tube and the pink below it, in the two
+                    // colours the retail tube files themselves paint — the
+                    // washed violet `damageguage` and the hot pink
+                    // `damageguagefull` — and at the strength those files carry
+                    // them, so the tube stays glass over the sky instead of
+                    // turning into a solid bar of colour down the edge.
                     VStack(spacing: 0) {
                         Rectangle()
-                            .fill(Color.black.opacity(0.45))
+                            .fill(Color(hex: "#89459B").opacity(0.35))
                             .frame(height: h * split / 393)
                         Rectangle()
-                            .fill(Palette.magenta)
+                            .fill(Color(hex: "#E03A75").opacity(0.51))
                     }
                     .frame(width: w, height: h)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))

@@ -11,8 +11,17 @@ import UIKit
 /// to the procedural art it can always draw.
 enum RetailAssets {
 
-    /// True when the retail folder made it into the bundle.
-    static let installed = url("Art/Baked/snail.png") != nil
+    /// True when the retail folder made it into the bundle at all.
+    static let imported = bundleURL("Art/Baked/snail.png") != nil
+
+    /// True when the retail files may be drawn and played.
+    ///
+    /// The remake ships its own art and audio, so the imported files are only
+    /// consulted when a debug run asks for them with `-retailart`. That keeps
+    /// them on disk for a side-by-side review of a screen without putting the
+    /// 2005 artwork in the shipped look.
+    static let installed = imported
+        && ProcessInfo.processInfo.arguments.contains("-retailart")
 
     private static var textures: [String: SKTexture] = [:]
     private static var billboards: [String: SKTexture] = [:]
@@ -20,7 +29,10 @@ enum RetailAssets {
 
     // MARK: - Lookup
 
-    static func url(_ path: String) -> URL? {
+    /// The file in the bundle, whoever asked for it. Only `imported` calls this
+    /// directly; every art and audio lookup goes through `url(_:)` below, so the
+    /// one gate above decides for all of them.
+    private static func bundleURL(_ path: String) -> URL? {
         let ns = path as NSString
         let dir = ns.deletingLastPathComponent
         let file = ns.lastPathComponent
@@ -28,6 +40,12 @@ enum RetailAssets {
         let ext = (file as NSString).pathExtension
         let sub = dir.isEmpty ? "Retail" : "Retail/" + dir
         return Bundle.main.url(forResource: base, withExtension: ext, subdirectory: sub)
+    }
+
+    /// A retail file, or nothing while the remake draws its own art.
+    static func url(_ path: String) -> URL? {
+        guard installed else { return nil }
+        return bundleURL(path)
     }
 
     static func image(_ path: String) -> UIImage? {

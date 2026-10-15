@@ -92,9 +92,11 @@ final class GameScene: SKScene {
     private var segments: [RoadSegment] = []
     private var trackLength: CGFloat = 1
     private var fringe: UIColor
-    /// The roadside wall's fill — the retail fringe gradient tinted with
-    /// `fringe`, or nil on a checkout without the retail art, where the walls
-    /// stay flat.
+    /// The roadside wall's fill: an alpha ramp in `fringe`, nearly clear at the
+    /// top of the wall and almost solid where it meets the road. The retail
+    /// fringe file is read when a review run asks for it and the same ramp is
+    /// drawn by the remake otherwise, so a wall never reads as a flat band of
+    /// colour down the side of the highway.
     private var fringeWall: SKTexture?
     /// The two tones the road checkerboard alternates between, taken from the
     /// retail surface the level's `Track:` script selects.
@@ -322,6 +324,8 @@ final class GameScene: SKScene {
             let tex = SKTexture(image: wall)
             tex.filteringMode = .linear
             self.fringeWall = tex
+        } else {
+            self.fringeWall = Sprites.fringeGradient(tint)
         }
         let palette = RetailAssets.roadColours(track: config.track)
         self.roadOrange = palette.dark
@@ -329,7 +333,8 @@ final class GameScene: SKScene {
         self.roadSurface = RetailAssets.trackSurface(config.track)
         super.init(size: size)
         self.scaleMode = .resizeFill
-        self.backgroundColor = UIColor(hex: backgroundHex(for: config.background))
+        self.backgroundColor = GameScene.skyShade(GameScene.skyTint(for: config.background),
+                                                  saturation: 0.70, brightness: 0.18)
     }
 
     required init?(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -377,7 +382,7 @@ final class GameScene: SKScene {
     }
 #endif
 
-    private func backgroundHex(for name: String) -> String {
+    private static func backgroundHex(for name: String) -> String {
         // Every level names a `BACKGROUNDS/*.txt` script, and each of those
         // declares the fog colour its backdrop is tinted with, so the sky is
         // read from the script's own `Fog:(r,g,b)` — the blue whirl, the green
@@ -386,6 +391,35 @@ final class GameScene: SKScene {
         // purple, so that is the fallback.
         guard let bg = TrackData.background[name.lowercased()] else { return "#800080" }
         return String(format: "#%02X%02X%02X", bg.fogR, bg.fogG, bg.fogB)
+    }
+
+    /// The colour the remake's own sky is built from on a given level.
+    ///
+    /// The retail backdrops are painted space art — a purple nebula, a blue
+    /// whirl, a green warp and a red one — while the `Fog:` colour their scripts
+    /// declare is only the haze laid over that art: `SpaceRed` fogs with the
+    /// very `#800080` the purple route does, which would paint a red galaxy
+    /// purple. The remake reads the nebula family the level names instead, so a
+    /// level's sky, haze and glow all sit where its backdrop art sits, and keeps
+    /// the script's own purple for the screens that have no nebula.
+    private static func skyTint(for name: String) -> UIColor {
+        switch name.lowercased() {
+        case "spacered":        return UIColor(hex: "#C0223C")
+        case "spacegreenwarp":  return UIColor(hex: "#1E9A4C")
+        case "spaceblueswhorl": return UIColor(hex: "#2A6BC8")
+        default:                return UIColor(hex: backgroundHex(for: name))
+        }
+    }
+
+    /// A shade of the level's own nebula hue. Every part of the remake's sky —
+    /// the field, the glow and the knot inside it — is one of these, so a level
+    /// keeps to a single palette instead of inventing a colour per layer.
+    private static func skyShade(_ tint: UIColor, saturation: CGFloat,
+                                 brightness: CGFloat) -> UIColor {
+        var h: CGFloat = 0, s: CGFloat = 0, v: CGFloat = 0, a: CGFloat = 0
+        tint.getHue(&h, saturation: &s, brightness: &v, alpha: &a)
+        return UIColor(hue: h, saturation: min(1, max(0.40, s) * saturation),
+                       brightness: brightness, alpha: 1)
     }
 
     // MARK: - Lifecycle
@@ -529,37 +563,62 @@ final class GameScene: SKScene {
             return
         }
 
-        let top = UIColor(hex: backgroundHex(for: config.background))
+        // The remake paints its own nebula, but reads it the way the painted
+        // originals are built: a field close to black with the colour spent on
+        // one soft knot, not poured evenly over the top of the display. The
+        // retail `SpacePurple` tile averages `#420B5C` for instance — most of
+        // its pixels are far darker than the `#800080` its script fogs with —
+        // so the level's hue is taken down to a near-black field and then lit
+        // again in the glow above the horizon.
+        let tint = GameScene.skyTint(for: config.background)
+        let top = GameScene.skyShade(tint, saturation: 0.72, brightness: 0.24)
         let grad = Sprites.gradientTexture(size: CGSize(width: 8, height: size.height),
-                                           colors: [top, UIColor(hex: "#140A2C"), UIColor(hex: "#06040D")])
+                                           colors: [top,
+                                                    GameScene.skyShade(tint, saturation: 0.85,
+                                                                       brightness: 0.10),
+                                                    UIColor(hex: "#04020A")])
         let backdrop = SKSpriteNode(texture: grad)
         backdrop.size = size
         backdrop.position = CGPoint(x: size.width / 2, y: size.height / 2)
         sky.addChild(backdrop)
 
-        let g1 = SKSpriteNode(texture: Sprites.radialTexture(size: 512, color: UIColor(hex: "#7A1E7A")))
-        g1.size = CGSize(width: size.width * 2.1, height: size.width * 2.1)
-        g1.position = CGPoint(x: size.width * 0.15, y: size.height * 0.92)
-        g1.alpha = 0.55
+        let g1 = SKSpriteNode(texture: Sprites.radialTexture(
+            size: 512, color: GameScene.skyShade(tint, saturation: 0.86, brightness: 0.52)))
+        g1.size = CGSize(width: size.width * 1.3, height: size.width * 1.3)
+        g1.position = CGPoint(x: size.width * 0.17, y: size.height * 0.94)
+        g1.alpha = 0.26
         sky.addChild(g1)
-        let g2 = SKSpriteNode(texture: Sprites.radialTexture(size: 512, color: UIColor(hex: "#1B3B7A")))
-        g2.size = CGSize(width: size.width * 1.9, height: size.width * 1.9)
-        g2.position = CGPoint(x: size.width * 0.95, y: size.height * 0.72)
-        g2.alpha = 0.5
+        // A tighter, paler core inside the glow: a nebula reads as a bright
+        // knot against the dark field rather than an even wash.
+        let g1b = SKSpriteNode(texture: Sprites.radialTexture(
+            size: 512, color: GameScene.skyShade(tint, saturation: 0.34, brightness: 0.92)))
+        g1b.size = CGSize(width: size.width * 0.38, height: size.width * 0.38)
+        g1b.position = CGPoint(x: size.width * 0.15, y: size.height * 0.96)
+        g1b.alpha = 0.26
+        sky.addChild(g1b)
+        // A second, bluer knot across the sky so the field is not lit from one
+        // corner only, kept dim enough to stay behind the road.
+        let g2 = SKSpriteNode(texture: Sprites.radialTexture(
+            size: 512, color: GameScene.skyShade(tint, saturation: 0.55, brightness: 0.40)))
+        g2.size = CGSize(width: size.width * 1.1, height: size.width * 1.1)
+        g2.position = CGPoint(x: size.width * 0.95, y: size.height * 0.76)
+        g2.alpha = 0.18
         sky.addChild(g2)
 
         // Distant ringed planet.
         let planetR = size.width * 0.22
         let planet = SKShapeNode(circleOfRadius: planetR)
-        planet.fillColor = UIColor(hex: "#6E3FA8")
-        planet.strokeColor = UIColor(hex: "#B98CFF").withAlphaComponent(0.7)
+        planet.fillColor = GameScene.skyShade(tint, saturation: 0.50, brightness: 0.34)
+        planet.strokeColor = GameScene.skyShade(tint, saturation: 0.24, brightness: 0.78)
+            .withAlphaComponent(0.7)
         planet.lineWidth = 2
         planet.position = CGPoint(x: size.width * 0.8, y: size.height * 0.84)
         planet.glowWidth = 8
         sky.addChild(planet)
         let ring = SKShapeNode(ellipseOf: CGSize(width: planetR * 3.2, height: planetR * 0.8))
         ring.fillColor = .clear
-        ring.strokeColor = UIColor(hex: "#58E1FF").withAlphaComponent(0.6)
+        ring.strokeColor = GameScene.skyShade(tint, saturation: 0.30, brightness: 0.66)
+            .withAlphaComponent(0.6)
         ring.lineWidth = 3
         ring.position = planet.position
         ring.zRotation = -0.32
@@ -596,11 +655,15 @@ final class GameScene: SKScene {
         fogNode = SKNode()
         fogNode.zPosition = 8
         let fogBand = size.height * 0.5
+        // The haze wears the level's own hue at the brightness the sky carries
+        // just above the horizon, so the far highway fades into the nebula
+        // rather than into a band of some second colour.
+        let haze = GameScene.skyShade(tint, saturation: 0.62, brightness: 0.32)
         let fog = SKSpriteNode(texture: Sprites.gradientTexture(
             size: CGSize(width: 8, height: fogBand),
-            colors: [fogColour.withAlphaComponent(0),
-                     fogColour.withAlphaComponent(0.96),
-                     fogColour.withAlphaComponent(0)],
+            colors: [haze.withAlphaComponent(0),
+                     haze.withAlphaComponent(0.82),
+                     haze.withAlphaComponent(0)],
             locations: [0, 0.5, 1]))
         fog.size = CGSize(width: size.width, height: fogBand)
         // Centred on the horizon, where the far highway dissolves into the sky.
@@ -608,9 +671,6 @@ final class GameScene: SKScene {
         fogNode.addChild(fog)
         addChild(fogNode)
     }
-
-    /// The level's fog colour — the tint its `BACKGROUNDS/*.txt` script names.
-    private var fogColour: UIColor { UIColor(hex: backgroundHex(for: config.background)) }
 
     /// Lays the level's own 512x256 space art over the scene — one copy, scaled
     /// to fill, which is what the retail build does.
@@ -1857,7 +1917,11 @@ final class GameScene: SKScene {
         for i in 0..<drawDistance {
             if i < roadPool.count { roadPool[i].isHidden = true }
             if i < roadPoolB.count { roadPoolB[i].isHidden = true }
-            for node in roadTonePool[i] { node.isHidden = true }
+            // The tone pool only exists when a retail road tiling was read in;
+            // the two-tone fallback above keeps its own rows.
+            if i < roadTonePool.count {
+                for node in roadTonePool[i] { node.isHidden = true }
+            }
             wallLeftPool[i].isHidden = true
             wallRightPool[i].isHidden = true
         }
@@ -2158,7 +2222,12 @@ final class GameScene: SKScene {
                                      rx2, fy(seg.p2.screenY - lh2), rx2, fy(seg.p2.screenY))
     }
 
-    private let checkCols = 6
+    /// Columns the fallback cuts a road segment into. The retail tiling is a
+    /// 32-cell lattice half of which spans the highway, so sixteen cells lie
+    /// across the road; the fallback cuts the same sixteen strips and flips the
+    /// tone between them and between rows, which is the same weave at the same
+    /// scale. Fewer, wider cells read as a chessboard rather than a road.
+    private let checkCols = 16
 
     /// The blue rails the highway wears.
     ///
