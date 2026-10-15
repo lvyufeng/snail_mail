@@ -353,7 +353,12 @@ enum Sprites {
         // Foot / body.
         let bodyPath = CGMutablePath()
         bodyPath.addEllipse(in: CGRect(x: -60, y: -30, width: 120, height: 64))
-        root.addChild(shape(bodyPath, fill: bodyLo, line: 3))
+        let foot = shape(bodyPath, fill: bodyLo, line: 3)
+        // Named so `-snailprobe` can measure Turbo's visible width on the
+        // checkout without the retail art, where there is no `snailframes`
+        // billboard to read the pose off.
+        foot.name = "snailbody"
+        root.addChild(foot)
         let bellyPath = CGMutablePath()
         bellyPath.addEllipse(in: CGRect(x: -52, y: -22, width: 104, height: 48))
         root.addChild(shape(bellyPath, fill: body, line: 0))
@@ -470,22 +475,37 @@ enum Sprites {
     /// How wide Turbo's own art is, in the same world units the procedural
     /// parts use. Callers that place him in a perspective scene (the race)
     /// divide their target width by this to get the node's scale.
-    static let snailNativeWidth: CGFloat = 116
+    ///
+    /// It is the ink of the drawing below, which `-artprobe` measures at 123
+    /// across, so the width he is meant to cover over this is the width he ends
+    /// up covering. It used to be 116, which drew him six per cent wider than
+    /// the 0.606 of the road his own mesh stands at.
+    static let snailNativeWidth: CGFloat = 123
 
     /// Turbo's share of one animation frame, in the frame's own pixels: the
     /// `turbo-base` pose's opaque box is 137 of the frame's 384 pixels across
-    /// and 252 tall, its feet resting on row 357.2.
+    /// and 252 tall (rows 108...359 of the window), its feet resting on row
+    /// 358.5.
     fileprivate static let snailFrameArtWidth: CGFloat = 137.0 / 384.0
     fileprivate static let snailFrameArtHeight: CGFloat = 252.0 / 384.0
-    fileprivate static let snailFrameFeet: CGFloat = 357.2 / 384.0
+    fileprivate static let snailFrameFeet: CGFloat = 358.5 / 384.0
 
     /// The width an animation frame is drawn at. `bake_clips` stores the poses
     /// whole inside one shared window rather than trimming each one, so the node
     /// is sized to the window; this width makes the Turbo inside it come out
-    /// exactly as wide as the trimmed `snail.png` billboard drew him (that one
-    /// puts the same pose across 148 of its 152 pixels).
+    /// exactly `snailNativeWidth` across, the width both the procedural snail
+    /// and the model's own 0.606 of the road stand at.
     static let snailFrameWidth: CGFloat =
-        snailNativeWidth * (148.0 / 152.0) / snailFrameArtWidth
+        snailNativeWidth / snailFrameArtWidth
+
+    /// Turbo's own part of an animation frame's own size. The frames share one
+    /// window with a wide margin around him, so anything measuring him off the
+    /// node — the `-snailprobe` and `-artprobe` readouts, say — has to come
+    /// through here rather than read the whole canvas.
+    static func snailFrameVisible(_ frame: CGSize) -> CGSize {
+        CGSize(width: frame.width * snailFrameArtWidth,
+               height: frame.height * snailFrameArtHeight)
+    }
 
     /// How wide Turbo stands in the engine's own units — the `turbo-base` mesh
     /// runs x -0.303...0.302 — which are the units the road is nine across in.
@@ -530,6 +550,10 @@ enum Sprites {
     static func makeEntity(_ kind: EntityKind, fringe: UIColor, tier: Int = 0,
                            face: Int = 0) -> SKNode {
         let body = makeEntityBody(kind, fringe: fringe, tier: tier, face: face)
+        // Named so the `-artprobe` readout can measure the drawing without the
+        // contact shadow, which is a child of the same node and would add a
+        // third of the width again.
+        body.name = "entitybody"
         guard groundKinds.contains(kind) else { return body }
         // A soft contact shadow so road objects read as sitting on the track
         // instead of floating. It scales with the sprite, so it stays correct
@@ -730,14 +754,14 @@ enum Sprites {
     /// (`X/PILLAR1..8.X2`), which is how a course raises a slim pillar into one
     /// wide enough to block the road. Every tier spans the same height and the
     /// same depth; these are the widths they stand at, straight from the meshes.
-    private static let pillarTierSpan: [CGFloat] = [
+    static let pillarTierSpan: [CGFloat] = [
         1.040, 1.711, 2.739, 3.654, 4.855, 5.826, 6.853, 7.998,
     ]
     /// The window `tools/bake_meshes.py` renders all eight of them inside, in
     /// those same units. Because the window is shared, the post covers
     /// `1.040 / 8.6` of the canvas it is drawn on, which is what lets a post
     /// reach as far across the road as its own mesh did.
-    private static let pillarCanvasSpan: CGFloat = 8.6
+    static let pillarCanvasSpan: CGFloat = 8.6
 
     /// Where the road runs through that canvas. The window is centred on the
     /// post's projected middle, and the build stands the post with a unit of it
@@ -753,24 +777,36 @@ enum Sprites {
         max(1, min(pillarTierSpan.count, tier))
     }
 
-    /// How much wider a pillar of `tier` stands than the slim tier-1 post, as
-    /// the ratio of their meshes. The renderer scales the pillar's footprint
-    /// and its collision with this, so what is drawn is what the snail hits.
-    static func pillarWidthFactor(_ tier: Int) -> CGFloat {
-        let t = clampPillarTier(tier)
-        return pillarTierSpan[t - 1] / pillarTierSpan[0]
-    }
-
     /// How wide an entity stands in the engine's own units. Everything the
     /// build ships a mesh for is measured from it, so a post reaches as far
     /// across the road as its own mesh did, the trampoline lies as flat as it
     /// was modelled and the post office front spans the width it was built at.
-    /// The props that exist only as 2D art keep the width the flat drawing gave
-    /// them, a little under a quarter of the road: hearts, rocks, slugs, the
-    /// rings, the arch, ramps and parcels.
+    ///
+    /// The props that exist only as 2D art carry no mesh to measure, and the
+    /// build ships no size table for them either: `SnailMail.exe` holds only
+    /// the file name of each `Sprites/*.tga`, and the PSM port's
+    /// `sprites_sprites.txt` records an atlas rect rather than a world size. So
+    /// the width each was drawn at lived in code, per kind. The course grid
+    /// recovers it.
+    ///
+    /// A segment row is ten cells, and the meshes fix a cell at one model
+    /// unit: `X/PILLAR1.X2` is 1.040 across, one cell, and `X/PILLAR8.X2` is
+    /// 7.998 across, the eight drivable columns; `X/TRAMP.X2` is 3.000, the
+    /// three cells a `(((` run reserves. The one flat hazard the build also
+    /// meshes agrees — `X/SALT.X2` measures 1.212 for a single-cell `s`, the
+    /// heap spilling a little past its cell. So a piece reserves 1.000 unit
+    /// for a prop, and the flat art is authored to fill that square.
+    ///
+    /// Anchoring the widest flat prop, the 80-unit rock, at exactly the cell
+    /// gives a design unit worth 1/80 unit, and every entry below is that
+    /// constant crossed with the kind's own art width. This replaces a band
+    /// read off the retail frames: those blobs are asteroids adrift in the
+    /// space field above the horizon, where no road width sits beside them to
+    /// measure against, so the 0.70 they gave was about a third too small for
+    /// the cell the piece actually reserves.
     static func entityModelWidth(_ kind: EntityKind) -> CGFloat {
         switch kind {
-        case .salt:       return 1.212       // salt.x, x -0.495...0.717
+        case .salt:       return 1.212       // salt.x, x -0.663...0.549
         case .turret:     return pillarCanvasSpan
         case .postOffice: return 5.999       // postofficestop.x
         case .trampoline: return 3.0         // tramp.x
@@ -778,7 +814,27 @@ enum Sprites {
         // The build's fence is a nine-unit quad tiled along the road rather
         // than a prop, so the stand-in post is sized to the one cell it marks.
         case .barrier:    return roadModelWidth / 8
-        default:          return 2.0
+
+        case .asteroid:   return 1.000       // the 80-unit rock fills its cell
+        case .enemy:      return 0.950       // the same rock art, 76 wide
+        case .slug:       return 0.875       // 70 wide
+        // The hoop the snail threads — power-up, slow, blast and plain, plus
+        // the decorative arch, all the one ring drawing, 88 wide.
+        case .ringUpgrade, .ringSlow, .ringExplode, .ringNormal, .arch:
+                          return 1.100       // 88 wide
+        case .heart:      return 0.600       // 48 wide
+        case .parcel:     return 0.600       // 48 wide
+        // The signs are the one family drawn in the model's own units rather
+        // than in a box of their own, so their width is the mesh's, which is
+        // also the share of the road the track data gives them.
+        case .signBang:            return CGFloat(SignKind.bang.modelWidth)
+        case .signConstruction:    return CGFloat(SignKind.construction.modelWidth)
+        case .signStop:            return CGFloat(SignKind.stop.modelWidth)
+        // Only reached when a piece leaves a ramp's width unset; a run of ramp
+        // cells carries the span it covers in `EntitySpec.width` instead, and a
+        // pit carries its own in the same place.
+        case .ramp:       return 0.700
+        default:          return 0.700
         }
     }
 
@@ -794,15 +850,88 @@ enum Sprites {
         return entityBaseWidth(.turret) * pillarTierSpan[t - 1] / pillarCanvasSpan
     }
 
+    /// How wide a road entity is solid, in the model units the road is nine
+    /// across: the same width its own art covers, which is what a pit, a ramp,
+    /// a trampoline, a sign or a post of a given tier actually occupies. The
+    /// one exception is a pillar, drawn as the shared canvas its post sits in —
+    /// only the post is solid, so its own mesh's width is what counts.
+    static func entitySolidWidth(_ kind: EntityKind, tier: Int) -> CGFloat {
+        guard kind == .turret else { return entityModelWidth(kind) }
+        return pillarTierSpan[clampPillarTier(tier) - 1]
+    }
+
     private static func makePillar(tier: Int) -> SKNode {
-        // The stand-in for a checkout without the retail meshes: the flat post
-        // from the procedural art, thickening with the tier so the course still
-        // reads the way it plays.
-        let f = pillarWidthFactor(tier)
+        // The stand-in for a checkout without the retail meshes: the mesh
+        // itself. `X/PILLAR*.X2` is not the slab the grid's digit suggests but
+        // an eight-sided spire — a base ring sunk a unit into the road, a
+        // shoulder at y 6.590, a small head at 7.088 and a pointed apex at
+        // 7.273 — tapering from 1.040 across at the shoulder to 0.723 at the
+        // base and 0.584 at the head. Each of the eight meshes carries the same
+        // three rings, so the post is drawn as that profile in the window
+        // `tools/bake_meshes.py` rasterises them into: the ratio of the mesh's
+        // widths to the window is what the renderer scales, which puts the
+        // fallback post and the retail bake on the same stretch of road.
+        let k = entityBaseWidth(.turret) / pillarCanvasSpan    // local per model unit
+        let t = clampPillarTier(tier)
+        let gain = pillarTierSpan[t - 1] / pillarTierSpan[0]
+        /// The window's road line is the node's own origin, so a model's y is
+        /// its local y, and the tier widens the rings without moving them.
+        func y(_ modelY: CGFloat) -> CGFloat { modelY * k }
+        func half(_ modelWidth: CGFloat) -> CGFloat { modelWidth * gain * k / 2 }
+        // The bake outlines the post with about two of its 256 pixels, which on
+        // this canvas is 0.055 of a model unit: a fixed local line would come
+        // out nearly a third of the slim tier-1 post's own width.
+        let line = k * 0.055 * gain
+
+        let baseY = y(-1.000), shoulderY = y(6.590), headY = y(7.088), apexY = y(7.273)
         let root = SKNode()
-        root.addChild(roundRect(34 * f, 90, CGPoint(x: 0, y: 0), radius: 8, fill: metal, line: 3))
-        root.addChild(roundRect(52 * f, 26, CGPoint(x: 0, y: 40), radius: 8, fill: metalLo, line: 3))
-        root.addChild(circle(7 * f, CGPoint(x: 0, y: 40), fill: danger, stroke: ink, line: 2))
+        let spire = CGMutablePath()
+        spire.move(to: CGPoint(x: -half(0.723), y: baseY))
+        spire.addLine(to: CGPoint(x: half(0.723), y: baseY))
+        spire.addLine(to: CGPoint(x: half(1.040), y: shoulderY))
+        spire.addLine(to: CGPoint(x: half(0.584), y: headY))
+        spire.addLine(to: CGPoint(x: 0, y: apexY))
+        spire.addLine(to: CGPoint(x: -half(0.584), y: headY))
+        spire.addLine(to: CGPoint(x: -half(1.040), y: shoulderY))
+        spire.closeSubpath()
+        root.addChild(shape(spire, fill: metalLo, stroke: ink, line: line))
+
+        /// The half width of the shaft at a local height, so a band can be laid
+        /// across the taper rather than across the window.
+        func shaft(_ yl: CGFloat) -> CGFloat {
+            if yl <= shoulderY {
+                let f = (yl - baseY) / max(1, shoulderY - baseY)
+                return half(0.723) + (half(1.040) - half(0.723)) * f
+            }
+            let f = (yl - shoulderY) / max(1, headY - shoulderY)
+            return half(1.040) + (half(0.584) - half(1.040)) * f
+        }
+        func band(_ from: CGFloat, _ to: CGFloat, _ color: UIColor) {
+            let a = shaft(from), b = shaft(to)
+            let p = CGMutablePath()
+            p.move(to: CGPoint(x: -a, y: from))
+            p.addLine(to: CGPoint(x: a, y: from))
+            p.addLine(to: CGPoint(x: b, y: to))
+            p.addLine(to: CGPoint(x: -b, y: to))
+            p.closeSubpath()
+            root.addChild(shape(p, fill: color, stroke: .clear, line: 0))
+        }
+        // The lit face: the bake lights the post's front, so a narrower spire
+        // down the middle keeps the flat drawing from reading as a silhouette.
+        let lit = CGMutablePath()
+        lit.move(to: CGPoint(x: -half(0.723) * 0.55, y: baseY))
+        lit.addLine(to: CGPoint(x: half(0.723) * 0.55, y: baseY))
+        lit.addLine(to: CGPoint(x: half(1.040) * 0.55, y: shoulderY))
+        lit.addLine(to: CGPoint(x: half(0.584) * 0.55, y: headY))
+        lit.addLine(to: CGPoint(x: 0, y: apexY))
+        lit.addLine(to: CGPoint(x: -half(0.584) * 0.55, y: headY))
+        lit.addLine(to: CGPoint(x: -half(1.040) * 0.55, y: shoulderY))
+        lit.closeSubpath()
+        root.addChild(shape(lit, fill: metal, stroke: .clear, line: 0))
+        // The two red turns the bake paints on it: a collar just under the
+        // shoulder and the head, which is what makes the spire read as a turret.
+        band(y(5.560), y(5.300), danger)
+        band(y(6.990), y(6.760), danger)
         return root
     }
 
@@ -1246,20 +1375,42 @@ enum Sprites {
 
     // MARK: - Base widths (world units the renderer scales against)
 
+    /// How wide a kind's own drawing inks, in the drawing's local units.
+    ///
+    /// The renderer lays a body down at `spriteWidth / entityBaseWidth`, so a
+    /// drawing that inks the whole of this comes out exactly `entityModelWidth`
+    /// across — the stretch of road the build's mesh or the piece's own cell
+    /// gives it. The retail billboards are sized the same way, since
+    /// `retail(_:width:)` sets the sprite to this width and a cropped billboard
+    /// inks all of it, so both paths put the same object on the road.
+    ///
+    /// The numbers are that measurement, taken with `-artprobe`, so they move
+    /// with the art rather than the other way round: a drawing that covered
+    /// only part of its box would stand that much narrower than the prop whose
+    /// cell it takes, which is how the rock came out a sixth short of its cell
+    /// and the slug and the post office a third. The three roadside signs are
+    /// the exception, drawn in the model's own units: their base is the mesh's
+    /// own width and the board's outline spills a little past it, the way the
+    /// bake outlines a pillar's shoulder past the ring it measures.
     static func entityBaseWidth(_ kind: EntityKind) -> CGFloat {
         switch kind {
-        case .postOffice: 240
-        case .hole: 120
-        case .slug: 70
-        case .turret: 80
-        case .ringUpgrade, .ringSlow, .ringExplode, .ringNormal, .arch: 88
-        case .asteroid: 80
-        case .enemy: 76
-        case .ramp: 80
-        case .trampoline: 84
-        case .barrier: 44
+        case .postOffice: 160.5     // the board, its roof and the little flag
+        case .hole: 126             // the pit's mouth; its rim spans three wider
+        case .slug: 47              // the body, the two eye stalks and their eyes
+        case .turret: 80            // the shared window, not the post inside it
+        case .ringUpgrade, .ringSlow, .ringExplode, .ringNormal: 89
+        case .arch: 86
+        case .asteroid: 67.8        // the nine-sided rock, outline included
+        case .enemy: 84
+        case .ramp: 92
+        case .trampoline: 79
+        case .barrier: 49
+        case .jetpack: 49
+        case .heart: 51
+        case .parcel: 50
+        case .salt: 47
         case .signBang, .signConstruction, .signStop:
-            CGFloat(SignKind(entity: kind)?.modelWidth ?? 48)
+            SignKind(entity: kind)?.signInkWidth ?? 48
         default: 48
         }
     }

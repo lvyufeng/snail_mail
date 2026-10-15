@@ -203,6 +203,19 @@ enum SignKind {
     /// `modelWidth` as a fraction of the road, the way `EntitySpec.width`
     /// measures it.
     var widthFraction: Double { modelWidth / Double(roadModelWidth) }
+
+    /// How wide the remake's own drawing of the sign inks, outline included,
+    /// measured on screen with `-artprobe`. The drawing is laid out in the
+    /// model's units, so the board and its outline reach a little past
+    /// `modelWidth`; the renderer scales by `entityModelWidth / ink` and lands
+    /// the drawn board on exactly the stretch of road the mesh covered.
+    var signInkWidth: CGFloat {
+        switch self {
+        case .bang: 8.12
+        case .construction: 12.40
+        case .stop: 2.06
+        }
+    }
 }
 
 // MARK: - World geometry
@@ -962,7 +975,6 @@ enum TrackBuilder {
             let metrics = roadRun(slices[i])
             let lo = metrics?.lo ?? 0, hi = metrics?.hi ?? 7
             let laneCentre = (CGFloat(lo) + CGFloat(hi)) / 2
-            let halfLane = max(0.5, (CGFloat(hi) - CGFloat(lo)) / 2)
 
             // A blank row means different things in different pieces. Where a
             // piece names no `Path=`, the road really has stopped: `Easy Gap`
@@ -986,11 +998,19 @@ enum TrackBuilder {
             }
             /// The same for a column that falls between two cells, so a run
             /// of an even number of cells still centres on the road.
+            ///
+            /// A column is one model unit — `X/PILLAR1.X2` is 1.040 across,
+            /// one cell, and the eight drivable columns of `X/PILLAR8.X2`
+            /// measure 7.998 — and the ribbon between the tire lines is nine,
+            /// so the distance across is `roadModelWidth / 2`. Dividing by the
+            /// run's own width instead, as this once did, spread the eight
+            /// columns of a full row wall to wall and pushed a three-column
+            /// piece's props a third of a unit clear off its road.
             func across(_ col: CGFloat) -> CGFloat {
-                max(-0.92, min(0.92, (col - laneCentre) / (halfLane + 0.5)))
+                max(-0.95, min(0.95, (col - laneCentre) / (roadModelWidth / 2)))
             }
             func spanWidth(_ from: Int, _ to: Int) -> CGFloat {
-                min(0.95, (CGFloat(to - from + 1)) / (2 * halfLane + 1))
+                min(0.95, (CGFloat(to - from + 1)) / roadModelWidth)
             }
 
             var sprites: [EntitySpec] = []
@@ -1085,8 +1105,18 @@ enum TrackBuilder {
                 case "R":
                     sprites.append(EntitySpec(kind: .ramp, offset: across(col), depth: 0.5))
                 case "(":
-                    sprites.append(EntitySpec(kind: .trampoline, offset: across(col),
-                                              depth: 0.5))
+                    // The trampoline's own mesh spans three cells —
+                    // `X/TRAMP.X2` measures 3.000 — and every `(((` a course
+                    // ships is exactly that run of three, so the piece is one
+                    // pad across the run rather than three pads stacked on one
+                    // another.
+                    var end = col
+                    while end + 1 < 8 && row[end + 1] == "(" { end += 1 }
+                    sprites.append(EntitySpec(kind: .trampoline,
+                                              offset: across((CGFloat(col) + CGFloat(end)) / 2),
+                                              depth: 0.5,
+                                              width: spanWidth(col, end)))
+                    col = end
                 case "[":
                     sprites.append(EntitySpec(kind: .enemy, offset: across(col), depth: 0.5))
                 case "J":

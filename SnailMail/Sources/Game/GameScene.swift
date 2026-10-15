@@ -55,9 +55,6 @@ final class GameScene: SKScene {
     private var hideWalls = false
     private var hideRails = false
     #endif
-    /// How wide the pit is, as a fraction of the half-road: the pit is drawn
-    /// 0.9 × screenW across and the snail drops in over the same span.
-    private let holeHalfWidth: CGFloat = 0.45
     /// How wide Turbo is drawn, as a fraction of the highway's full width at
     /// his own row on screen.
     ///
@@ -67,20 +64,22 @@ final class GameScene: SKScene {
     /// stretch him on a tall portrait phone, where the near highway runs off
     /// both edges.
     ///
-    /// Taken straight off that mesh he would cover 6.7% of the road, which on
-    /// this frame is a tenth of the width of the display — the share the build
-    /// gives a highway nine units across means him to be read at the distance
-    /// the camera stands, not blown up to fill a phone.
+    /// Taken straight off the mesh he covers 6.7% of the road, which on this
+    /// frame is about a ninth of the width of the display: with the camera at
+    /// `cameraHeight` his row sits a third of the height below the horizon, so
+    /// the road under him is 1.6 screens across and 6.7% of it is 44 points.
+    /// The build reads him at the distance the camera stands rather than blown
+    /// up to fill a phone, and so does this. Sizing him at a fixed fraction of
+    /// the screen instead would stretch him on a tall portrait phone, where the
+    /// near highway runs off both edges.
     ///
-    /// The share here is set so the creature comes out about 28 points across,
-    /// a fourteenth of the portrait frame and comfortably legible on a phone,
-    /// which is two thirds of the mesh's own share: with the camera at
-    /// `cameraHeight` his row sits 0.30 of the height below the horizon, so the
-    /// road under him is 1.61 screens across and 6.7% of it is 44 points.
-    /// Sizing him at a fixed fraction of the screen instead would stretch him
-    /// on a tall portrait phone, where the near highway runs off both edges.
+    /// The share is the mesh's own, undivided. It used to be trimmed to 0.64 of
+    /// it to keep him legible while the flat props were still drawn at the
+    /// shared two-and-a-quarter-unit fallback and stood five times his width;
+    /// with those back at the share the build drew them at, matching the mesh
+    /// is what makes the two read together the way the build's frame does.
     private let snailRoadFraction: CGFloat =
-        Sprites.snailModelWidth / roadModelWidth * 0.64
+        Sprites.snailModelWidth / roadModelWidth
     /// Turbo's own width, in points, at the snapshot's screen scale.
     private var snailScale: CGFloat = 1
     /// Half the highway's on-screen width on Turbo's row, refreshed by
@@ -324,6 +323,18 @@ final class GameScene: SKScene {
     }
     private var entityPool: [EntityKey: [SKNode]] = [:]
     private var entityUse: [EntityKey: Int] = [:]
+    #if DEBUG
+    private var sizeProbeOn = false
+    /// `-artprobe`: print, for every kind of road furniture and for Turbo, the
+    /// width the drawing actually inks at scale 1, so it can be set against the
+    /// width the piece's cell gives it.
+    private var artProbeOn = false
+    private var artProbeDone = false
+    /// Per-kind widest sample of `(spriteWidth, roadScreenWidth)` seen this
+    /// frame, so `-sizeprobe` can print what share of the road each prop is
+    /// actually drawn at, in points.
+    private var sizeProbe: [String: (CGFloat, CGFloat)] = [:]
+    #endif
     /// Idle bullets are pooled per weapon tier so an upgrade immediately swaps
     /// the look — a tier-1 pellet must never come back as a rocket.
     private var bulletPool: [Int: [SKNode]] = [:]
@@ -548,6 +559,15 @@ final class GameScene: SKScene {
                 positionZ = max(0, mid - playerZ - 10 * segmentLength)
             }
         }
+        if let arg = ProcessInfo.processInfo.arguments.firstIndex(of: "-park"),
+           arg + 1 < ProcessInfo.processInfo.arguments.count,
+           let row = Int(ProcessInfo.processInfo.arguments[arg + 1]) {
+            startRace()
+            // Park the snail a few rows short of row `n`, so the row the caller
+            // wants to measure sits in the near half of the frame where the
+            // road is widest and a prop's drawn width reads cleanly.
+            positionZ = max(0, CGFloat(row - 5) * segmentLength - playerZ)
+        }
         if ProcessInfo.processInfo.arguments.contains("-givesjet") {
             startRace()
             // Drop a jetpack under the snail so its flight can be watched
@@ -579,6 +599,8 @@ final class GameScene: SKScene {
         debugIgnoreNoFall = ProcessInfo.processInfo.arguments.contains("-ignoretnf")
         #if DEBUG
         roadGeomDebug = ProcessInfo.processInfo.arguments.contains("-roadgeom")
+        sizeProbeOn = ProcessInfo.processInfo.arguments.contains("-sizeprobe")
+        artProbeOn = ProcessInfo.processInfo.arguments.contains("-artprobe")
         bandProbe = ProcessInfo.processInfo.arguments.contains("-bandprobe")
         roadCellsProbe = ProcessInfo.processInfo.arguments.contains("-roadcells")
         #endif
@@ -1406,24 +1428,34 @@ final class GameScene: SKScene {
         for idx in window {
             let seg = segments[((idx % segments.count) + segments.count) % segments.count]
             for spec in seg.sprites {
-                // A pit is as wide as it looks, and a turret widens with its
-                // own mesh; everything else is a point-sized pick-up or hazard
-                // with a slim footprint.
-                let tolerance: CGFloat
+                // Every piece catches the snail across the width its own
+                // design gives it, and the renderer draws each of those the
+                // same width, so what is drawn is what is hit: a pit and a ramp
+                // span the run of cells the track data hands them, a sign its
+                // board, a post the mesh of its tier, everything else the
+                // width its own art covers.
+                let span: CGFloat
                 switch spec.kind {
-                case .hole:
-                    tolerance = (spec.width > 0 ? spec.width : holeHalfWidth * 2) / 2 * 0.93
-                case .ramp:
+                case .hole, .ramp:
                     // A ramp spans the columns its run covers, so a piece that
                     // turns the whole road into one (`{>>>>>>}`) launches the
                     // snail wherever it crosses, while a lone `<` at the kerb
-                    // only catches a snail hugging that edge.
-                    tolerance = max(0.16, spec.width * 0.93)
-                case .turret:
-                    tolerance = 0.16 * Sprites.pillarWidthFactor(spec.tier)
+                    // only catches a snail over that one cell.
+                    let fraction = spec.width > 0
+                        ? spec.width
+                        : Sprites.entityModelWidth(spec.kind) / roadModelWidth
+                    span = fraction * roadModelWidth
+                case .signBang, .signConstruction, .signStop:
+                    let own = CGFloat(SignKind(entity: spec.kind)?.widthFraction ?? 0)
+                    span = (spec.width > 0 ? spec.width : own) * roadModelWidth
                 default:
-                    tolerance = 0.16
+                    span = Sprites.entitySolidWidth(spec.kind, tier: spec.tier)
                 }
+                // The build's own test is the two boxes touching, so Turbo's
+                // own 0.606 units come on top of the piece's width. `playerX`
+                // runs -1...1 across the road, so half of the nine model units
+                // the road is across is one of those.
+                let tolerance = (span + Sprites.snailModelWidth) / 2 / (roadModelWidth / 2)
                 guard abs(spec.offset - playerX) < tolerance else { continue }
                 switch spec.kind {
                 case .parcel:
@@ -2232,6 +2264,126 @@ final class GameScene: SKScene {
         }
         #endif
         #if DEBUG
+        // `-artprobe` draws each kind of road furniture once at scale 1 and
+        // prints the width it inks, so the drawing can be set against the
+        // width the piece's cell gives it. Turbo comes along, measured the
+        // same way, against the 0.606 units his own mesh stands at.
+        if artProbeOn && !artProbeDone {
+            artProbeDone = true
+            /// The box a drawing actually inks, in its own node's space.
+            /// SpriteKit folds a crop node's *unclipped* children into its
+            /// frame, so the hoarding's stripes — which hang a whole board past
+            /// each edge — read as a board three times its own width; measuring
+            /// the mask instead reports what the player sees.
+            func inkBox(_ node: SKNode) -> CGRect {
+                if let crop = node as? SKCropNode {
+                    guard let mask = crop.maskNode else { return .null }
+                    return inkBox(mask)
+                }
+                var box = CGRect.null
+                if let s = node as? SKShapeNode, let path = s.path {
+                    box = path.boundingBoxOfPath.insetBy(dx: -s.lineWidth / 2,
+                                                         dy: -s.lineWidth / 2)
+                } else if let s = node as? SKSpriteNode, s.texture != nil {
+                    box = CGRect(x: -s.size.width / 2, y: -s.size.height / 2,
+                                 width: s.size.width, height: s.size.height)
+                }
+                for child in node.children {
+                    let c = inkBox(child)
+                    if c.isNull { continue }
+                    box = box.union(c.offsetBy(dx: child.position.x,
+                                               dy: child.position.y))
+                }
+                return box
+            }
+            for kind in EntityKind.allCases {
+                let node = Sprites.makeEntity(kind, fringe: fringe, tier: 1, face: 0)
+                let body = node.childNode(withName: "entitybody") ?? node
+                let f = inkBox(body)
+                let base = Sprites.entityBaseWidth(kind)
+                let model = Sprites.entityModelWidth(kind)
+                let w = f.isNull ? 0 : f.width
+                let h = f.isNull ? 0 : f.height
+                let ink = base > 0 ? w / base : 0
+                // A turret is drawn as the post inside the shared window, so
+                // its share of the road is the post's own share of the canvas
+                // the window draws at, not the whole window's.
+                let footprint = Sprites.entityFootprint(kind, tier: 1)
+                print(String(format: "ARTPROBE %-18@ ink=%7.2f h=%7.2f base=%6.1f"
+                             + " model=%6.3f drawn=%6.3f share=%5.3f fprint=%6.2f",
+                             "\(kind)" as NSString, Double(w), Double(h),
+                             Double(base), Double(model), Double(ink * model),
+                             Double(ink * model / roadModelWidth),
+                             Double(footprint / base * model)))
+            }
+            // All eight pillars share the one canvas the window draws at, so
+            // the sweep reads each tier's own spire back off that canvas and
+            // holds it against the mesh the tier stands for.
+            func fillBox(_ node: SKNode) -> CGRect {
+                var box = CGRect.null
+                if let s = node as? SKShapeNode, let path = s.path {
+                    box = path.boundingBoxOfPath
+                } else if let s = node as? SKSpriteNode, s.texture != nil {
+                    box = CGRect(x: -s.size.width / 2, y: -s.size.height / 2,
+                                 width: s.size.width, height: s.size.height)
+                }
+                for child in node.children {
+                    let c = fillBox(child)
+                    if c.isNull { continue }
+                    box = box.union(c.offsetBy(dx: child.position.x,
+                                               dy: child.position.y))
+                }
+                return box
+            }
+            for tier in 1...Sprites.pillarTierSpan.count {
+                let node = Sprites.makeEntity(.turret, fringe: fringe, tier: tier, face: 0)
+                let body = node.childNode(withName: "entitybody") ?? node
+                let f = fillBox(body)
+                let base = Sprites.entityBaseWidth(.turret)
+                let ink = (f.isNull ? 0 : f.width) / base
+                let span = Sprites.pillarTierSpan[tier - 1]
+                print(String(format: "ARTPROBE pillar%02d            ink=%7.2f"
+                             + " drawn=%6.3f mesh=%6.3f share=%5.3f pole=%5.3f",
+                             tier, Double(f.isNull ? 0 : f.width),
+                             Double(ink * Sprites.pillarCanvasSpan),
+                             Double(span),
+                             Double(ink * Sprites.pillarCanvasSpan / roadModelWidth),
+                             Double(span / roadModelWidth)))
+            }
+            let tur = Sprites.makeSnail()
+            var box = inkBox(tur)
+            // The animation frames carry one shared window with a margin
+            // around Turbo, so the frame's own ink is not his.
+            if tur.childNode(withName: "snailframes") != nil {
+                box.size = Sprites.snailFrameVisible(box.size)
+            }
+            let ink = box.isNull ? 0 : box.width
+            print(String(format: "ARTPROBE %-18@ ink=%7.2f h=%7.2f base=%6.1f"
+                         + " model=%6.3f drawn=%6.3f share=%5.3f",
+                         "snail" as NSString,
+                         Double(ink),
+                         Double(box.isNull ? 0 : box.height),
+                         Double(Sprites.snailNativeWidth),
+                         Double(Sprites.snailModelWidth),
+                         Double(ink / Sprites.snailNativeWidth * Sprites.snailModelWidth),
+                         Double(ink / Sprites.snailNativeWidth * Sprites.snailModelWidth
+                                / roadModelWidth)))
+        }
+        #endif
+        #if DEBUG
+        // `-sizeprobe` prints, per entity kind drawn this frame, the widest
+        // sprite the renderer laid down and the road width it was measured
+        // against, so every prop's share of the road can be read off.
+        if sizeProbeOn {
+            for (kind, v) in sizeProbe.sorted(by: { $0.key < $1.key }) {
+                let share = v.1 > 0 ? v.0 / v.1 : 0
+                print(String(format: "SIZEPROBE %-18@ w=%6.1fpt road=%6.1fpt share=%5.3f",
+                             kind as NSString, Double(v.0), Double(v.1), Double(share)))
+            }
+            sizeProbe.removeAll()
+        }
+        #endif
+        #if DEBUG
         // `-hide road,walls,rails,entities,sky,snail` takes a group of nodes off
         // the frame after it has been drawn, so a band of colour can be traced
         // to what paints it by putting the groups back one at a time.
@@ -2398,10 +2550,32 @@ final class GameScene: SKScene {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-snailprobe") {
             let f = snail.calculateAccumulatedFrame()
-            let body = (snail.childNode(withName: "snailframes") as? SKSpriteNode)?
-                .calculateAccumulatedFrame()
+            // The retail checkout draws Turbo as the `snailframes` billboard;
+            // without it the procedural snail names its foot `snailbody`. Read
+            // whichever is there, so the visible share of the road can be
+            // compared against the 0.606-unit mesh on either path.
+            let bodyNode = snail.childNode(withName: "snailframes")
+                ?? snail.childNode(withName: "snailbody")
+            var bw: CGFloat = 0
+            var bh: CGFloat = 0
+            if let node = bodyNode {
+                // The drawing's own width in scene points: the node is a child
+                // of the snail, so its size only has to cross the snail's own
+                // scale. Reading it off a converted corner instead would tilt
+                // with whatever the snail happens to be doing — a tumbling one
+                // reports a box as wide as its own spin.
+                var size = node.calculateAccumulatedFrame().size
+                // The animation frames are one shared window with a margin
+                // around Turbo, so the frame's own size is not his; the
+                // procedural snail is drawn tight, so its own is.
+                if node is SnailFrames { size = Sprites.snailFrameVisible(size) }
+                bw = size.width * snailScale
+                bh = size.height * snailScale
+            }
+            let road = snailRowHalfWidth * 2
+            let share = road > 0 ? bw / road : 0
             print("SNAILPROBE scale=\(snailScale) node w=\(f.width) h=\(f.height)"
-                  + " body w=\(body?.width ?? 0) h=\(body?.height ?? 0)"
+                  + " body w=\(bw) h=\(bh) share=\(share)"
                   + " centre=(\(f.midX),\(f.midY)) scene=\(size.width)x\(size.height)"
                   + " half=\(snailRowHalfWidth)")
         }
@@ -2699,10 +2873,14 @@ final class GameScene: SKScene {
                 // against the nine units the road is across.
                 let roadFraction: CGFloat
                 switch spec.kind {
-                case .hole, .ramp:
-                    // A pit and a ramp are as wide as the run of cells they
-                    // cover, so the track data carries their width.
-                    roadFraction = spec.width > 0 ? spec.width : holeHalfWidth * 2
+                case .hole, .ramp, .trampoline:
+                    // A pit, a ramp and a trampoline are as wide as the run of
+                    // cells they cover, so the track data carries their width;
+                    // a piece that left it unset is drawn at the width its own
+                    // mesh was built at.
+                    roadFraction = spec.width > 0
+                        ? spec.width
+                        : Sprites.entityModelWidth(spec.kind) / roadModelWidth
                 case .signBang, .signConstruction, .signStop:
                     let own = SignKind(entity: spec.kind)?.widthFraction ?? 0.42
                     roadFraction = spec.width > 0 ? spec.width : CGFloat(own)
@@ -2721,6 +2899,14 @@ final class GameScene: SKScene {
                 node.setScale(max(0.02, scale))
                 node.isHidden = false
                 node.zPosition = -CGFloat(n) + 0.5
+                #if DEBUG
+                if sizeProbeOn {
+                    let prev = sizeProbe["\(spec.kind)"]?.0 ?? 0
+                    if spriteWidth > prev {
+                        sizeProbe["\(spec.kind)"] = (spriteWidth, p.screenW * 2)
+                    }
+                }
+                #endif
             }
         }
         // Hide unused pooled entities.
