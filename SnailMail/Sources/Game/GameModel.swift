@@ -1049,14 +1049,30 @@ enum TrackBuilder {
                     sprites.append(EntitySpec(kind: .turret, offset: across(col),
                                               depth: 0.5))
                 case "#":
-                    // A pit is as wide as the run of cells it covers, so it can
-                    // be steered around exactly like the original's.
+                    // `#` is the grid's other void glyph: the build's own
+                    // dispatcher (`0x43672d`) stores a space over the cell, so
+                    // the engine reads it as open air exactly like ` `. The voids
+                    // that leave road beside them are the pits to weave around —
+                    // `Dodge Dip`'s `   ##   ` is the hole it is named for — and
+                    // one is as wide as the run of cells it covers.
+                    //
+                    // A run that closes the whole row is the retail's open void,
+                    // though. Every course that writes one hangs it off a
+                    // `Path=` that carries the road over it — `Hill`, `Valley`,
+                    // `Wibble`, `HalfPipe`, the spawn's own `Start.txt` — so it
+                    // is the air under the crest, not a pit. Reading it as a pit
+                    // walls the road off with no lane to steer around, and since
+                    // the fall rewinds the snail into the same row it becomes an
+                    // inescapable loop: the tutorial never gets past its first
+                    // piece. Such a run is left as the void it is.
                     var end = col
                     while end + 1 < 8 && row[end + 1] == "#" { end += 1 }
-                    sprites.append(EntitySpec(kind: .hole,
-                                              offset: across((col + end) / 2),
-                                              depth: 0.5,
-                                              width: spanWidth(col, end)))
+                    if !(col == 0 && end == 7) {
+                        sprites.append(EntitySpec(kind: .hole,
+                                                  offset: across((col + end) / 2),
+                                                  depth: 0.5,
+                                                  width: spanWidth(col, end)))
+                    }
                     col = end
                 case "+":
                     sprites.append(EntitySpec(kind: .ringUpgrade, offset: 0, depth: 0.5))
