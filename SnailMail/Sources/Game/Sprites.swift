@@ -113,12 +113,14 @@ enum Sprites {
     /// `width` points. The installer renders every effect at two sizes — a
     /// 256-pixel `-big` and a 32-pixel `-small` — and the two drawing sizes of
     /// each are the same picture, so a caller picks whichever matches how much
-    /// of the screen the effect covers. Nil on a checkout without the retail
-    /// folder, which leaves the caller on its procedural drawing.
+    /// of the screen the effect covers. An effect the bitmaps do not carry, or
+    /// a run that is not drawing the retail folder at all, falls through to the
+    /// remake's own drawing below.
     static func makeParticle(_ name: String, width: CGFloat,
                              alpha: CGFloat = 1) -> SKSpriteNode? {
-        guard RetailAssets.installed,
-              let tex = RetailAssets.billboard("Art/Sprites/\(name).png") else { return nil }
+        let tex = RetailAssets.billboard("Art/Sprites/\(name).png")
+            ?? drawnParticle(name)
+        guard let tex else { return nil }
         let size = tex.size()
         guard size.width > 0, size.height > 0 else { return nil }
         // Opaque white and not a clear tint: a three-argument initialiser with
@@ -129,6 +131,203 @@ enum Sprites {
         node.alpha = alpha
         return node
     }
+
+    // MARK: - Drawn effects
+
+    /// The remake's own drawing of one of the build's effects.
+    ///
+    /// The 2005 build paints each effect as a small bitmap and the scene asks
+    /// for it by name, so a run that is not drawing the retail folder reads it
+    /// from here instead: a hit still flashes and throws its sparkles, a skid
+    /// still smokes, a rocket still trails its exhaust and a slug still leaves
+    /// goo. Each effect is drawn from the radius profile its retail bitmap
+    /// wears — measured off the 2005 art rather than copied from it — so an
+    /// effect lands on the same colours and the same spread without a retail
+    /// pixel going into the build.
+    private static func drawnParticle(_ name: String) -> SKTexture? {
+        switch name {
+        case "spark":            return sparkTexture()
+        case "smoke", "jet":     return puffTexture()
+        case "sluggoo":          return gooTexture()
+        case "startail":         return tailTexture()
+        case "particleblasters": return blasterTexture()
+        default:
+            return name.hasPrefix("particleexplode") ? burstTexture() : nil
+        }
+    }
+
+    /// A transparent square for a drawing that carries its own alpha.
+    private static func particleTexture(_ side: CGFloat,
+                                        _ draw: (CGContext, CGSize) -> Void) -> SKTexture {
+        let size = CGSize(width: side, height: side)
+        let format = UIGraphicsImageRendererFormat.default()
+        format.opaque = false
+        let renderer = UIGraphicsImageRenderer(size: size, format: format)
+        return SKTexture(image: renderer.image { ctx in draw(ctx.cgContext, size) })
+    }
+
+    /// One stop of a drawn effect's radius: how far out it sits, what colour it
+    /// wears there and how opaque it is.
+    ///
+    /// The stops below are read off the profile of the matching bitmap in the
+    /// retail build — the mean colour and mean alpha of each slice of its
+    /// radius — which is what keeps the remake's effects on the build's own
+    /// orange rather than on an invented one.
+    private struct EffectStop {
+        let at: CGFloat
+        let hex: String
+        let alpha: CGFloat
+        init(_ at: CGFloat, _ hex: String, _ alpha: CGFloat) {
+            self.at = at; self.hex = hex; self.alpha = alpha
+        }
+    }
+
+    /// Draws an effect from its radius profile, optionally with the angular
+    /// structure the original carries: `lobes` points reaching `depth` of the
+    /// radius past the valleys between them, which is what turns a round glow
+    /// into a sparkle, a splat or a ragged explosion. A `ragged` figure folds a
+    /// second, finer set of points into the first, for the torn edge the
+    /// build's blast wears. Zero lobes leaves the effect round, as the build's
+    /// smoke is.
+    private static func radialEffect(_ side: CGFloat, _ stops: [EffectStop],
+                                     lobes: Int = 0, depth: CGFloat = 0,
+                                     ragged: CGFloat = 0) -> SKTexture {
+        particleTexture(side) { cg, size in
+            let c = CGPoint(x: size.width / 2, y: size.height / 2)
+            let radius = size.width / 2
+            let ramp = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                  colors: stops.map {
+                                      UIColor(hex: $0.hex).withAlphaComponent($0.alpha).cgColor
+                                  } as CFArray,
+                                  locations: stops.map { $0.at })!
+            if lobes > 0 {
+                let shape = CGMutablePath()
+                let steps = 288
+                for i in 0...steps {
+                    let angle = CGFloat(i) / CGFloat(steps) * 2 * .pi
+                    var point = abs(cos(CGFloat(lobes) * angle / 2))
+                    if ragged > 0 {
+                        let torn = abs(cos(CGFloat(lobes * 2) * angle / 2 + 0.7))
+                        point = point * (1 - ragged) + ragged * torn
+                    }
+                    let r = radius * (1 - depth + depth * point)
+                    let p = CGPoint(x: c.x + cos(angle) * r, y: c.y + sin(angle) * r)
+                    if i == 0 { shape.move(to: p) } else { shape.addLine(to: p) }
+                }
+                shape.closeSubpath()
+                cg.addPath(shape)
+                cg.clip()
+            }
+            cg.drawRadialGradient(ramp, startCenter: c, startRadius: 0,
+                                  endCenter: c, endRadius: radius, options: [])
+        }
+    }
+
+    /// The flash of a hit: a white core running out through yellow and orange
+    /// into the build's deep orange, with a ragged edge. Drawn round rather
+    /// than spiked, because the build's own blast is a cloudy ball.
+    private static func burstTexture() -> SKTexture {
+        radialEffect(128, [
+            EffectStop(0.00, "#FFFFFC", 1.00),
+            EffectStop(0.13, "#FFF9D3", 1.00),
+            EffectStop(0.22, "#FFD07F", 0.86),
+            EffectStop(0.30, "#FF9224", 0.57),
+            EffectStop(0.38, "#FF6A03", 0.34),
+            EffectStop(0.46, "#FF5E00", 0.26),
+            EffectStop(0.54, "#FF5800", 0.21),
+            EffectStop(0.63, "#FF5300", 0.16),
+            EffectStop(0.71, "#FF4F00", 0.10),
+            EffectStop(0.79, "#FF4C00", 0.06),
+            EffectStop(0.88, "#FF4800", 0.03),
+            EffectStop(1.00, "#FF4600", 0.00),
+        ], lobes: 9, depth: 0.40, ragged: 0.30)
+    }
+
+    /// The build's sparkle: a soft white glow pulled out into eight points.
+    private static func sparkTexture() -> SKTexture {
+        radialEffect(64, [
+            EffectStop(0.00, "#FFFFFF", 0.98),
+            EffectStop(0.10, "#FFFFFF", 0.86),
+            EffectStop(0.21, "#FFFFFF", 0.60),
+            EffectStop(0.29, "#FFFFFF", 0.36),
+            EffectStop(0.38, "#FFFFFF", 0.20),
+            EffectStop(0.46, "#FFFFFF", 0.155),
+            EffectStop(0.54, "#FFFFFF", 0.12),
+            EffectStop(0.63, "#FFFFFF", 0.07),
+            EffectStop(0.72, "#FFFFFF", 0.02),
+            EffectStop(1.00, "#FFFFFF", 0.00),
+        ], lobes: 8, depth: 0.34)
+    }
+
+    /// The build's smoke: a white ball with no hard edge, so it reads as vapour
+    /// whether it is scrubbed off the road or blown out of a rocket.
+    private static func puffTexture() -> SKTexture {
+        radialEffect(64, [
+            EffectStop(0.00, "#FFFFFF", 1.00),
+            EffectStop(0.40, "#FFFFFF", 0.90),
+            EffectStop(0.50, "#FFFFFF", 0.81),
+            EffectStop(0.58, "#FFFFFF", 0.70),
+            EffectStop(0.67, "#FFFFFF", 0.59),
+            EffectStop(0.75, "#FFFFFF", 0.47),
+            EffectStop(0.83, "#FFFFFF", 0.36),
+            EffectStop(0.92, "#FFFFFF", 0.25),
+            EffectStop(1.00, "#FFFFFF", 0.00),
+        ])
+    }
+
+    /// What a slug leaves where it was shot: an opaque splat in the build's
+    /// burnt orange, scorched brown at the middle and brightest at the rim.
+    private static func gooTexture() -> SKTexture {
+        radialEffect(64, [
+            EffectStop(0.000, "#9B4C00", 1.00),
+            EffectStop(0.120, "#BC6005", 1.00),
+            EffectStop(0.210, "#D16D00", 1.00),
+            EffectStop(0.290, "#E2760A", 1.00),
+            EffectStop(0.375, "#DC7520", 1.00),
+            EffectStop(0.460, "#D47020", 1.00),
+            EffectStop(0.540, "#DB6D1C", 1.00),
+            EffectStop(0.630, "#DE6D1A", 1.00),
+            EffectStop(0.710, "#DF7529", 1.00),
+            EffectStop(0.790, "#E8711A", 0.93),
+            EffectStop(0.875, "#E95700", 0.55),
+            EffectStop(0.950, "#E95700", 0.12),
+            EffectStop(1.000, "#E95700", 0.00),
+        ], lobes: 7, depth: 0.10)
+    }
+
+    /// A gold burst running out of a white-hot core: the build's blaster
+    /// flash, four bumps and all.
+    private static func blasterTexture() -> SKTexture {
+        radialEffect(128, [
+            EffectStop(0.000, "#FFFEF1", 1.00),
+            EffectStop(0.130, "#FFFDDD", 1.00),
+            EffectStop(0.210, "#FFF799", 1.00),
+            EffectStop(0.290, "#FFE744", 0.98),
+            EffectStop(0.375, "#FFCC2C", 0.88),
+            EffectStop(0.460, "#FFB322", 0.61),
+            EffectStop(0.540, "#FFA617", 0.34),
+            EffectStop(0.630, "#FFA310", 0.18),
+            EffectStop(0.710, "#FFA80F", 0.12),
+            EffectStop(0.790, "#FFA90F", 0.08),
+            EffectStop(0.875, "#FFAB14", 0.05),
+            EffectStop(1.000, "#FFAB14", 0.00),
+        ], lobes: 4, depth: 0.30)
+    }
+
+    /// The white ball the build trails behind a snail that is moving under its
+    /// own steam.
+    private static func tailTexture() -> SKTexture {
+        radialEffect(32, [
+            EffectStop(0.00, "#FFFFFF", 0.98),
+            EffectStop(0.21, "#FFFFFF", 0.96),
+            EffectStop(0.375, "#FFFFFF", 0.87),
+            EffectStop(0.540, "#FFFFFF", 0.68),
+            EffectStop(0.710, "#FFFFFF", 0.46),
+            EffectStop(0.875, "#FFFFFF", 0.30),
+            EffectStop(1.000, "#FFFFFF", 0.00),
+        ])
+    }
+
 
     // MARK: - Turbo the snail (seen from behind as it races away)
 

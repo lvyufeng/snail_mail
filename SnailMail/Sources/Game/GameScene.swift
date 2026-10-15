@@ -477,6 +477,21 @@ final class GameScene: SKScene {
             // builds can be photographed.
             togglePause()
         }
+        if ProcessInfo.processInfo.arguments.contains("-fxshot") {
+            startRace()
+            // Throw one of each effect across the road and hold on the first
+            // frame, so the whole set can be photographed at once. Running the
+            // same hook under `-retailart` puts the remake's own drawings beside
+            // the 2005 bitmaps they stand in for.
+            framesToFreeze = 1
+            let across = size.width / 6
+            let row = size.height * 0.34
+            spawnBurst(at: CGPoint(x: across, y: row))
+            spawnBurst(at: CGPoint(x: across * 2, y: row), small: true)
+            spawnSparks(at: CGPoint(x: across * 3, y: row), count: 6, spread: 27)
+            spawnGoo(at: CGPoint(x: across * 4, y: row))
+            spawnSmoke(at: CGPoint(x: across * 5, y: row), width: 70)
+        }
         if let arg = ProcessInfo.processInfo.arguments.firstIndex(of: "-meter"),
            arg + 1 < ProcessInfo.processInfo.arguments.count,
            let pct = Double(ProcessInfo.processInfo.arguments[arg + 1]) {
