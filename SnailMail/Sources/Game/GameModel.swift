@@ -3,8 +3,9 @@ import CoreGraphics
 
 // MARK: - Game modes
 
-/// The 2005 PC build's four modes: 教学 Tutorial, 战役 Postal (its level files
-/// are the `Arcade*.txt` campaign), 时速 Time Trial and 挑战 Challenge. The
+/// The 2005 PC build's four modes: 教学 Tutorial, 战役 Postal Mode (its level
+/// files are the `Arcade*.txt` campaign), 时速 Time Trial and 挑战 Challenge
+/// Mode — the names the retail build's own mode table prints. The
 /// later mobile port's Practice and Pro Challenge are not part of this build,
 /// so the remake leaves them out.
 enum GameMode: String, CaseIterable, Identifiable {
@@ -16,11 +17,15 @@ enum GameMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var title: String {
+        // The retail build names its four modes in one table built at
+        // 0x417c00-0x417e00: `Help` 0x4a38b4, `Tutorial` 0x4a38e4, `Postal Mode`
+        // 0x4a38d8, `Time Trial` 0x4a38cc and `Challenge Mode` 0x4a38bc. The
+        // remake's third mode is the retail Time Trial.
         switch self {
-        case .arcade: "Postal"
+        case .arcade: "Postal Mode"
         case .tutorial: "Tutorial"
         case .speedRun: "Time Trial"
-        case .challenge: "Challenge"
+        case .challenge: "Challenge Mode"
         }
     }
 

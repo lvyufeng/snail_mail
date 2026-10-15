@@ -115,7 +115,22 @@ final class HighScores: ObservableObject {
         guard let data = defaults.data(forKey: key),
               let list = try? JSONDecoder().decode([HighScoreEntry].self, from: data)
         else { return [] }
-        return list.sorted { $0.score > $1.score }
+        return list.map {
+            var entry = $0
+            entry.level = Self.retailModeName(entry.level)
+            return entry
+        }.sorted { $0.score > $1.score }
+    }
+
+    /// A run's route line used to carry the short mode name; the mode table now
+    /// prints the retail wording, so tables saved before that change keep
+    /// reading the same.
+    private static func retailModeName(_ level: String) -> String {
+        switch level {
+        case "Challenge": "Challenge Mode"
+        case "Postal": "Postal Mode"
+        default: level
+        }
     }
 
     private func save(_ list: [HighScoreEntry], _ key: String) {

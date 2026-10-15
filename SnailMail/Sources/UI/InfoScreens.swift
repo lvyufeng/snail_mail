@@ -155,7 +155,11 @@ struct HighScoresView: View {
     @ObservedObject private var scores = HighScores.shared
 
     var body: some View {
-        InfoScaffold(title: "HIGH SCORES", chinese: "排行榜", icon: "🏆") {
+        // The retail score screen titles itself `High Score Table`
+        // (0x4a38a0, built at 0x417925) — the menu row that leads here is the
+        // shorter `High Scores` (0x4a3b68). The scaffold headings are set in
+        // caps like the rest of the chrome.
+        InfoScaffold(title: "HIGH SCORE TABLE", chinese: "排行榜", icon: "🏆") {
             VStack(spacing: 20) {
                 ForEach(HighScores.Board.allCases) { board in
                     VStack(alignment: .leading, spacing: 8) {

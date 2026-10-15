@@ -442,6 +442,8 @@ private struct ParcelCounter: View {
                 Text(mode.title)
                     .font(.retail(labelFont - 1, weight: .bold))
                     .foregroundStyle(Palette.ink.opacity(0.75))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
             }
             .padding(.top, 4 * scale)
         }
