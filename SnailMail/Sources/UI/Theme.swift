@@ -281,6 +281,62 @@ struct StatLabel: View {
     }
 }
 
+/// One of the retail build's stepped percentage rows: a labelled border with a
+/// `<` and a `>` button and the `%02i%%` reading sitting between them. The two
+/// rows on the Time Trial screen (`Select Speed` 0x4a3788, `Select Difficulty`
+/// 0x4a37a4) and the two on Options (`Music Volume` 0x4a3d14, `Sounds Volume`
+/// 0x4a3d30) are the same widget — only the label and the reading change.
+struct SteppedRow: View {
+    let title: String
+    let value: String
+    var detail: String = ""
+    let previous: () -> Void
+    let next: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text(title)
+                .font(.retail(13, weight: .heavy))
+                .foregroundStyle(Palette.ink.opacity(0.85))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Spacer(minLength: 8)
+            StepArrowButton(icon: "<", action: previous)
+            VStack(spacing: 0) {
+                Text(value)
+                    .font(.retail(15, weight: .black))
+                    .foregroundStyle(Palette.gold)
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(.retail(10, weight: .semibold))
+                        .foregroundStyle(Palette.ink.opacity(0.55))
+                }
+            }
+            .frame(minWidth: 76)
+            StepArrowButton(icon: ">", action: next)
+        }
+    }
+}
+
+/// The row's two arrow buttons. The retail label strings carry their own `>`
+/// (`       Select Speed       >`), so the arrows sit inside the row text.
+struct StepArrowButton: View {
+    let icon: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Text(icon)
+                .font(.retail(20, weight: .black))
+                .foregroundStyle(.white)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(Palette.cyan.opacity(0.28)))
+                .overlay(Circle().stroke(Palette.cyan.opacity(0.8), lineWidth: 1.2))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 /// The game's mascot, drawn with the exact coordinates and palette that
 /// `Sprites.makeSnail()` uses in-game, so the menu and the racer are the same
 /// character. Canvas keeps it resolution independent.
