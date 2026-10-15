@@ -8,6 +8,16 @@ struct GameView: View {
     /// stack so the results screen's MENU works even when the race is the root.
     let onMenu: () -> Void
     @StateObject private var model: GameViewModel
+    /// The retail build ends a run on two pages: the results, then the
+    /// `Thanks For Playing!` page. This tracks which of the two is up.
+    /// `-thanks` opens straight on the second page for screenshots.
+    @State private var showingThanks = {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains("-thanks")
+        #else
+        return false
+        #endif
+    }()
 
     init(mode: GameMode, level: Int = 0, onMenu: @escaping () -> Void) {
         self.mode = mode
@@ -40,10 +50,20 @@ struct GameView: View {
                 })
 
                 if case .finished(let won) = model.state.phase {
-                    ResultOverlay(won: won, state: model.state,
-                                  mode: mode, levelName: levelName,
-                                  onReplay: { model.restart() },
-                                  onMenu: onMenu)
+                    if showingThanks {
+                        ThanksOverlay(mode: mode) {
+                            showingThanks = false
+                            onMenu()
+                        }
+                    } else {
+                        ResultOverlay(won: won, state: model.state,
+                                      mode: mode, levelName: levelName,
+                                      onReplay: {
+                                          showingThanks = false
+                                          model.restart()
+                                      },
+                                      onMenu: { showingThanks = true })
+                    }
                 }
             }
             .onAppear {

@@ -87,7 +87,11 @@ struct ResultOverlay: View {
 
                     HStack(spacing: 14) {
                         ArcadeButton(title: "REPLAY", tint: Palette.good, icon: "↻", action: onReplay)
-                        ArcadeButton(title: "MENU", tint: Palette.cyan, icon: "⌂", action: onMenu)
+                        // The original's own label for leaving the results
+                        // page; it hands over to the "Thanks For Playing!"
+                        // page before the menu, exactly as the retail build
+                        // does (`Click to Continue`, 0x4a11c4).
+                        ArcadeButton(title: "CONTINUE", tint: Palette.cyan, icon: "▶", action: onMenu)
                     }
                 }
             }
@@ -120,6 +124,52 @@ struct ResultOverlay: View {
     private func percent(_ value: Int) -> String {
         guard state.score > 0 else { return "0%" }
         return "\(value * 100 / state.score)%"
+    }
+}
+
+/// The page the retail build shows once the results are dismissed: a
+/// `Thanks For Playing!` line (0x4a4a34) over a nudge toward one of the other
+/// modes, then one more click to continue.
+///
+/// The build's own end-of-run routine (`0x433fb0` to build the page,
+/// `0x4340d0` to run it) prints both nudges in turn — `Test your reflexes in
+/// Challenge Mode!` (0x4a4a6c) and `Improve your skills in Time Trial!`
+/// (0x4a4a48) — and finishes on `Click to Continue`. A still page cannot
+/// alternate them, so it keeps the one aimed at the mode the run was not in.
+struct ThanksOverlay: View {
+    let mode: GameMode
+    let onContinue: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.6).ignoresSafeArea()
+
+            NeonPanel(border: Palette.gold) {
+                VStack(spacing: 18) {
+                    Text("THANKS FOR PLAYING!")
+                        .font(.retail(26, weight: .black))
+                        .foregroundStyle(Palette.gold)
+                        .multilineTextAlignment(.center)
+                        .shadow(color: Palette.gold.opacity(0.6), radius: 10)
+
+                    Text(nudge)
+                        .font(.retail(16, weight: .heavy))
+                        .foregroundStyle(Palette.ink)
+                        .multilineTextAlignment(.center)
+
+                    ArcadeButton(title: "CLICK TO CONTINUE", tint: Palette.good, icon: "▶",
+                                 action: onContinue)
+                }
+            }
+            .padding(.horizontal, 24)
+        }
+    }
+
+    /// The nudge toward the mode the finished run was not played in.
+    private var nudge: String {
+        mode == .speedRun
+            ? "Test your reflexes in Challenge Mode!"
+            : "Improve your skills in Time Trial!"
     }
 }
 
