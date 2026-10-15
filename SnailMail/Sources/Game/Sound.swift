@@ -159,8 +159,10 @@ final class Sound {
     private(set) var muted = false
 
     /// User-facing volume levels, 0...1, scaling the balanced defaults the
-    /// retail `_Voice.txt` asks for. The Options screen's "Music Volume" and
-    /// "Sounds Volume" rows drive these, and they persist between launches.
+    /// retail `_Voice.txt` asks for. The Options screen's "Sounds Volume"
+    /// (`0x4df958`) and "Music Volume" (`0x4df95c`) rows drive these, and they
+    /// persist between launches. A fresh `SnailMail.cfg` ships both at
+    /// `0x3f19999a` (0.6), and the rows step them by 0.2.
     private(set) var musicLevel: Double
     private(set) var sfxLevel: Double
 
@@ -195,8 +197,8 @@ final class Sound {
     private init(defaults: UserDefaults = .standard) {
         let storedMusic = defaults.object(forKey: Key.music) as? Double
         let storedSfx = defaults.object(forKey: Key.sfx) as? Double
-        musicLevel = storedMusic ?? 1
-        sfxLevel = storedSfx ?? 1
+        musicLevel = storedMusic ?? 0.6
+        sfxLevel = storedSfx ?? 0.6
         retailNodes = (0..<6).map { _ in AVAudioPlayerNode() }
     }
 

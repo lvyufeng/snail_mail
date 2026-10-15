@@ -293,6 +293,12 @@ struct SteppedRow: View {
     let previous: () -> Void
     let next: () -> Void
 
+    /// The retail readout: `%02i%%` (`0x4a10f4`) of `value * 100 + 0.1` taken as
+    /// an int (`0x40325c`), so 0.6 prints `60%` and 1.0 prints `100%`.
+    static func percent(_ value: Double) -> String {
+        String(format: "%02i%%", Int(value * 100 + 0.1))
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             Text(title)

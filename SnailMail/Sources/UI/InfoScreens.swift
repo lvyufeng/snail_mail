@@ -92,32 +92,36 @@ struct HelpView: View {
     }
 }
 
-/// The original's Options screen, kept to the two rows that mean something on
-/// a phone: the music and sound-effect levels.
+/// The original's Options screen (`0x41acc0`), kept to the two rows that mean
+/// something on a phone. Retail labels them `     Sounds Volume     >`
+/// (`0x4a3d30`) and `      Music Volume      >` (`0x4a3d14`) in that order,
+/// and both are the shared stepped row (`0x403090`): the value lives 0...1,
+/// one press moves it `0x3e4ccccd` (0.2), and the readout is `%02i%%`
+/// (`0x4a10f4`) of `value * 100`. A fresh `SnailMail.cfg` ships both at
+/// `0x3f19999a` (0.6), i.e. 60%.
 struct OptionsView: View {
     @State private var music: Double = Sound.shared.musicLevel
     @State private var sfx: Double = Sound.shared.sfxLevel
-    @State private var muted: Bool = Sound.shared.muted
 
     var body: some View {
         InfoScaffold(title: "OPTIONS", chinese: "设置", icon: "⚙️") {
             VStack(spacing: 18) {
-                VolumeRow(title: "Music Volume", value: $music) { Sound.shared.setMusicLevel($0) }
-                VolumeRow(title: "Sounds Volume", value: $sfx) { Sound.shared.setSfxLevel($0) }
-
-                Button {
-                    muted.toggle()
-                    Sound.shared.setMuted(muted)
-                } label: {
-                    HStack {
-                        StatLabel(text: "Sound")
-                        Spacer(minLength: 40)
-                        Text(muted ? "Off" : "On")
-                            .font(.retail(16, weight: .heavy))
-                            .foregroundStyle(muted ? Palette.danger : Palette.good)
-                    }
+                SteppedRow(title: "Sounds Volume", value: SteppedRow.percent(sfx),
+                           detail: "音效") {
+                    step(&sfx, by: -1) { Sound.shared.setSfxLevel($0) }
+                    Sound.shared.play(.select)
+                } next: {
+                    step(&sfx, by: 1) { Sound.shared.setSfxLevel($0) }
+                    Sound.shared.play(.select)
                 }
-                .buttonStyle(.plain)
+                SteppedRow(title: "Music Volume", value: SteppedRow.percent(music),
+                           detail: "音乐") {
+                    step(&music, by: -1) { Sound.shared.setMusicLevel($0) }
+                    Sound.shared.play(.select)
+                } next: {
+                    step(&music, by: 1) { Sound.shared.setMusicLevel($0) }
+                    Sound.shared.play(.select)
+                }
 
                 Text("The original's own music, effects and voice play when the retail assets are installed. Without them the app falls back to synthesised audio.")
                     .font(.retail(11, weight: .medium))
@@ -127,26 +131,14 @@ struct OptionsView: View {
             }
         }
     }
-}
 
-private struct VolumeRow: View {
-    let title: String
-    @Binding var value: Double
-    let onChange: (Double) -> Void
-
-    var body: some View {
-        VStack(spacing: 4) {
-            HStack {
-                StatLabel(text: title)
-                Spacer(minLength: 40)
-                Text("\(Int(value * 100))%")
-                    .font(.retail(15, weight: .heavy))
-                    .foregroundStyle(Palette.ink)
-            }
-            Slider(value: $value, in: 0...1)
-                .tint(Palette.cyan)
-                .onChange(of: value) { _, new in onChange(new) }
-        }
+    /// One press of the retail arrow adds or removes `0.2` (`0x497270`) and the
+    /// value stays on the `0, 0.2, ... 1.0` ladder the widget can produce.
+    private func step(_ value: inout Double, by delta: Int, apply: (Double) -> Void) {
+        let steps = (value * 5).rounded()
+        let next = min(5, max(0, steps + Double(delta)))
+        value = next / 5
+        apply(value)
     }
 }
 
