@@ -15,15 +15,16 @@ final class GameScene: SKScene {
     /// to each side of the centre, so the fan-out rate is the single ratio
     /// `roadWidth / cameraHeight`.
     ///
-    /// The retail courses are shot from a low, wide camera. Read off their own
-    /// frames — the highway reaches both edges of the picture 0.17 of the
-    /// screen below its vanishing point — that ratio sits near 2.7
-    /// screen-widths per screen-height. 1500 units of highway under a camera
-    /// 560 units up is 2.68, and is what is drawn. Any higher and the near
-    /// highway shrinks to a ribbon down the middle of the frame with both walls
-    /// on show beside the snail, which is what "1500 over 1500", a ratio of
-    /// 1.0, gave.
-    private let cameraHeight: CGFloat = 560
+    /// The fan-out is read off the retail build's own frame, row by row: its
+    /// highway runs 0.53 of a screen wide 0.16 of the height under its
+    /// vanishing point, 0.79 at 0.28 under, and reaches both edges 0.41 under.
+    /// That is a ratio just above 1.5 — 1500 units of highway under a camera
+    /// 1000 units up. It used to be 560, a ratio of 2.68 taken from the row
+    /// where the retail highway first touches the edges of its own, much
+    /// shorter, frame; on a portrait phone, where twice as much road lies under
+    /// the horizon as did there, that ratio threw the near highway 1.8 screens
+    /// wide and left Turbo looking a third of his own size.
+    private let cameraHeight: CGFloat = 1000
     private let cameraDepth: CGFloat = 1.0 / tan((100.0 / 2.0) * .pi / 180.0) // ≈ 0.84
     /// The row the highway's vanishing point sits on, as a fraction of the
     /// screen height, counted from the top. Rather than tilt the camera — which
@@ -58,28 +59,19 @@ final class GameScene: SKScene {
     /// How wide Turbo is drawn, as a fraction of the highway's full width at
     /// his own row on screen.
     ///
-    /// The build's `turbo-base` mesh measures 0.606 of the nine units the road
-    /// is across — `Sprites.snailModelWidth` — so a share of the road is the
-    /// right way to size him; measuring him against the screen instead would
-    /// stretch him on a tall portrait phone, where the near highway runs off
-    /// both edges.
-    ///
-    /// Taken straight off the mesh he covers 6.7% of the road, which on this
-    /// frame is about a ninth of the width of the display: with the camera at
-    /// `cameraHeight` his row sits a third of the height below the horizon, so
-    /// the road under him is 1.6 screens across and 6.7% of it is 44 points.
-    /// The build reads him at the distance the camera stands rather than blown
-    /// up to fill a phone, and so does this. Sizing him at a fixed fraction of
+    /// A share of the road is the right way to size him: measuring him against
     /// the screen instead would stretch him on a tall portrait phone, where the
     /// near highway runs off both edges.
     ///
-    /// The share is the mesh's own, undivided. It used to be trimmed to 0.64 of
-    /// it to keep him legible while the flat props were still drawn at the
-    /// shared two-and-a-quarter-unit fallback and stood five times his width;
-    /// with those back at the share the build drew them at, matching the mesh
-    /// is what makes the two read together the way the build's frame does.
-    private let snailRoadFraction: CGFloat =
-        Sprites.snailModelWidth / roadModelWidth
+    /// `turbo-base` measures 0.606 of the nine units the highway is across, but
+    /// turbo-base is the body alone. At his own row the retail frame shows him
+    /// 0.10 to 0.15 of the width of the display while the highway under him
+    /// runs 0.86 of it — about a sixth of the road. `TURBOHOTSPOTS`, the volume
+    /// the build collides him with, agrees: 1.469 units across is 0.163 of the
+    /// road. Sized off the body mesh he stood at 0.067 of the highway, a third
+    /// of what the frame gives him, which is what read as "蜗牛太小了" while
+    /// the props, which are meshes either way, stayed put.
+    private let snailRoadFraction: CGFloat = 0.16
     /// Turbo's own width, in points, at the snapshot's screen scale.
     private var snailScale: CGFloat = 1
     /// Half the highway's on-screen width on Turbo's row, refreshed by
