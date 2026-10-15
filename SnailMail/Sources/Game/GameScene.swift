@@ -34,12 +34,27 @@ final class GameScene: SKScene {
     /// 0.9 × screenW across and the snail drops in over the same span.
     private let holeHalfWidth: CGFloat = 0.45
     /// How wide Turbo is drawn, as a fraction of the highway's full width at
-    /// his own row on screen. The build's `turbo-base` mesh measures 0.606 of
-    /// the nine units the road is across, so sizing him against the road keeps
-    /// the proportion the build modelled him at. Measuring him against the
-    /// screen instead would stretch him on a tall portrait phone, where the
-    /// near highway runs off both edges.
-    private let snailRoadFraction = Sprites.snailModelWidth / roadModelWidth
+    /// his own row on screen.
+    ///
+    /// The build's `turbo-base` mesh measures 0.606 of the nine units the road
+    /// is across — `Sprites.snailModelWidth` — so a share of the road is the
+    /// right way to size him; measuring him against the screen instead would
+    /// stretch him on a tall portrait phone, where the near highway runs off
+    /// both edges.
+    ///
+    /// Taken straight off that mesh, though, he covers 6.7% of the road and
+    /// reads half again as wide as the build's own screenshots show him. Two
+    /// things push him out. The baked frames hang his eye stalks and the gear
+    /// bolted to his shell outside the mesh box, so sizing the mesh fills the
+    /// share with his shell alone; and on the portrait frame the road at his
+    /// row is wider than the screen, so the same share covers more of the
+    /// view. The retail captures put the whole creature — shell, stalks and
+    /// gear — at about a twentieth of the frame across (`ma_5` of the screen
+    /// set, where he spans 32 of the 640 columns, and the road there already
+    /// runs off both edges as it does here). Seven tenths of the mesh's share
+    /// lands him on the same reading, and is what is drawn.
+    private let snailRoadFraction: CGFloat =
+        Sprites.snailModelWidth / roadModelWidth * 0.7
     /// Turbo's own width, in points, at the snapshot's screen scale.
     private var snailScale: CGFloat = 1
     /// Half the highway's on-screen width on Turbo's row, refreshed by
