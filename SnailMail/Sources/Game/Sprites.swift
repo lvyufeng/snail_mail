@@ -830,11 +830,19 @@ enum Sprites {
         case .signBang:            return CGFloat(SignKind.bang.modelWidth)
         case .signConstruction:    return CGFloat(SignKind.construction.modelWidth)
         case .signStop:            return CGFloat(SignKind.stop.modelWidth)
-        // Only reached when a piece leaves a ramp's width unset; a run of ramp
-        // cells carries the span it covers in `EntitySpec.width` instead, and a
-        // pit carries its own in the same place.
+        // A pit normally carries the span of its `#` run in
+        // `EntitySpec.width` and a ramp the columns its `>` run covers, so
+        // these fallbacks are only reached when a caller places one without a
+        // width. The free modes' scatter does exactly that.
+        //
+        // The pit's fallback is the width the retail grids use most: their
+        // `#` runs are 1, 2, 3, 4 and 5 cells, and three cells (3.0 units) is
+        // the commonest at 41% of them. It also has to be steered around, and
+        // the build's touching-boxes test means a pit that wide leaves just
+        // over half the road to pass on. Riding the ramp's 0.700 drew it a
+        // third narrower than the narrowest pit any retail piece ships.
+        case .hole:       return 3.0
         case .ramp:       return 0.700
-        default:          return 0.700
         }
     }
 
