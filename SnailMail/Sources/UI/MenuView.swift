@@ -47,26 +47,27 @@ struct MenuView: View {
                         }
                         .padding(.horizontal, 20)
 
-                        // The original's start screen pairs Postal with two
-                        // cyclers, `Select Speed` and `Select Difficulty`, that
-                        // scale the whole campaign.
+                        // The Time Trial screen's two percentage rows
+                        // (`Select Speed` 0x4a3788, `Select Difficulty`
+                        // 0x4a37a4) step 20 points a press and hand their
+                        // reading to the level they start.
                         if selected == .arcade {
                             NeonPanel(border: Palette.cyan) {
                                 VStack(spacing: 8) {
-                                    CycleRow(title: "Select Speed", value: settings.speed.label,
-                                             detail: settings.speed.chinese) {
-                                        settings.cycleSpeed(by: -1)
+                                    CycleRow(title: "Select Speed", value: settings.speedLabel,
+                                             detail: "速度") {
+                                        settings.stepSpeed(by: -1)
                                         Sound.shared.play(.select)
                                     } next: {
-                                        settings.cycleSpeed(by: 1)
+                                        settings.stepSpeed(by: 1)
                                         Sound.shared.play(.select)
                                     }
-                                    CycleRow(title: "Select Difficulty", value: settings.difficulty.label,
-                                             detail: settings.difficulty.chinese) {
-                                        settings.cycleDifficulty(by: -1)
+                                    CycleRow(title: "Select Difficulty", value: settings.difficultyLabel,
+                                             detail: "难度") {
+                                        settings.stepDifficulty(by: -1)
                                         Sound.shared.play(.select)
                                     } next: {
-                                        settings.cycleDifficulty(by: 1)
+                                        settings.stepDifficulty(by: 1)
                                         Sound.shared.play(.select)
                                     }
                                 }
@@ -144,6 +145,13 @@ struct MenuView: View {
             // so it can be screenshotted without a tap.
             if ProcessInfo.processInfo.arguments.contains("-quitconfirm") {
                 confirmingQuit = true
+            }
+            // `-select <mode>`: land on a mode row so the screen behind it
+            // (the percentage rows on Postal) can be screenshotted too.
+            let args = ProcessInfo.processInfo.arguments
+            if let i = args.firstIndex(of: "-select"), i + 1 < args.count,
+               let mode = GameMode(rawValue: args[i + 1]) {
+                selected = mode
             }
             #endif
         }
