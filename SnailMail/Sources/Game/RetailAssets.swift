@@ -198,7 +198,10 @@ enum RetailAssets {
                         n += 1
                     }
                 }
-                cells.append((r / n, g / n, b / n))
+                // A texture narrower than the 32-block grid leaves the trailing
+                // blocks empty, so `n` can still be zero here; guard the divide
+                // rather than let a NaN colour reach `UIColor`.
+                cells.append(n > 0 ? (r / n, g / n, b / n) : (0, 0, 0))
             }
         }
 

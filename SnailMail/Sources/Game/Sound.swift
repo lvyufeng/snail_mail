@@ -155,6 +155,12 @@ final class Sound {
     private var musicBuffer: AVAudioPCMBuffer?
     private var flips: [String: Int] = [:]
     private var ready = false
+    /// The store the levels were read from, so a write lands where the read
+    /// came from instead of always in `.standard`.
+    private let defaults: UserDefaults
+    /// Whether the session observers have been installed, so `start()` can be
+    /// called on every appearance without stacking them up.
+    private var observing = false
 
     private(set) var muted = false
 
@@ -195,6 +201,7 @@ final class Sound {
     }
 
     private init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         let storedMusic = defaults.object(forKey: Key.music) as? Double
         let storedSfx = defaults.object(forKey: Key.sfx) as? Double
         musicLevel = storedMusic ?? 0.6
@@ -206,9 +213,15 @@ final class Sound {
     /// Fails silently on machines without audio.
     func start() {
         guard !ready else {
+            // A call, Siri, a route change or a media-services reset stops the
+            // engine out from under us, and every node goes quiet with it. The
+            // observers below mark the engine dead; rebooting it here means the
+            // next screen to ask for sound gets a working one.
+            if !engine.isRunning { reboot(); return }
             if let buffer = musicBuffer, !musicNode.isPlaying { scheduleMusic(buffer) }
             return
         }
+        observeSession()
         let session = AVAudioSession.sharedInstance()
         try? session.setCategory(.ambient, mode: .default, options: [.mixWithOthers])
         try? session.setActive(true)
@@ -240,6 +253,43 @@ final class Sound {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-audiotest") { runSelfTest() }
         #endif
+    }
+
+    /// Watch the session so a silence the system imposed can be undone. The
+    /// engine posts its own configuration-change notice when the hardware moves
+    /// under it, which is the case a route change does not cover.
+    private func observeSession() {
+        guard !observing else { return }
+        observing = true
+        let centre = NotificationCenter.default
+        centre.addObserver(forName: AVAudioSession.interruptionNotification,
+                           object: nil, queue: .main) { [weak self] note in
+            let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+            guard let raw, AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
+            self?.reboot()
+        }
+        centre.addObserver(forName: AVAudioSession.routeChangeNotification,
+                           object: nil, queue: .main) { [weak self] _ in
+            self?.reboot()
+        }
+        centre.addObserver(forName: .AVAudioEngineConfigurationChange,
+                           object: engine, queue: .main) { [weak self] _ in
+            self?.reboot()
+        }
+    }
+
+    /// Re-arm the engine and every node that was playing on it. The nodes keep
+    /// their scheduled buffers, so restarting the engine resumes the track where
+    /// it was instead of resynthesising it.
+    private func reboot() {
+        guard ready, !engine.isRunning else { return }
+        let session = AVAudioSession.sharedInstance()
+        try? session.setActive(true)
+        do { try engine.start() } catch { return }
+        // A node only plays its queue from the moment `play()` is called, and a
+        // stopped engine forgets that it was playing at all.
+        if let buffer = musicBuffer, !musicNode.isPlaying { scheduleMusic(buffer) }
+        if postalAlarmOn, !postalNode.isPlaying { postalNode.play() }
     }
 
 #if DEBUG
@@ -302,13 +352,13 @@ final class Sound {
 
     func setMusicLevel(_ value: Double) {
         musicLevel = max(0, min(1, value))
-        UserDefaults.standard.set(musicLevel, forKey: Key.music)
+        defaults.set(musicLevel, forKey: Key.music)
         applyVolumes()
     }
 
     func setSfxLevel(_ value: Double) {
         sfxLevel = max(0, min(1, value))
-        UserDefaults.standard.set(sfxLevel, forKey: Key.sfx)
+        defaults.set(sfxLevel, forKey: Key.sfx)
         applyVolumes()
     }
 
@@ -349,7 +399,11 @@ final class Sound {
         if let name = retailName(effect), let buffer = retail(name, format: format) {
             let node = retailNodes[retailCursor % retailNodes.count]
             retailCursor += 1
-            node.scheduleBuffer(buffer, at: nil, options: [.interrupts], completionHandler: nil)
+            // Queued, not interrupting: the pool exists so that shots landing
+            // close together overlap. With `.interrupts` the node the round
+            // robin comes back to would cut off whatever it was still playing,
+            // which is exactly the case the pool is here to cover.
+            node.scheduleBuffer(buffer, at: nil, options: [], completionHandler: nil)
             if !node.isPlaying { node.play() }
             return
         }
@@ -364,8 +418,13 @@ final class Sound {
     /// call every frame.
     func setPostalAlarm(_ on: Bool) {
         guard ready, on != postalAlarmOn else { return }
-        postalAlarmOn = on
-        guard on, !muted, let buffer = retail("Audio/Sfx/postalloop.m4a", format: format) else {
+        // The latch is only committed once the alarm has actually been started
+        // or deliberately left off. Setting it first would record "alarm on"
+        // for a call that the muted branch turns straight back off, so unmuting
+        // mid-red would find `on == postalAlarmOn` and never sound it.
+        let buffer = (on && !muted) ? retail("Audio/Sfx/postalloop.m4a", format: format) : nil
+        postalAlarmOn = buffer != nil
+        guard let buffer else {
             postalNode.stop()
             return
         }

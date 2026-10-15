@@ -288,7 +288,11 @@ private struct PostalMeter: View {
                 }
             }
             .frame(width: w, height: h, alignment: .top)
-            .animation(.easeOut(duration: 0.2), value: clamped)
+            // No implicit animation here: `clamped` is republished every frame
+            // the race advances, so an `.animation(value:)` would tear down and
+            // restart its curve on each of those frames and leave the tube
+            // chasing a level it has already moved past. The per-frame update is
+            // the smoothing.
         }
     }
 }
@@ -410,7 +414,9 @@ private struct RouteSpine: View {
                 }
                 .frame(width: cursorH * 43 / 61, height: cursorH)
                 .position(x: centre, y: cursorTop + cursorH / 2)
-                .animation(.easeOut(duration: 0.25), value: clamped)
+                // The cursor's `clamped` is republished on every frame of the
+                // run, so an implicit animation would restart its curve each
+                // frame and lag the marker behind the snail by a quarter second.
             }
         }
     }
@@ -570,17 +576,18 @@ private struct TutorialBanner: View {
     let text: String
     let scale: CGFloat
 
-    /// The retail script's inline-art glyphs, the sprite each stands for and
-    /// the word to write instead when the retail art is not installed.
-    private static let icons: [Character: (path: String, word: String)] = [
-        "{": ("Art/Sprites/parcelicon.png", "package"),
-        "}": ("Art/Sprites/mouse.png", "mouse"),
-        "~": ("Art/Sprites/particlering-big.png", "power-up"),
-        "[": ("Art/Sprites/garbagea.png", "enemy"),
-        "]": ("Art/Objects/lazer_lazer.png", "blaster"),
-        "^": ("Art/Baked/salt.png", "salt"),
-        "_": ("Art/Sprites/health.png", "heart"),
-        ";": ("Art/Sprites/particleslow-big.png", "slow ring"),
+    /// The retail script's inline-art glyphs and the sprite each stands for. The
+    /// bundle's own drawing is preferred; without it `TutorialGlyph` draws the
+    /// item, so the entry only has to name the retail sprite.
+    private static let icons: [Character: String] = [
+        "{": "Art/Sprites/parcelicon.png",
+        "}": "Art/Sprites/mouse.png",
+        "~": "Art/Sprites/particlering-big.png",
+        "[": "Art/Sprites/garbagea.png",
+        "]": "Art/Objects/lazer_lazer.png",
+        "^": "Art/Baked/salt.png",
+        "_": "Art/Sprites/health.png",
+        ";": "Art/Sprites/particleslow-big.png",
     ]
 
     /// A line of the prompt cut into the plain-text runs and the icons between
@@ -636,16 +643,125 @@ private struct TutorialBanner: View {
 
     @ViewBuilder
     private func icon(_ ch: Character) -> some View {
-        if let entry = TutorialBanner.icons[ch], let img = RetailAssets.billboardImage(entry.path) {
+        if let entry = TutorialBanner.icons[ch], let img = RetailAssets.billboardImage(entry) {
             Image(uiImage: img)
                 .resizable()
                 .scaledToFit()
                 .frame(height: fontSize * 1.25)
                 .baselineOffset(-2)
-        } else if let entry = TutorialBanner.icons[ch] {
-            Text(entry.word)
-                .font(.retail(fontSize, weight: .bold))
-                .foregroundStyle(Palette.ink)
+        } else {
+            // Without the retail sprites the line draws the item itself rather
+            // than spelling it out: written as a word the script reads as
+            // "Salt salt burns me!" and "Hearts heart restore my Postal", so
+            // the banner stands a small drawing in the glyph's place the same
+            // way the retail script drops its sprite into the prose.
+            TutorialGlyph(glyph: ch)
+                .frame(width: fontSize * 1.35, height: fontSize * 1.35)
+                .baselineOffset(-3)
+        }
+    }
+}
+
+/// The eight items the tutorial's prose names inline, drawn the flat
+/// cartoon-neon way the rest of the remake draws: the same shapes and palette
+/// the in-game sprites use, at banner size. Substitutes for the retail sprite
+/// when the original art is not installed, so the line reads as a picture
+/// rather than as a repeated word.
+private struct TutorialGlyph: View {
+    let glyph: Character
+
+    private static let ink  = Color(hex: "#2A1440")
+    private static let fill = Color(hex: "#F3ECFF")
+
+    var body: some View {
+        Canvas { ctx, size in
+            let w = size.width, h = size.height
+            let line = max(1, w * 0.07)
+            func blob(_ path: Path, _ colour: Color) {
+                ctx.fill(path, with: .color(colour))
+                ctx.stroke(path, with: .color(TutorialGlyph.ink), lineWidth: line)
+            }
+            switch glyph {
+            case "{":   // the parcel the mail run is about
+                let box = Path(roundedRect: CGRect(x: w * 0.1, y: h * 0.22,
+                                                   width: w * 0.8, height: h * 0.68),
+                               cornerRadius: w * 0.1)
+                blob(box, Color(hex: "#B5783C"))
+                var cross = Path()
+                cross.move(to: CGPoint(x: w * 0.5, y: h * 0.24))
+                cross.addLine(to: CGPoint(x: w * 0.5, y: h * 0.88))
+                cross.move(to: CGPoint(x: w * 0.12, y: h * 0.5))
+                cross.addLine(to: CGPoint(x: w * 0.88, y: h * 0.5))
+                ctx.stroke(cross, with: .color(Color(hex: "#7A4C25")),
+                           lineWidth: max(1, w * 0.09))
+            case "}":   // the mouse the player steers with
+                let shell = Path(roundedRect: CGRect(x: w * 0.28, y: h * 0.08,
+                                                     width: w * 0.44, height: h * 0.84),
+                                 cornerRadius: w * 0.22)
+                blob(shell, TutorialGlyph.fill)
+                var split = Path()
+                split.move(to: CGPoint(x: w * 0.3, y: h * 0.42))
+                split.addLine(to: CGPoint(x: w * 0.7, y: h * 0.42))
+                ctx.stroke(split, with: .color(TutorialGlyph.ink),
+                           lineWidth: max(1, w * 0.07))
+                ctx.fill(Path(ellipseIn: CGRect(x: w * 0.44, y: h * 0.2,
+                                                width: w * 0.12, height: h * 0.14)),
+                         with: .color(Color(hex: "#58E1FF")))
+            case "~":   // the power-up ring
+                blob(Path(ellipseIn: CGRect(x: w * 0.12, y: h * 0.12,
+                                            width: w * 0.76, height: h * 0.76)),
+                     TutorialGlyph.fill)
+                ctx.fill(Path(ellipseIn: CGRect(x: w * 0.38, y: h * 0.38,
+                                                width: w * 0.24, height: h * 0.24)),
+                         with: .color(Color(hex: "#241048")))
+            case "[":   // the highway pest
+                let rock = Path(roundedRect: CGRect(x: w * 0.08, y: h * 0.3,
+                                                    width: w * 0.84, height: h * 0.56),
+                                cornerRadius: w * 0.26)
+                blob(rock, Color(hex: "#8A8FA8"))
+            case "]":   // the blaster
+                blob(Path(roundedRect: CGRect(x: w * 0.06, y: h * 0.38,
+                                              width: w * 0.62, height: h * 0.3),
+                          cornerRadius: w * 0.08), Color(hex: "#8A8FA8"))
+                blob(Path(roundedRect: CGRect(x: w * 0.58, y: h * 0.44,
+                                              width: w * 0.36, height: h * 0.18),
+                          cornerRadius: w * 0.06), Color(hex: "#58E1FF"))
+            case "^":   // the salt heap that cannot be shot
+                var cone = Path()
+                cone.move(to: CGPoint(x: w * 0.5, y: h * 0.18))
+                cone.addLine(to: CGPoint(x: w * 0.94, y: h * 0.84))
+                cone.addLine(to: CGPoint(x: w * 0.06, y: h * 0.84))
+                cone.closeSubpath()
+                blob(cone, Color(hex: "#F3ECFF"))
+            case "_":   // the heart that repairs the meter
+                var heart = Path()
+                heart.move(to: CGPoint(x: w * 0.5, y: h * 0.88))
+                heart.addCurve(to: CGPoint(x: w * 0.08, y: h * 0.38),
+                               control1: CGPoint(x: w * 0.28, y: h * 0.7),
+                               control2: CGPoint(x: w * 0.08, y: h * 0.52))
+                heart.addCurve(to: CGPoint(x: w * 0.5, y: h * 0.28),
+                               control1: CGPoint(x: w * 0.08, y: h * 0.12),
+                               control2: CGPoint(x: w * 0.4, y: h * 0.1))
+                heart.addCurve(to: CGPoint(x: w * 0.92, y: h * 0.38),
+                               control1: CGPoint(x: w * 0.6, y: h * 0.1),
+                               control2: CGPoint(x: w * 0.92, y: h * 0.12))
+                heart.addCurve(to: CGPoint(x: w * 0.5, y: h * 0.88),
+                               control1: CGPoint(x: w * 0.92, y: h * 0.52),
+                               control2: CGPoint(x: w * 0.72, y: h * 0.7))
+                heart.closeSubpath()
+                blob(heart, Color(hex: "#FF5A6E"))
+            case ";":   // the slow ring that drags the snail down
+                blob(Path(ellipseIn: CGRect(x: w * 0.12, y: h * 0.12,
+                                            width: w * 0.76, height: h * 0.76)),
+                     Color(hex: "#8B5CF6"))
+                ctx.fill(Path(ellipseIn: CGRect(x: w * 0.38, y: h * 0.38,
+                                                width: w * 0.24, height: h * 0.24)),
+                         with: .color(Color(hex: "#241048")))
+            default:
+                // `Canvas` draws into a `Void` context, so an unhandled glyph
+                // is simply nothing rather than an empty view.
+                break
+            }
         }
     }
 }

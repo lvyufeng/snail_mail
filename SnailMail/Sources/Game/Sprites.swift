@@ -1411,7 +1411,6 @@ enum Sprites {
         case .salt: 47
         case .signBang, .signConstruction, .signStop:
             SignKind(entity: kind)?.signInkWidth ?? 48
-        default: 48
         }
     }
 }

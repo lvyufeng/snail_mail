@@ -202,6 +202,16 @@ enum RoundIcon {
     case sound(on: Bool)
     case pause
     case play
+
+    /// What VoiceOver reads. The button is nothing but a `Canvas`, so without
+    /// this it is announced as an unlabelled button.
+    var label: String {
+        switch self {
+        case .sound(let on): return on ? "Mute sound" : "Unmute sound"
+        case .pause:         return "Pause"
+        case .play:          return "Play"
+        }
+    }
 }
 
 /// Small round icon button (mute / pause / play) matching the shared chrome.
@@ -265,6 +275,7 @@ struct RoundIconButton: View {
             .overlay(Circle().stroke(Palette.cyan.opacity(0.8), lineWidth: 1.5))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(icon.label)
     }
 }
 
@@ -330,6 +341,10 @@ struct StepArrowButton: View {
     let icon: String
     let action: () -> Void
 
+    /// The glyph is the whole button, so VoiceOver would read it as the bare
+    /// punctuation `<` / `>`; name the step instead.
+    private var label: String { icon == "<" ? "Decrease" : "Increase" }
+
     var body: some View {
         Button(action: action) {
             Text(icon)
@@ -340,6 +355,7 @@ struct StepArrowButton: View {
                 .overlay(Circle().stroke(Palette.cyan.opacity(0.8), lineWidth: 1.2))
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 }
 
