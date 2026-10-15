@@ -959,7 +959,12 @@ enum TrackBuilder {
 
             /// Map a grid column to a position across the road.
             func across(_ col: Int) -> CGFloat {
-                max(-0.92, min(0.92, (CGFloat(col) - laneCentre) / (halfLane + 0.5)))
+                across(CGFloat(col))
+            }
+            /// The same for a column that falls between two cells, so a run
+            /// of an even number of cells still centres on the road.
+            func across(_ col: CGFloat) -> CGFloat {
+                max(-0.92, min(0.92, (col - laneCentre) / (halfLane + 0.5)))
             }
             func spanWidth(_ from: Int, _ to: Int) -> CGFloat {
                 min(0.95, (CGFloat(to - from + 1)) / (2 * halfLane + 1))
@@ -971,7 +976,10 @@ enum TrackBuilder {
             // the road runs across, not a fence to weave through, so it must
             // stay passable. Only a fence that leaves a gap to thread counts.
             let band = row[lo...hi]
-            let fenceChars: Set<Character> = ["|", "=", "-", "{", "}"]
+            let fenceChars: Set<Character> = ["|", "=", "-"]
+            // The ramp markers: a run of these cells is the road itself
+            // turning into a ramp, not a prop standing on it.
+            let rampChars: Set<Character> = ["<", ">", "{", "}"]
             let solidRow = band.allSatisfy { fenceChars.contains($0) }
             var col = 0
             while col < 8 {
@@ -1011,7 +1019,10 @@ enum TrackBuilder {
                     sprites.append(EntitySpec(kind: .ringUpgrade, offset: 0, depth: 0.5))
                 case "~":
                     sprites.append(EntitySpec(kind: .ringSlow, offset: 0, depth: 0.5))
-                case ">":
+                case "^":
+                    // The blast ring. `tools/import_tracks.py` folds a
+                    // `Ring=Explode` row's glyphs to `^` because the glyph it
+                    // stands on (`>`) is a road ramp of its own.
                     sprites.append(EntitySpec(kind: .ringExplode, offset: 0, depth: 0.5))
                 case "!":
                     sprites.append(EntitySpec(kind: .ringNormal, offset: 0, depth: 0.5))
@@ -1021,7 +1032,7 @@ enum TrackBuilder {
                     sprites.append(EntitySpec(kind: .parcel, offset: 0, depth: 0.5))
                 case "$":
                     sprites.append(EntitySpec(kind: .parcel, offset: across(col), depth: 0.5))
-                case "|", "=", "-", "{", "}":
+                case "|", "=", "-":
                     // Fences, rails and the pillars of a cage: solid pieces the
                     // snail has to thread between. A full-width row is a ledge
                     // lip, so it is left clear.
@@ -1029,7 +1040,26 @@ enum TrackBuilder {
                         sprites.append(EntitySpec(kind: .barrier, offset: across(col),
                                                   depth: 0.5))
                     }
-                case "<", "R":
+                case "<", ">", "{", "}":
+                    // The road's own ramp markers. A piece spells its launch
+                    // with a run of them across the whole grid — `{>>>>>>}`
+                    // throws the snail over the gap ahead, and the run of
+                    // `<` on the far side is the bank it comes down on. The
+                    // cells are road, not props: the retail build feeds the
+                    // four kinds to its road auto-tiler (`0x434bc0` picks a
+                    // road piece from `>`=1, `}`=2, `[`=3, `<`=4), and its
+                    // own "is there ground here" test (`0x434b60`) answers yes
+                    // for every one of them. So the run is drawn as a single
+                    // ramp spanning the columns it covers, the width the
+                    // launch covers, rather than as one post per column.
+                    var end = col
+                    while end + 1 < 8 && rampChars.contains(row[end + 1]) { end += 1 }
+                    sprites.append(EntitySpec(kind: .ramp,
+                                              offset: across((CGFloat(col) + CGFloat(end)) / 2),
+                                              depth: 0.5,
+                                              width: spanWidth(col, end)))
+                    col = end
+                case "R":
                     sprites.append(EntitySpec(kind: .ramp, offset: across(col), depth: 0.5))
                 case "(":
                     sprites.append(EntitySpec(kind: .trampoline, offset: across(col),

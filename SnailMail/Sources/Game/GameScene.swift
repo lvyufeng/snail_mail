@@ -1105,6 +1105,12 @@ final class GameScene: SKScene {
                 switch spec.kind {
                 case .hole:
                     tolerance = (spec.width > 0 ? spec.width : holeHalfWidth * 2) / 2 * 0.93
+                case .ramp:
+                    // A ramp spans the columns its run covers, so a piece that
+                    // turns the whole road into one (`{>>>>>>}`) launches the
+                    // snail wherever it crosses, while a lone `<` at the kerb
+                    // only catches a snail hugging that edge.
+                    tolerance = max(0.16, spec.width * 0.93)
                 case .turret:
                     tolerance = 0.16 * Sprites.pillarWidthFactor(spec.tier)
                 default:
@@ -2069,7 +2075,9 @@ final class GameScene: SKScene {
                 // against the nine units the road is across.
                 let roadFraction: CGFloat
                 switch spec.kind {
-                case .hole:
+                case .hole, .ramp:
+                    // A pit and a ramp are as wide as the run of cells they
+                    // cover, so the track data carries their width.
                     roadFraction = spec.width > 0 ? spec.width : holeHalfWidth * 2
                 case .signBang, .signConstruction, .signStop:
                     let own = SignKind(entity: spec.kind)?.widthFraction ?? 0.42

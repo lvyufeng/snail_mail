@@ -52,12 +52,17 @@ d0 32 12 70 4c a6 86 b4 a8 da ca e8 e4 fe fe fc
 KEY = bytes.fromhex(_KEY_HEX)
 
 # A `Ring=` row draws a pickup ring, but the glyph sitting in the grid
-# (`>`, `<`, `{`, `}`, `(`, `)`, `R`) only describes how it is oriented on the
-# road. The attribute names the effect, so fold every glyph to a token the
-# renderer can act on: power-up, slow, blast, a plain scoring ring, and a
-# decorative arch that does nothing.
+# (`>`, `<`, `{`, `}`, `(`, `)`, `R`) only names the ring's spot on the road.
+# The attribute names the effect, so fold every glyph to a token the renderer
+# can act on: power-up, slow, blast, a plain scoring ring, and a decorative
+# arch that does nothing.
+#
+# The glyphs are also the road's own ramp markers when a row carries no
+# `Ring=` at all — `{>>>>>>}` is the lip a piece launches the snail off — so
+# no ring token may reuse one of them. The blast ring therefore folds to `^`,
+# which no grid ever writes.
 RING_GLYPHS = set("><{}()R")
-RING = {"powerup": "+", "slow": "~", "explode": ">", "explosive": ">",
+RING = {"powerup": "+", "slow": "~", "explode": "^", "explosive": "^",
         "normal": "!", "none": "o"}
 
 def deobfuscate(data):
