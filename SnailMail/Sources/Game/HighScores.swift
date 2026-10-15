@@ -28,6 +28,17 @@ final class HighScores: ObservableObject {
             }
         }
 
+        /// The shorter name the results page calls the same board by — its own
+        /// heading over the run's tallies (`Postal Scores`, 0x4a37d8, and
+        /// `Challenge Scores`, 0x4a37c4) — while the score screen keeps the
+        /// `... High Scores` wording for the table itself.
+        var resultsTitle: String {
+            switch self {
+            case .postal: "Postal Scores"
+            case .challenge: "Challenge Scores"
+            }
+        }
+
         var chinese: String {
             switch self {
             case .postal: "战役排行榜"

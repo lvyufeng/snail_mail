@@ -80,7 +80,7 @@ struct ResultOverlay: View {
                             submitted = true
                         }
                     } else if let place, let board {
-                        Text("\(board.title) #\(place)")
+                        Text("\(board.resultsTitle) #\(place)")
                             .font(.retail(13, weight: .heavy))
                             .foregroundStyle(Palette.gold)
                     }
@@ -229,7 +229,7 @@ private struct NameEntry: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            Text("\(board.title)!")
+            Text("\(board.resultsTitle)!")
                 .font(.retail(13, weight: .heavy))
                 .foregroundStyle(Palette.gold)
             TextField("Enter your name here!", text: $name)
