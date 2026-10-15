@@ -7,6 +7,7 @@ struct MenuView: View {
     @ObservedObject private var settings = GameSettings.shared
     @State private var selected: GameMode = .tutorial
     @State private var muted = Sound.shared.muted
+    @State private var confirmingQuit = false
 
     var body: some View {
         ZStack {
@@ -102,6 +103,9 @@ struct MenuView: View {
                             HStack(spacing: 8) {
                                 MenuChip(title: "INTRO") { router.push(.intro) }
                                 MenuChip(title: "CREDITS") { router.push(.credits) }
+                                // The original's own last entry on this screen
+                                // (`Exit`, 0x4a20f4).
+                                MenuChip(title: "EXIT") { confirmingQuit = true }
                             }
                         }
                         .padding(.horizontal, 20)
@@ -135,6 +139,54 @@ struct MenuView: View {
         .onAppear {
             Sound.shared.start()
             Sound.shared.playMusic(.menu)
+            #if DEBUG
+            // `-quitconfirm`: open the leave-the-game question straight away
+            // so it can be screenshotted without a tap.
+            if ProcessInfo.processInfo.arguments.contains("-quitconfirm") {
+                confirmingQuit = true
+            }
+            #endif
+        }
+        .overlay {
+            if confirmingQuit {
+                QuitConfirmOverlay(
+                    onYes: { exit(0) },
+                    onNo: { confirmingQuit = false }
+                )
+            }
+        }
+    }
+}
+
+/// The build's own leave-the-game question. Its `Exit` entry puts up a dimmed
+/// screen carrying `Do you really want to quit?` (0x4a16ac) over a `Yes`
+/// (0x4a16c8) and a `No` (0x4a16a8) button, and only `Yes` closes the game.
+private struct QuitConfirmOverlay: View {
+    let onYes: () -> Void
+    let onNo: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.55).ignoresSafeArea()
+
+            NeonPanel(border: Palette.danger) {
+                VStack(spacing: 18) {
+                    Text("Do you really want to quit?")
+                        .font(.retail(20, weight: .black))
+                        .foregroundStyle(Palette.ink)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    HStack(spacing: 14) {
+                        ArcadeButton(title: "YES", tint: Palette.danger, action: onYes)
+                        ArcadeButton(title: "NO", tint: Palette.good, action: onNo)
+                    }
+                }
+                // Without a width the two pills take the whole screen, and
+                // their labels go off the edges with them.
+                .frame(maxWidth: 260)
+            }
+            .padding(.horizontal, 40)
         }
     }
 }

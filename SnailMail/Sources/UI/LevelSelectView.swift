@@ -53,13 +53,18 @@ struct LevelSelectView: View {
                     .scaledToFit()
                     .frame(height: 46)
             } else {
-                Text("GALAXY MAP")
+                // The screen's own title in the retail build (`0x408e31`,
+                // 0x4a20fc), drawn where the map's logo art would sit.
+                Text("Intergalactic Delivery Route")
                     .font(.retail(34, weight: .black))
-                    .tracking(1)
+                    .tracking(0.5)
                     .foregroundStyle(
                         LinearGradient(colors: [Palette.gold, Palette.goldDeep],
                                        startPoint: .top, endPoint: .bottom)
                     )
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.6)
+                    .lineLimit(2)
                     .shadow(color: .black.opacity(0.8), radius: 6, y: 3)
             }
             Text("战役 · \(LevelCatalog.reachableStars) stars across \(LevelCatalog.galaxies.count) galaxies")
