@@ -136,7 +136,10 @@ struct HUDView: View {
                 Spacer(minLength: 0)
 
                 PostalMeter(fraction: state.meterFraction, scale: s)
-                    .frame(width: 64 * s, height: max(1, height - 70 * sy))
+                    // The retail tube runs from y=70 to y=466 of the 640x480
+                    // frame, so it stops 14 rows short of the bottom edge
+                    // rather than running off it.
+                    .frame(width: 64 * s, height: max(1, height - 84 * sy))
                     .padding(.trailing, 16 * s)
                     .padding(.top, 70 * sy)
             }

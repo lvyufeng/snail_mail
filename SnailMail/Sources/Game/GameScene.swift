@@ -10,26 +10,51 @@ final class GameScene: SKScene {
     // MARK: - Tunables
 
     /// How high the camera rides over the highway. This, not the lens, is what
-    /// sets how fast the road fans out down the frame: the highway on screen
-    /// row `r` runs `roadWidth * (r - horizonRow) / cameraHeight` of a screen
-    /// wide, half to each side of the centre. The retail courses are shot from a
-    /// low, wide camera: their lanes widen at a steady screen-width per
-    /// screen-height and are already most of the frame across by two thirds of
-    /// the way down, which 1500 units above a 1500-unit highway reproduces.
-    private let cameraHeight: CGFloat = 1500
+    /// sets how fast the road fans out down the frame: a lane on screen row `r`
+    /// runs `(r - horizonRow) * roadWidth / cameraHeight` of a screen wide, half
+    /// to each side of the centre, so the fan-out rate is the single ratio
+    /// `roadWidth / cameraHeight`.
+    ///
+    /// The retail courses are shot from a low, wide camera. Read off their own
+    /// frames — the highway reaches both edges of the picture 0.17 of the
+    /// screen below its vanishing point — that ratio sits near 2.7
+    /// screen-widths per screen-height. 1500 units of highway under a camera
+    /// 560 units up is 2.68, and is what is drawn. Any higher and the near
+    /// highway shrinks to a ribbon down the middle of the frame with both walls
+    /// on show beside the snail, which is what "1500 over 1500", a ratio of
+    /// 1.0, gave.
+    private let cameraHeight: CGFloat = 560
     private let cameraDepth: CGFloat = 1.0 / tan((100.0 / 2.0) * .pi / 180.0) // ≈ 0.84
     /// The row the highway's vanishing point sits on, as a fraction of the
-    /// screen height, counted from the top. A level camera would put it on the
-    /// middle row, which leaves the near highway too short and everything that
-    /// stands on it oversized. Rather than tilt the camera — which would shear
-    /// every billboard and bend the lanes — the projection simply moves its
-    /// centre up onto this row, the shift a rising-front lens makes.
-    private let horizonRow: CGFloat = 0.30
+    /// screen height, counted from the top. Rather than tilt the camera — which
+    /// would shear every billboard and bend the lanes — the projection simply
+    /// moves its centre onto this row, the shift a rising-front lens makes.
+    ///
+    /// The retail frames converge on 0.45 of their height, and the remake keeps
+    /// that row: the space art owns the strip above the horizon and the highway
+    /// owns everything under it, so on a portrait frame the sky wants a little
+    /// under half the height rather than the third the remake used to give it.
+    private let horizonRow: CGFloat = 0.44
     private let roadWidth = TrackBuilder.roadWidth
     private let segmentLength = TrackBuilder.segmentLength
     private let drawDistance = 220
     private let playerZ: CGFloat
     private let wallRatio: CGFloat = 0.45
+
+    #if DEBUG
+    /// Set by `-roadgeom`: prints the projected highway segments each frame.
+    private var roadGeomDebug = false
+    /// Set by `-bandprobe`: prints the narrow nodes over the right-hand strip.
+    private var bandProbe = false
+    /// Set by `-roadcells`: prints the highway's tall subpaths on the right.
+    private var roadCellsProbe = false
+    /// Set by `-hide road|walls|rails`: keeps that part of the highway off the
+    /// frame. The flags are checked where the drawing happens, because the
+    /// pools are re-shown on every frame and a plain `isHidden` does not last.
+    private var hideRoad = false
+    private var hideWalls = false
+    private var hideRails = false
+    #endif
     /// How wide the pit is, as a fraction of the half-road: the pit is drawn
     /// 0.9 × screenW across and the snail drops in over the same span.
     private let holeHalfWidth: CGFloat = 0.45
@@ -51,10 +76,13 @@ final class GameScene: SKScene {
     /// view. The retail captures put the whole creature — shell, stalks and
     /// gear — at about a twentieth of the frame across (`ma_5` of the screen
     /// set, where he spans 32 of the 640 columns, and the road there already
-    /// runs off both edges as it does here). Seven tenths of the mesh's share
-    /// lands him on the same reading, and is what is drawn.
+    /// runs off both edges as it does here). How far the road runs past the
+    /// edges is what the share has to be discounted by. With the camera at
+    /// `cameraHeight` his row sits 0.30 of the height below the horizon, so the
+    /// road under him is 1.61 screens across and the mesh's share of it is cut
+    /// to about a third, which leaves him a twentieth of the frame.
     private let snailRoadFraction: CGFloat =
-        Sprites.snailModelWidth / roadModelWidth * 0.7
+        Sprites.snailModelWidth / roadModelWidth * 0.36
     /// Turbo's own width, in points, at the snapshot's screen scale.
     private var snailScale: CGFloat = 1
     /// Half the highway's on-screen width on Turbo's row, refreshed by
@@ -551,6 +579,11 @@ final class GameScene: SKScene {
             targetX = 1.15
         }
         debugIgnoreNoFall = ProcessInfo.processInfo.arguments.contains("-ignoretnf")
+        #if DEBUG
+        roadGeomDebug = ProcessInfo.processInfo.arguments.contains("-roadgeom")
+        bandProbe = ProcessInfo.processInfo.arguments.contains("-bandprobe")
+        roadCellsProbe = ProcessInfo.processInfo.arguments.contains("-roadcells")
+        #endif
         let launchArgs = ProcessInfo.processInfo.arguments
         if let arg = launchArgs.firstIndex(of: "-turret"), arg + 1 < launchArgs.count,
            let tier = Int(launchArgs[arg + 1]) {
@@ -606,6 +639,12 @@ final class GameScene: SKScene {
         let backdrop = SKSpriteNode(texture: grad)
         backdrop.size = size
         backdrop.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-greensky") {
+            backdrop.color = .green
+            backdrop.colorBlendFactor = 1
+        }
+        #endif
         sky.addChild(backdrop)
 
         let g1 = SKSpriteNode(texture: Sprites.radialTexture(
@@ -680,7 +719,11 @@ final class GameScene: SKScene {
         fogNode.removeFromParent()
         fogNode = SKNode()
         fogNode.zPosition = 8
-        let fogBand = size.height * 0.5
+        // Narrow enough to keep to the vanishing point. A band half the frame
+        // tall is centred on the horizon too, but it also washes the first
+        // stretch of the fan-out, which is where the highway has to read as
+        // road rather than as haze.
+        let fogBand = size.height * 0.26
         // The haze wears the level's own hue at the brightness the sky carries
         // just above the horizon, so the far highway fades into the nebula
         // rather than into a band of some second colour.
@@ -688,7 +731,7 @@ final class GameScene: SKScene {
         let fog = SKSpriteNode(texture: Sprites.gradientTexture(
             size: CGSize(width: 8, height: fogBand),
             colors: [haze.withAlphaComponent(0),
-                     haze.withAlphaComponent(0.82),
+                     haze.withAlphaComponent(0.72),
                      haze.withAlphaComponent(0)],
             locations: [0, 0.5, 1]))
         fog.size = CGSize(width: size.width, height: fogBand)
@@ -718,6 +761,14 @@ final class GameScene: SKScene {
         let tile = SKSpriteNode(texture: texture)
         tile.size = CGSize(width: art.width * scale, height: art.height * scale)
         tile.position = CGPoint(x: size.width / 2, y: size.height / 2)
+        #if DEBUG
+        // `-greensky` paints the backdrop a flat green, so any pixel of it
+        // showing through the road is unmistakable in a capture.
+        if ProcessInfo.processInfo.arguments.contains("-greensky") {
+            tile.color = .green
+            tile.colorBlendFactor = 1
+        }
+        #endif
         list.addChild(tile)
         sky.addChild(list)
 
@@ -2012,7 +2063,7 @@ final class GameScene: SKScene {
         var dx: CGFloat = -(baseSegment.curve * basePercent)
         // The row Turbo rides on, in the projection's own y-grows-downwards
         // canvas space. His size is read off the highway here.
-        let snailRow = size.height * 0.83
+        let snailRow = size.height * 0.74
 
         for n in 0..<drawDistance {
             let seg = segments[(baseSegment.index + n) % segments.count]
@@ -2037,6 +2088,18 @@ final class GameScene: SKScene {
 
             drawSegment(seg, n: n)
             drawRails(seg, n: n)
+            #if DEBUG
+            // `-roadgeom` prints each drawn segment's projected row, centre
+            // and half width, so the framing can be read off numbers instead of
+            // guessed at from pixels.
+            if roadGeomDebug, n < 14 {
+                print(String(format: "ROADGEOM n=%2d y=%7.1f..%7.1f cx=%7.1f w=%7.1f L=%7.1f R=%7.1f",
+                             n, seg.p1.screenY, seg.p2.screenY,
+                             seg.p1.screenX, seg.p1.screenW,
+                             seg.p1.screenX - seg.p1.screenW,
+                             seg.p1.screenX + seg.p1.screenW))
+            }
+            #endif
             if seg.p1.screenY >= snailRow && seg.p2.screenY <= snailRow {
                 let span = max(0.0001, seg.p1.screenY - seg.p2.screenY)
                 let t = (seg.p1.screenY - snailRow) / span
@@ -2054,15 +2117,15 @@ final class GameScene: SKScene {
         snailScale = max(0.05, halfRoad * 2 * snailRoadFraction / Sprites.snailNativeWidth)
         if fallTimer >= 0 {
             // Tumbling down the pit: sink below the road, spin and shrink.
-            let p = min(1, fallTimer / fallDuration)
+                let p = min(1, fallTimer / fallDuration)
             let ease = p * p
             snail.position = CGPoint(x: size.width * 0.5,
-                                     y: size.height * 0.17 - 95 * ease * snailScale)
+                                     y: size.height * 0.26 - 95 * ease * snailScale)
             snail.zRotation = p * 5.6
             snail.setScale(snailScale * (1 - 0.5 * ease))
             snail.alpha = 1 - 0.3 * p
         } else {
-            snail.position = CGPoint(x: size.width * 0.5, y: size.height * 0.17)
+            snail.position = CGPoint(x: size.width * 0.5, y: size.height * 0.26)
             // Steer with the road, then add the roll of a loop or a screw so
             // the snail actually turns over as it flies the piece.
             snail.zRotation = -playerX * 0.22 + playerRoll
@@ -2097,6 +2160,244 @@ final class GameScene: SKScene {
             shadow.alpha = fallTimer >= 0 ? max(0, 1 - fallTimer / fallDuration) : 1
         }
         #if DEBUG
+        // `-hitprobe fx,fy;fx,fy` prints the nodes that cover a point given as
+        // fractions of the frame (x from the left, y from the top), so a
+        // suspicious band of colour on the road can be traced to the node that
+        // paints it instead of guessed at from the pixels.
+        if let hi = ProcessInfo.processInfo.arguments.firstIndex(of: "-hitprobe"),
+           hi + 1 < ProcessInfo.processInfo.arguments.count {
+            for pair in ProcessInfo.processInfo.arguments[hi + 1].split(separator: ";") {
+                let bits = pair.split(separator: ",")
+                guard bits.count == 2, let fx = Double(bits[0]), let fy = Double(bits[1])
+                else { continue }
+                let p = CGPoint(x: size.width * CGFloat(fx),
+                                y: size.height * (1 - CGFloat(fy)))
+                var lines: [String] = []
+                func walk(_ node: SKNode, _ depth: Int, _ trail: String) {
+                    guard !node.isHidden else { return }
+                    let here = trail + "/" + (node.name ?? "\(type(of: node))")
+                    if node.calculateAccumulatedFrame().contains(p) {
+                        var d = "\(depth):\(here)@z\(node.zPosition)"
+                        if let s = node as? SKShapeNode, let bb = s.path?.boundingBox {
+                            d += "[\(Int(bb.minX)),\(Int(bb.minY)) \(Int(bb.width))x\(Int(bb.height))]"
+                            var pts: [String] = []
+                            s.path?.applyWithBlock { e in
+                                if pts.count < 4 {
+                                    let q = e.pointee.points[0]
+                                    pts.append("(\(Int(q.x)),\(Int(q.y)))")
+                                }
+                            }
+                            d += pts.joined()
+                            d += "fill=\(s.fillColor.description)"
+                            d += "tex=\(s.fillTexture != nil)"
+                            let local = s.convert(p, from: self)
+                            var inside = false
+                            if let path = s.path {
+                                inside = path.contains(local, using: .winding)
+                            }
+                            d += " local=(\(Int(local.x)),\(Int(local.y))) inPath=\(inside)"
+                        }
+                        if let s = node as? SKSpriteNode { d += "[\((Int(s.size.width)))x\(Int(s.size.height))]" }
+                        lines.append(d)
+                    }
+                    if depth < 8 { for c in node.children { walk(c, depth + 1, here) } }
+                }
+                for c in children { walk(c, 0, "") }
+                print("HITPROBE \(pair) -> \(lines.joined(separator: " | "))")
+            }
+        }
+        #endif
+        #if DEBUG
+        // `-tree` dumps the scene graph of the frozen frame — class, z, alpha,
+        // frame and fill — so whatever is painting a stray band can be named.
+        if ProcessInfo.processInfo.arguments.contains("-tree") {
+            print("TREE background=\(backgroundColor.description) size=\(size)")
+            func dump(_ node: SKNode, _ depth: Int) {
+                let f = node.calculateAccumulatedFrame()
+                var s = String(repeating: "  ", count: depth)
+                s += "\(type(of: node)) z=\(node.zPosition) hid=\(node.isHidden)"
+                s += " a=\(node.alpha) f=(\(Int(f.minX)),\(Int(f.minY)) \(Int(f.width))x\(Int(f.height)))"
+                if let sh = node as? SKShapeNode { s += " fill=\(sh.fillColor.description)" }
+                if let sp = node as? SKSpriteNode { s += " tex=\(sp.texture != nil)" }
+                print("  TREE \(s)")
+                guard depth < 2 else { return }
+                let kids = node.children
+                if kids.count <= 6 {
+                    for c in kids { dump(c, depth + 1) }
+                } else {
+                    for c in kids.prefix(3) { dump(c, depth + 1) }
+                    print("  TREE \(String(repeating: "  ", count: depth + 1))<\(kids.count - 6) more>")
+                    for c in kids.suffix(3) { dump(c, depth + 1) }
+                }
+            }
+            for c in children { dump(c, 0) }
+        }
+        #endif
+        #if DEBUG
+        // `-hide road,walls,rails,entities,sky,snail` takes a group of nodes off
+        // the frame after it has been drawn, so a band of colour can be traced
+        // to what paints it by putting the groups back one at a time.
+        if let hi = ProcessInfo.processInfo.arguments.firstIndex(of: "-hide"),
+           hi + 1 < ProcessInfo.processInfo.arguments.count {
+            for group in ProcessInfo.processInfo.arguments[hi + 1].split(separator: ",") {
+                switch group {
+                case "sky":
+                    childNode(withName: "sky")?.isHidden = true
+                case "snail":
+                    snail.isHidden = true
+                    childNode(withName: "snailshadow")?.isHidden = true
+                case "road":
+                    // The pools are re-shown at the top of every `renderRoad`,
+                    // so hiding the nodes is undone before the frame is drawn.
+                    // The flag is what actually keeps the highway off screen.
+                    hideRoad = true
+                case "walls":
+                    hideWalls = true
+                case "rails":
+                    hideRails = true
+                case "entities":
+                    entityLayer.isHidden = true
+                case "fx":
+                    fxLayer.isHidden = true
+                default:
+                    break
+                }
+            }
+        }
+        #endif
+        #if DEBUG
+        // `-bandprobe` prints every narrow node that overlaps the right-hand
+        // strip of the frame, so a stray band can be traced to the shape that
+        // paints it.
+        if bandProbe {
+            let rect = CGRect(x: size.width * 0.84, y: 0,
+                              width: size.width * 0.16, height: size.height * 0.52)
+            var lines: [String] = []
+            func walk(_ node: SKNode, _ trail: String) {
+                let here = trail + "/" + (node.name ?? "\(type(of: node))")
+                let f = node.calculateAccumulatedFrame()
+                if f.intersects(rect) && f.width < 120 {
+                    var d = "\(here) f=\(Int(f.minX)),\(Int(f.minY)) \(Int(f.width))x\(Int(f.height)) z=\(node.zPosition) a=\(node.alpha) hid=\(node.isHidden)"
+                    if let sh = node as? SKShapeNode {
+                        var moves = 0
+                        var verts = 0
+                        sh.path?.applyWithBlock { e in
+                            switch e.pointee.type {
+                            case .moveToPoint: moves += 1
+                            default: break
+                            }
+                            switch e.pointee.type {
+                            case .addLineToPoint: verts += 1
+                            default: break
+                            }
+                        }
+                        d += " fill=\(sh.fillColor.description) tex=\(sh.fillTexture != nil) bm=\(sh.blendMode.rawValue) lw=\(sh.lineWidth) glow=\(sh.glowWidth) sub=\(moves) verts=\(verts)"
+                    }
+                    if let sp = node as? SKSpriteNode { d += " sz=\(Int(sp.size.width))x\(Int(sp.size.height)) blend=\(sp.blendMode.rawValue)" }
+                    lines.append(d)
+                }
+                for c in node.children { walk(c, here) }
+            }
+            for c in children { walk(c, "") }
+            print("BANDPROBE count=\(lines.count)\n" + lines.joined(separator: "\n"))
+        }
+        // `-roadcells` walks the highway's own shapes and prints every tall
+        // subpath that lands on the right of the frame, so a stray band can be
+        // read back to the lattice cell that drew it.
+        if roadCellsProbe {
+            var out: [String] = []
+            func scan(_ nodes: [SKShapeNode], _ tag: String) {
+                for (i, node) in nodes.enumerated() where !node.isHidden {
+                    guard let path = node.path else { continue }
+                    var minX = CGFloat.greatestFiniteMagnitude
+                    var maxX = -CGFloat.greatestFiniteMagnitude
+                    var minY = CGFloat.greatestFiniteMagnitude
+                    var maxY = -CGFloat.greatestFiniteMagnitude
+                    var started = false
+                    func flush() {
+                        guard started else { return }
+                        if maxY - minY > 60 && maxX > size.width * 0.7 {
+                            out.append("\(tag)[\(i)] bbox=\(Int(minX)),\(Int(minY)) \(Int(maxX - minX))x\(Int(maxY - minY))")
+                        }
+                        started = false
+                    }
+                    path.applyWithBlock { e in
+                        let p = e.pointee
+                        switch p.type {
+                        case .moveToPoint:
+                            flush()
+                            started = true
+                            minX = p.points[0].x; maxX = p.points[0].x
+                            minY = p.points[0].y; maxY = p.points[0].y
+                        case .addLineToPoint:
+                            let q = p.points[0]
+                            minX = min(minX, q.x); maxX = max(maxX, q.x)
+                            minY = min(minY, q.y); maxY = max(maxY, q.y)
+                        default:
+                            break
+                        }
+                    }
+                    flush()
+                }
+            }
+            scan(roadPool, "roadPool")
+            scan(roadPoolB, "roadPoolB")
+            for (i, row) in roadTonePool.enumerated() { scan(row, "tone\(i)") }
+            print("ROADCELLS count=\(out.count)\n" + out.joined(separator: "\n"))
+        }
+        #endif
+        #if DEBUG
+        // `-scanrow fy;fy` prints, for each row, which node the renderer draws
+        // at each hundredth of the frame across. It reads the scene graph
+        // rather than the pixels, so it says where the road actually stops and
+        // what shows through past it.
+        if let si = ProcessInfo.processInfo.arguments.firstIndex(of: "-scanrow"),
+           si + 1 < ProcessInfo.processInfo.arguments.count {
+            var klass: [ObjectIdentifier: Character] = [:]
+            for n in roadPool { klass[ObjectIdentifier(n)] = "T" }
+            for n in roadPoolB { klass[ObjectIdentifier(n)] = "O" }
+            for row in roadTonePool { for n in row { klass[ObjectIdentifier(n)] = "t" } }
+            for n in wallLeftPool { klass[ObjectIdentifier(n)] = "l" }
+            for n in wallRightPool { klass[ObjectIdentifier(n)] = "r" }
+            klass[ObjectIdentifier(snail)] = "S"
+            func tag(_ node: SKNode) -> Character {
+                if node.name == "sky" { return "k" }
+                if let n = node.name, n.hasPrefix("snail") { return "S" }
+                return klass[ObjectIdentifier(node)] ?? "?"
+            }
+            var nodes: [(SKNode, String)] = []
+            func collect(_ node: SKNode, _ key: String) {
+                let here = key + String(format: "%08.3f:%03d|", node.zPosition + 1000,
+                                        node.parent?.children.firstIndex(of: node) ?? 0)
+                if !node.isHidden { nodes.append((node, here)) }
+                for c in node.children { collect(c, here) }
+            }
+            for c in children { collect(c, "") }
+            for spec in ProcessInfo.processInfo.arguments[si + 1].split(separator: ";") {
+                guard let fy = Double(spec) else { continue }
+                var line = ""
+                for i in 0...100 {
+                    let p = CGPoint(x: size.width * CGFloat(i) / 100,
+                                    y: size.height * (1 - CGFloat(fy)))
+                    var best: (SKNode, String)?
+                    for (node, key) in nodes {
+                        let hit: SKNode
+                        if let s = node as? SKShapeNode {
+                            if s.path == nil { continue }
+                            hit = s
+                        } else if let s = node as? SKSpriteNode {
+                            hit = s
+                        } else { continue }
+                        guard hit.contains(hit.convert(p, from: self)) else { continue }
+                        if best == nil || key > best!.1 { best = (hit, key) }
+                    }
+                    if let b = best { line.append(tag(b.0)) } else { line.append("?") }
+                }
+                print("SCANROW \(spec) \(line)")
+            }
+        }
+        #endif
+        #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("-snailprobe") {
             let f = snail.calculateAccumulatedFrame()
             let body = (snail.childNode(withName: "snailframes") as? SKSpriteNode)?
@@ -2124,7 +2425,7 @@ final class GameScene: SKScene {
     private func drawSegment(_ seg: RoadSegment, n: Int) {
         // An airborne slice is the void a jump flies over: no tiles, no
         // fringe walls, just the background scrolling past underneath.
-        guard !seg.airborne else { return }
+        guard !seg.airborne, !hideRoad else { return }
 
         if let surface = roadSurface {
             drawTiledRoad(seg, n: n, surface: surface)
@@ -2273,6 +2574,7 @@ final class GameScene: SKScene {
     }
 
     private func drawFringe(_ seg: RoadSegment, n: Int) {
+        guard !hideWalls else { return }
         // The walls on both sides of the highway, tinted with the level's
         // `Fringe:` colour and filled with the retail gradient, so each wall is
         // solid where it meets the road and fades out as it rises.
@@ -2315,7 +2617,7 @@ final class GameScene: SKScene {
     /// it in, and the pieces of a fence row leave the lanes between them to
     /// thread.
     private func drawRails(_ seg: RoadSegment, n: Int) {
-        guard let rail = railTexture, !seg.airborne else { return }
+        guard let rail = railTexture, !seg.airborne, !hideRails else { return }
         let y1 = fy(seg.p1.screenY), y2 = fy(seg.p2.screenY)
         let h1 = railHeight(at: seg.p1.screenW), h2 = railHeight(at: seg.p2.screenW)
         // Past this the rail is under a point tall, and the road carrying it is
