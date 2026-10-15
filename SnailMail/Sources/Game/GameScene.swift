@@ -144,6 +144,9 @@ final class GameScene: SKScene {
     private let sceneSeed = CourseRandom.launchedSeed()
     private var framesToFreeze = -1
     private var framesRun = 0
+    /// `-meterlock F`: debug only — the fraction of the postal tube the race is
+    /// held at every frame.
+    private var debugMeterLock: Double?
     /// `-turret N`: the tier of the pillar the debug hook keeps parked ahead.
     private var debugTurretTier: Int?
     private var debugTurretSegment: Int?
@@ -316,6 +319,10 @@ final class GameScene: SKScene {
            let frames = Int(args[i + 1]) {
             framesToFreeze = frames
         }
+        if let i = args.firstIndex(of: "-meterlock"), i + 1 < args.count,
+           let pct = Double(args[i + 1]) {
+            debugMeterLock = max(0, min(1, pct))
+        }
         // `-norails` runs the course with the fence posts of the procedural
         // fallback in place of the blue rails, so a screenshot pair can show
         // what the rails cover.
@@ -411,6 +418,16 @@ final class GameScene: SKScene {
             // Hold the race on the start line, so the pause overlay `0x440640`
             // builds can be photographed.
             togglePause()
+        }
+        if let arg = ProcessInfo.processInfo.arguments.firstIndex(of: "-meter"),
+           arg + 1 < ProcessInfo.processInfo.arguments.count,
+           let pct = Double(ProcessInfo.processInfo.arguments[arg + 1]) {
+            startRace()
+            // Set the postal meter to a share of the full tube, so each of the
+            // two pieces `0x4411b0` splits the tube into — the violet
+            // `damageguage` above the health line and the pink
+            // `damageguagefull` below it — can be photographed on its own.
+            state.postalMeter = state.maxMeter * max(0, min(1, pct))
         }
         if ProcessInfo.processInfo.arguments.contains("-gaptop") {
             startRace()
@@ -761,6 +778,13 @@ final class GameScene: SKScene {
         let dt = framesToFreeze >= 0 ? 1.0 / 60.0 : min(currentTime - lastUpdate, 1.0 / 30.0)
         let fdt = CGFloat(dt)
 
+        #if DEBUG
+        // `-meterlock F` holds the postal tube at a fraction of its length, so
+        // one band of `0x4411b0` at a time — the wash it only reaches for above
+        // 0.9, the violet and pink split — can be photographed without the race
+        // draining the meter first.
+        if let lock = debugMeterLock { state.postalMeter = state.maxMeter * lock }
+        #endif
         scrollStars(fdt: fdt)
         scrollSky(fdt: fdt)
         // Turbo's animation rides the same clock, but a paused race holds its

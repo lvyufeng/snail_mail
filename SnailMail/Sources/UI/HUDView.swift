@@ -135,9 +135,7 @@ struct HUDView: View {
 
                 Spacer(minLength: 0)
 
-                PostalMeter(fraction: state.meterFraction,
-                            invincible: state.invincible,
-                            scale: s)
+                PostalMeter(fraction: state.meterFraction, scale: s)
                     .frame(width: 64 * s, height: max(1, height - 70 * sy))
                     .padding(.trailing, 16 * s)
                     .padding(.top, 70 * sy)
@@ -200,80 +198,144 @@ struct HUDView: View {
 
 // MARK: - Postal meter
 
-/// The health gauge: the retail tube down the right edge, filled from the
-/// bottom with the artwork the original swapped in for that state — the violet
-/// `damageguage` while the snail is holding on, the hot pink `damageguagefull`
-/// at a full meter and the bright wash of `damageguagebright` while a pickup
-/// has it invincible.
+/// The health gauge: the retail tube down the right edge.
+///
+/// `0x4411b0` lays three sprites on one another. The whole tube goes down
+/// first as the bright wash of `damageguagebright` (0x5b); the tube itself is
+/// then laid over it in two pieces that meet at the health line — the washed
+/// violet `damageguage` (0x59) above the line and the hot pink
+/// `damageguagefull` (0x5a) below it, so the meter drains from the top down.
+///
+/// The line is the build's own arithmetic. Its 640x480 frame carries the tube
+/// from y=70 down 396 rows of artwork, and the line falls `351 - 308 * fraction`
+/// rows below the top (0x497650, 0x497654). At the two ends the build stops
+/// working the line out: over 0.999 (0x497424) it pins it to row 0, so the tube
+/// is all `damageguagefull`, and under 0.01 (0x497298) to the art's last row, so
+/// the tube is all `damageguage`.
+///
+/// Only the wash answers to the health, and only while the meter is nearly
+/// full: over a fraction of 0.9 (0x49726c) the build ramps it in at ten times
+/// the overshoot (0x497400), and at or under that line it jumps the sprite
+/// entirely (0x441219). Once the meter reads full the build also holds the wash
+/// at full strength for the beat it spends in its own "just filled" state,
+/// which it enters at 0x441168 and leaves at 0x4410c2.
 private struct PostalMeter: View {
     let fraction: Double
-    let invincible: Bool
     let scale: CGFloat
 
     private var clamped: Double { min(1, max(0, fraction)) }
 
-    /// Which of the three retail gauges the run is showing.
-    private var sprite: String {
-        if invincible { return "damageguagebright" }
-        if clamped >= 0.995 { return "damageguagefull" }
-        return "damageguage"
+    /// The strength of the bright wash, or zero where the build skips it.
+    private var brightAlpha: Double {
+        clamped > 0.9 ? min(1, (clamped - 0.9) * 10) : 0
+    }
+
+    /// Where the two tube sprites meet, in the sprite's own rows — 1 is the
+    /// first row of the art and 393 its last. A meter over 0.999 (0x497424)
+    /// puts the line above the art, so the tube is all `damageguagefull`, and
+    /// one under 0.01 (0x497298) puts it below, so the tube is all
+    /// `damageguage` — the build's two ends.
+    private var splitRow: Double {
+        if clamped > 0.999 { return 0 }
+        if clamped < 0.01 { return 393 }
+        return min(393, max(0, 350 - 308 * clamped))
     }
 
     var body: some View {
         GeometryReader { geo in
-            let h = geo.size.height
-            ZStack(alignment: .bottom) {
-                // The empty tube behind the fill: the same artwork, spent.
-                if RetailAssets.installed {
-                    GaugeTube(sprite: "damageguage", scale: scale, height: h)
-                        .opacity(0.32)
-                } else {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(Color.black.opacity(0.45))
-                        .frame(width: 64 * scale, height: h)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .stroke(Palette.ink.opacity(0.55), lineWidth: 1.5)
-                        )
-                }
+            let h = max(1, geo.size.height)
+            let w = 64 * scale
+            let split = CGFloat(splitRow)
 
-                GaugeTube(sprite: sprite, scale: scale, height: h)
-                    .frame(height: h * clamped, alignment: .bottom)
-                    .frame(height: h, alignment: .bottom)
-                    .clipped()
-                    .animation(.easeOut(duration: 0.2), value: clamped)
+            ZStack(alignment: .top) {
+                if RetailAssets.installed {
+                    GaugeTube(sprite: "damageguagebright", scale: scale, height: h)
+                        .opacity(brightAlpha)
+                        .animation(.easeOut(duration: 0.2), value: brightAlpha)
+
+                    if split > 1 {
+                        GaugeTube(sprite: "damageguage", scale: scale, height: h,
+                                  rows: 1...split)
+                    }
+                    if split < 393 {
+                        GaugeTube(sprite: "damageguagefull", scale: scale, height: h,
+                                  rows: split...393)
+                    }
+                } else {
+                    // Without the art the meter still reads: the same line
+                    // between the spent tube and the pink below it.
+                    VStack(spacing: 0) {
+                        Rectangle()
+                            .fill(Color.black.opacity(0.45))
+                            .frame(height: h * split / 393)
+                        Rectangle()
+                            .fill(Palette.magenta)
+                    }
+                    .frame(width: w, height: h)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(Palette.ink.opacity(0.55), lineWidth: 1.5)
+                    )
+                }
             }
+            .frame(width: w, height: h, alignment: .top)
+            .animation(.easeOut(duration: 0.2), value: clamped)
         }
     }
 }
 
-/// One retail meter sprite, held together at any height: the file carries a
-/// fixed fitting in rows 1...33 and another in rows 352...393 with a flat run
-/// of tube between them, so a tall screen stretches only the run.
+/// One retail meter sprite, cut to a band of its own rows and held together at
+/// any height: the file carries a fixed fitting in rows 1...33 and another in
+/// rows 352...393 with a flat run of tube between them, so a tall screen
+/// stretches only the run. `rows` names the slice to show, which is how the
+/// meter splits the art between its violet and pink halves.
 private struct GaugeTube: View {
     let sprite: String
     let scale: CGFloat
     let height: CGFloat
+    var rows: ClosedRange<CGFloat> = 1...393
+
+    private var width: CGFloat { 64 * scale }
+    private var capTop: CGFloat { 33 * scale }
+    private var capBottom: CGFloat { 42 * scale }
+    private var run: CGFloat { max(1, height - capTop - capBottom) }
+
+    /// Where a row of the artwork lands once the run has been stretched to
+    /// this height.
+    private func screenY(_ row: CGFloat) -> CGFloat {
+        if row <= 34 { return min(capTop, max(0, (row - 1) / 33 * capTop)) }
+        if row <= 352 { return capTop + min(run, max(0, (row - 34) / 318 * run)) }
+        return capTop + run + min(capBottom, max(0, (row - 352) / 42 * capBottom))
+    }
 
     var body: some View {
-        let path = "Art/Sprites/\(sprite).png"
-        let width = 64 * scale
-        let capTop = 33 * scale
-        let capBottom = 42 * scale
-        let run = max(1, height - capTop - capBottom)
+        slice(rows)
+    }
 
+    private func slice(_ rows: ClosedRange<CGFloat>) -> some View {
+        let top = screenY(rows.lowerBound)
+        let cut = max(0.5, screenY(rows.upperBound) - top)
+        return stack
+            .offset(y: -top)
+            .frame(width: width, height: cut, alignment: .top)
+            .clipped()
+            .offset(y: top)
+            .frame(width: width, height: height, alignment: .top)
+    }
+
+    private var stack: some View {
         VStack(spacing: 0) {
-            piece(path, y: 1, rows: 33, width: width, height: capTop)
-            piece(path, y: 34, rows: 318, width: width, height: run)
-            piece(path, y: 352, rows: 42, width: width, height: capBottom)
+            piece(1, rows: 33, height: capTop)
+            piece(34, rows: 318, height: run)
+            piece(352, rows: 42, height: capBottom)
         }
         .frame(width: width, height: height, alignment: .top)
     }
 
     @ViewBuilder
-    private func piece(_ path: String, y: Int, rows: Int,
-                       width: CGFloat, height: CGFloat) -> some View {
-        if let cut = RetailAssets.band(path, y: y, height: rows) {
+    private func piece(_ y: Int, rows: Int, height: CGFloat) -> some View {
+        if let cut = RetailAssets.band("Art/Sprites/\(sprite).png", y: y, height: rows) {
             Image(uiImage: cut)
                 .resizable()
                 .interpolation(.medium)
