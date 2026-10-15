@@ -123,6 +123,17 @@ final class GameScene: SKScene {
     private var skidUntil: CGFloat = 0
     /// Counts down to the next puff of tyre smoke while a skid is running.
     private var skidClock: CGFloat = 0
+    /// Counts down to the next puff of the white tail the snail lays on the
+    /// road behind him while he is travelling under his own steam.
+    private var trailClock: CGFloat = 0
+    /// The tail's own dice, kept off the course's stream.
+    ///
+    /// The trail lays a puff most frames, so drawing its jitter from
+    /// `sceneRandom` would shift every later draw on that stream — the rocks
+    /// would come up wearing different faces — and a frozen capture of one seed
+    /// would no longer land on the same course as a build without the trail.
+    /// Its own generator keeps the two runs comparable.
+    private var trailRandom = CourseRandom(seed: 0x5A17)
     private var elapsed: CGFloat = 0
     /// This frame's slice of time, handed to Turbo's animation. Zero while the
     /// race is paused so he holds his pose.
@@ -1039,6 +1050,7 @@ final class GameScene: SKScene {
         updateBullets(fdt: fdt)
         updateEnemyFire(fdt: fdt)
         updateSkid(fdt: fdt)
+        updateTrail(fdt: fdt)
         publish()
     }
 
@@ -1229,7 +1241,8 @@ final class GameScene: SKScene {
                bullet.travel.truncatingRemainder(dividingBy: 24) < step {
                 spawnSmoke(at: bullet.node.position,
                            width: 15 * max(0.3, bullet.node.xScale),
-                           drift: CGPoint(x: 0, y: 4), life: 0.35)
+                           drift: CGPoint(x: 0, y: 4), life: 0.35,
+                           name: "jet")
             }
             bullets[i] = bullet
         }
@@ -1691,6 +1704,45 @@ final class GameScene: SKScene {
                    life: 0.4)
     }
 
+    /// The pale puff chain the build lays on the road behind Turbo.
+    ///
+    /// The 2005 build keeps a pool of thirty-six of its `Startail` sprites and
+    /// re-lays the oldest one at the snail on every frame he spends travelling,
+    /// so the road behind him carries a short line of white puffs. Each is laid
+    /// a shade narrower than the snail, and the soft edge of the puff leaves a
+    /// core about a third of his width once they overlap. They drift back
+    /// toward the camera, widening and thinning as they go. Only a snail moving
+    /// under his own steam leaves them — a slugged one is curled in his shell,
+    /// and a tumbling one has already left the road.
+    private func updateTrail(fdt: CGFloat) {
+        guard state.phase == .running, fallTimer < 0, !slugged,
+              currentSpeed > baseTargetSpeed * 0.35 else {
+            trailClock = 0
+            return
+        }
+        trailClock -= fdt
+        guard trailClock <= 0 else { return }
+        // The pool is re-laid once a frame, so a faster snail draws its puffs
+        // closer together than a slow one.
+        trailClock = 0.075
+        let width = Sprites.snailNativeWidth * 0.8 * snailScale
+        guard let puff = Sprites.makeParticle("startail", width: width, alpha: 0.5) else { return }
+        puff.position = CGPoint(x: snail.position.x
+                                    + CGFloat.random(in: -5...5, using: &trailRandom),
+                                y: snail.position.y - 22 * snailScale)
+        // Under the snail and over the highway, so the chain reads as left
+        // behind him rather than pasted on top.
+        puff.zPosition = 8
+        puff.zRotation = CGFloat.random(in: 0...(2 * .pi), using: &trailRandom)
+        fxLayer.addChild(puff)
+        puff.run(.sequence([
+            .group([.moveBy(x: 0, y: -200 * snailScale, duration: 0.45),
+                    .scale(to: 1.35, duration: 0.45),
+                    .fadeOut(withDuration: 0.45)]),
+            .removeFromParent(),
+        ]))
+    }
+
     // MARK: - Bullets
 
     private func obtainBullet() -> SKNode {
@@ -1876,9 +1928,15 @@ final class GameScene: SKScene {
 
     /// A puff of the build's smoke, for tyres scrubbing the road and for the
     /// exhaust trailing a shot.
+    ///
+    /// The two are separate bitmaps in the build — `Smoke` under the tyres and
+    /// `Jet` behind a rocket — so the caller names which it wants. The remake
+    /// draws both as the same soft puff, but a retail-art run then shows the
+    /// right picture in each place.
     private func spawnSmoke(at point: CGPoint, width: CGFloat,
-                            drift: CGPoint = .zero, life: TimeInterval = 0.45) {
-        guard let puff = Sprites.makeParticle("smoke", width: width, alpha: 0.8) else { return }
+                            drift: CGPoint = .zero, life: TimeInterval = 0.45,
+                            name: String = "smoke") {
+        guard let puff = Sprites.makeParticle(name, width: width, alpha: 0.8) else { return }
         puff.position = point
         puff.zPosition = 24
         puff.zRotation = CGFloat.random(in: 0...(2 * .pi), using: &sceneRandom)
