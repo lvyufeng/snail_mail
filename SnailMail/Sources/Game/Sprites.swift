@@ -212,8 +212,9 @@ enum Sprites {
     }
 
     /// Drives the weapon, jetpack and invincibility bubble the retail build
-    /// bolts onto Turbo. A snail drawn procedurally has no gear node, so this
-    /// does nothing there rather than half-drawing the add-ons.
+    /// bolts onto Turbo. `weapon` is the shot mesh the ladder rung picked, one
+    /// to three. A snail drawn procedurally has no gear node, so this does
+    /// nothing there rather than half-drawing the add-ons.
     static func setSnailGear(_ node: SKNode, weapon: Int, jetpack: Bool,
                              invincible: Bool, dt: CGFloat) {
         guard let gear = node.childNode(withName: "snailgear") as? SnailGear else { return }
@@ -869,11 +870,11 @@ enum Sprites {
 
     // MARK: - Projectiles
 
-    /// The three weapons the pickup ladder climbs: the blaster's pellet, the
-    /// laser's glowing bolt, then the rocket the ladder tops out at. The rocket
-    /// gets a nose cone, tail fins and an exhaust plume so it is unmistakable at
-    /// a glance, and the laser a cyan beam so the middle rung reads differently
-    /// from the starting pellet.
+    /// The three shot meshes the ladder's own mask picks between at `0x43a2e0`:
+    /// the blaster's pellet, the laser's glowing bolt, then the rocket. The
+    /// rocket gets a nose cone, tail fins and an exhaust plume so it is
+    /// unmistakable at a glance, and the laser a cyan beam so the middle mesh
+    /// reads differently from the pellet.
     static func makeBullet(level: Int) -> SKNode {
         if let retail = makeRetailBullet(level: level) { return retail }
         if level >= 3 {
@@ -1176,9 +1177,10 @@ final class SnailGear: SKNode {
 
     private static func frame(_ n: Int) -> String { String(format: "%03d", n) }
 
-    /// Show the weapon the ladder has reached, and the pack and bubble while
-    /// they are live. Anything not asked for is hidden rather than removed, so
-    /// a run that cycles through the tiers pays for the textures once.
+    /// Show the shot mesh a ladder rung asked for, and the pack and bubble
+    /// while they are live. Anything not asked for is hidden rather than
+    /// removed, so a run that cycles through the three meshes pays for the
+    /// textures once.
     func update(weapon: Int, jetpack: Bool, invincible: Bool, dt: CGFloat) {
         let rungs = tiers.keys.sorted()
         let wanted = min(max(weapon, 1), 3)

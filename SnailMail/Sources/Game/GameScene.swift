@@ -158,8 +158,13 @@ final class GameScene: SKScene {
         elapsed < jetpackUntil && (jetpackOffZ <= 0 || positionZ < jetpackOffZ)
     }
     /// True while the snail shrugs off hits: the brief post-hit grace, the
-    /// post-ladder ring bonus, or the jetpack carrying it over everything.
-    private var invincible: Bool { jetpackActive || elapsed < invincibleUntil }
+    /// jetpack carrying it over everything, or a weapon rung high enough to
+    /// wear bit `0x80` of the ladder's capability mask — the top two rungs,
+    /// which the build's hit routines at `0x444d0b` and `0x445093` step over
+    /// entirely.
+    private var invincible: Bool {
+        jetpackActive || elapsed < invincibleUntil || state.weapon.invulnerable
+    }
     /// Progress across the airborne void the snail is flying, 0...1, or -1
     /// while there is road under it. The jump pieces spell their gap as a run
     /// of blank rows, and the snail takes that as a ramp and arcs over.
@@ -269,7 +274,8 @@ final class GameScene: SKScene {
     required init?(coder aDecoder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
 #if DEBUG
-    /// Screenshot hooks: `-weapon N` starts at a weapon tier with autofire enabled.
+    /// Screenshot hooks: `-weapon N` starts on ladder rung N (0...8) with
+    /// autofire enabled.
     private func applyDebugArguments() {
         let args = ProcessInfo.processInfo.arguments
         if let i = args.firstIndex(of: "-freeze"), i + 1 < args.count,
@@ -301,7 +307,7 @@ final class GameScene: SKScene {
         }
         guard let i = args.firstIndex(of: "-weapon"), i + 1 < args.count,
               let level = Int(args[i + 1]) else { return }
-        state.weaponLevel = max(1, min(level, state.maxWeaponLevel))
+        state.weaponLevel = max(0, min(level, state.maxWeaponLevel))
         debugAutoFire = true
     }
 #endif
@@ -612,7 +618,7 @@ final class GameScene: SKScene {
         state.quota = config.quota
         state.maxMeter = 100
         state.postalMeter = 100
-        state.weaponLevel = 1
+        state.weaponLevel = 0
         baseTargetSpeed = baseSpeed(for: config.speed)
         currentSpeed = baseTargetSpeed * 0.4
         positionZ = 0
@@ -765,7 +771,9 @@ final class GameScene: SKScene {
         if touching || debugAutoFire {
             fireCooldown -= fdt
             if fireCooldown <= 0 {
-                fireCooldown = state.weaponLevel >= 3 ? 0.16 : 0.26
+                // The rung decides the pace, not the shot: a rung taken for
+                // its faster timer really does fire faster.
+                fireCooldown = CGFloat(state.weapon.fireInterval)
                 fire()
             }
         }
@@ -925,12 +933,12 @@ final class GameScene: SKScene {
         node.zRotation = .pi / 2   // nose points up the road
         node.removeAllActions()
         bullets.append(Bullet(node: node,
-                              level: state.weaponLevel,
+                              level: state.weapon.shotClass,
                               z: positionZ + playerZ + muzzleAhead,
                               offset: playerX,
                               travel: 0,
                               lastPoint: .zero))
-        Sound.shared.play(.shoot(state.weaponLevel))
+        Sound.shared.play(.shoot(state.weapon.shotClass))
     }
 
     /// Runs every shot forward, re-projects it on the road and resolves the
@@ -986,8 +994,8 @@ final class GameScene: SKScene {
     private func firstTarget(from z0: CGFloat, to z1: CGFloat,
                              offset: CGFloat) -> (RoadSegment, EntitySpec, CGFloat)? {
         guard !segments.isEmpty else { return nil }
-        // Rockets carry a wider warhead than the early pellets.
-        let reach: CGFloat = state.weaponLevel >= 3 ? 0.30 : 0.22
+        // Rockets carry a wider warhead than the blaster and the laser do.
+        let reach: CGFloat = state.weapon.shotClass >= 3 ? 0.30 : 0.22
         let first = segmentIndex(at: z0)
         let last = segmentIndex(at: z1)
         var idx = first
@@ -1116,20 +1124,16 @@ final class GameScene: SKScene {
                     Sound.shared.play(.heart)
                     toRemove.append((seg, spec))
                 case .ringUpgrade:
-                    if state.weaponLevel < state.maxWeaponLevel {
-                        // The power-up ring is the only way up the weapon ladder:
-                        // blaster -> laser -> rocket launcher.
-                        state.weaponLevel += 1
-                        Sound.shared.play(.upgrade(state.weaponLevel))
-                    } else {
-                        // Already at rockets. The original promises that once
-                        // you have grabbed enough rings "I will become
-                        // invincible", so a ring past the top of the ladder
-                        // buys a spell of invulnerability and a bonus.
-                        invincibleUntil = max(invincibleUntil, elapsed + 4)
-                        state.sheet.bonus += 200
-                        Sound.shared.play(.invincible)
-                    }
+                    // The power-up ring is the only way up the weapon ladder,
+                    // and `0x4456d7` sets out exactly what it pays: one rung,
+                    // a hundred points into the Parcel Collect tally (the same
+                    // award a parcel makes), and the build's own power-up
+                    // jingle with `pw1`...`pw7` indexed by the rung it just
+                    // reached. The rung the snail stands on is what decides how
+                    // hard and how fast he shoots from then on.
+                    state.climbWeapon()
+                    state.sheet.parcelCollect += 100
+                    Sound.shared.play(.upgrade(state.weaponLevel))
                     Sound.shared.speak(.powerup)
                     toRemove.append((seg, spec))
                 case .ringExplode:
@@ -1427,7 +1431,9 @@ final class GameScene: SKScene {
     // MARK: - Bullets
 
     private func obtainBullet() -> SKNode {
-        let level = state.weaponLevel
+        // Shots are pooled by the mesh they wear, which is what the rung's
+        // mask picks, so a snail carrying a rocket never draws a pellet.
+        let level = state.weapon.shotClass
         var idle = bulletPool[level] ?? []
         if let node = idle.popLast() {
             bulletPool[level] = idle
@@ -1738,7 +1744,7 @@ final class GameScene: SKScene {
             snail.setScale(snailScale)
             Sprites.setBoost(snail, on: elapsed < boostUntil || jetpackActive
                              || currentSpeed > baseTargetSpeed * 1.05)
-            Sprites.setSnailGear(snail, weapon: state.weaponLevel, jetpack: jetpackActive,
+            Sprites.setSnailGear(snail, weapon: state.weapon.shotClass, jetpack: jetpackActive,
                                  invincible: invincible, dt: frameDelta)
             // Blink while the post-hit invulnerability is active.
             snail.alpha = elapsed < invincibleUntil ? 0.45 + 0.55 * abs(sin(elapsed * 22)) : 1

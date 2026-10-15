@@ -29,11 +29,11 @@ final class Sound {
     }
 
     enum Effect {
-        case shoot(Int)       // player's weapon tier, 1...3
+        case shoot(Int)       // the shot mesh the rung picked, 1...3
         case enemyFire
         case collect          // parcel picked up
         case deliver          // parcels handed over at the post office
-        case upgrade(Int)     // power-up ring, rung 1...7
+        case upgrade(Int)     // power-up ring, indexed by the rung reached
         case hit              // fence, pillar, slug, salt
         case asteroid
         case boost
@@ -454,10 +454,10 @@ final class Sound {
     private func retailName(_ effect: Effect) -> String? {
         switch effect {
         case .shoot(let tier):
-            // The build ships three fire samples per weapon family — the
-            // launcher's tubes and the blaster's barrels each have their own
-            // recording — so sustained fire rotates through them the same way
-            // the paired impacts and servos alternate below.
+            // The mesh the rung picked decides the family here: the blaster's
+            // and the laser's own recordings, and the launcher's three tubes
+            // for the rocket. Sustained fire rotates through the trio the same
+            // way the paired impacts and servos alternate below.
             switch tier {
             case 1: return "Audio/Sfx/laser1.m4a"
             case 2: return "Audio/Sfx/laser\(flip("laser", of: 2) + 2).m4a"
@@ -466,6 +466,8 @@ final class Sound {
         case .enemyFire:   return "Audio/Sfx/enemyfire.m4a"
         case .collect:     return "Audio/Sfx/packagecount.m4a"
         case .deliver:     return "Audio/Sfx/placepackage.m4a"
+        // `0x4457e6` indexes the jingle by the rung the snail just reached and
+        // clamps at seven, so the two top rungs both ring `pw7`.
         case .upgrade(let rung): return "Audio/Sfx/pw\(max(1, min(7, rung))).m4a"
         case .hit:         return "Audio/Sfx/wallhit.m4a"
         case .asteroid:    return "Audio/Sfx/asteroidimpact\(flip("impact", of: 2) + 1).m4a"

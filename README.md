@@ -69,8 +69,10 @@ the title backdrop, with a gold bar filling underneath. A tap skips it.
 - Pickups:
   - **Parcel** — counts toward the delivery quota
   - **Heart** — repairs the postal meter
-  - **Power-up ring** — the only way up the weapon ladder: blaster → laser →
-    rocket launcher. Rings past the top tier pay out in points (green)
+  - **Power-up ring** — the only way up the weapon ladder, which runs nine
+    rungs from the starting blaster to the rocket launcher and turns the snail
+    invulnerable on its top two. Every ring climbs a rung and pays 100 into the
+    Parcel Collect tally (green)
   - **Blast ring** — detonates nearby hazards (gold)
   - **Slow ring** — drags the snail down (violet)
 

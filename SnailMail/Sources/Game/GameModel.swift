@@ -385,6 +385,101 @@ struct LevelConfig {
 
 // MARK: - Live state
 
+/// One rung of the retail weapon ladder.
+///
+/// The build keeps the rung in the snail's `0x308` and rebuilds everything
+/// else from it in the routine at `0x43a180`: a capability mask in `0x338` and
+/// the step in `0x2734` that the fire timer advances by. The mask is read in
+/// two places. `0x43a2e0` picks one of the three shot meshes from its low
+/// bits, and the two hit routines (`0x444d0b` and `0x445093`) skip their whole
+/// damage block while bit `0x80` is set — the invulnerability the ladder's
+/// last rungs carry, and the one the tutorial promises ("I will become
+/// invincible") to a snail that has climbed far enough.
+///
+/// The table is the build's own, quirks and all: rung five is sent down the
+/// default path and takes the slowest step on the ladder rather than the one
+/// its neighbours use, and rungs three to six hand back a blaster or a laser
+/// barrel after the rockets of rung two.
+struct WeaponTier {
+    /// The rung as the build stores it in `0x308`, counting from zero.
+    let rung: Int
+    /// `0x338`.
+    let mask: Int
+    /// `0x2734`.
+    let step: Double
+
+    /// The rung the pickup ladder tops out on. `0x4456d7` advances while the
+    /// rung is below eight and drops an eighth-rung snail back to seven, so
+    /// eight is both the ceiling and a rung he can never climb out of.
+    static let topRung = 8
+
+    private static let ladder: [(mask: Int, step: Double)] = [
+        (0x01, 0.074074),  // 0 — the blaster a run starts with
+        (0x02, 0.074074),  // 1 — the laser
+        (0x04, 0.074074),  // 2 — the rocket launcher
+        (0x08, 0.111111),  // 3 — a blaster barrel again, firing faster
+        (0x10, 0.111111),  // 4
+        (0x20, 0.066667),  // 5 — the table's own quirk: the default step
+        (0x40, 0.133333),  // 6
+        (0xc0, 0.133333),  // 7 — the first invulnerable rung
+        (0x90, 0.111111),  // 8
+    ]
+
+    /// Anything past the table takes the build's default arm (`0x43a268`).
+    private static let beyond = (mask: 0x81, step: 0.066667)
+
+    init(rung: Int) {
+        self.rung = rung
+        let entry = (rung >= 0 && rung < Self.ladder.count) ? Self.ladder[rung] : Self.beyond
+        mask = entry.mask
+        step = entry.step
+    }
+
+    /// The shot mesh, numbered one to three, as `0x43a2e0` chooses it. Each
+    /// mesh owns a bit of the mask — blaster `0x1`, laser `0x2`, rocket `0x4` —
+    /// and the ladder's own order decides which of them the snail is carrying.
+    /// A mask that names none of them (there is none in the table) leaves the
+    /// build with nothing to fire, which the ladder here answers with the
+    /// blaster rather than a silent gun.
+    var shotClass: Int {
+        if mask & 0x69 != 0 { return 1 }
+        if mask & 0x12 != 0 { return 2 }
+        if mask & 0x4 != 0 { return 3 }
+        return 1
+    }
+
+    /// Bit `0x80` of the mask: the two hit routines test it and step over the
+    /// damage they were about to do.
+    var invulnerable: Bool { mask & 0x80 != 0 }
+
+    var name: String {
+        switch shotClass {
+        case 2:   "LASER"
+        case 3:   "ROCKET"
+        default:  "BLASTER"
+        }
+    }
+
+    /// Seconds between shots, worked out by running the build's own fire timer.
+    ///
+    /// `0x43d031` keeps a per-frame accumulator out of `0x2730`: while the fire
+    /// button is down it adds the rung's step every frame, and the moment the
+    /// total passes one, the accumulator snaps back to zero so the *next* frame
+    /// is the one a shot leaves on. Firing sets it a third above the step
+    /// (`0x43d130`) rather than at it, which is what paces sustained fire a
+    /// little quicker than the bare step would.
+    var fireInterval: Double {
+        var accumulator = step + 0.3
+        var frames = 1                       // the frame the shot leaves on
+        while accumulator > 0 {
+            accumulator += step
+            frames += 1
+            if accumulator > 1 { accumulator = 0 }
+        }
+        return Double(frames) / 60
+    }
+}
+
 struct RaceState: Equatable {
     var speed: Double = 0                 // current forward speed (units/s)
     var maxSpeed: Double = 1              // reference top speed
@@ -395,8 +490,10 @@ struct RaceState: Equatable {
     var parcels: Int = 0                  // parcels picked up this run
     var quota: Int = 0                    // parcels the level asks for
     var delivered: Int = 0                // parcels handed in at the post office
-    var weaponLevel: Int = 1
-    var maxWeaponLevel: Int = 3
+    /// The rung of the weapon ladder, counted from zero the way the build's
+    /// `0x308` does: nought is the blaster a run starts with.
+    var weaponLevel: Int = 0
+    var maxWeaponLevel: Int = WeaponTier.topRung
 
     /// Spare shells in hand. The retail build hands a fresh run none at all and
     /// pays one out every time the score passes another thousand points: the
@@ -411,13 +508,23 @@ struct RaceState: Equatable {
     static let maxLives = 9
     static let milestoneStep = 1000
 
-    /// The three weapons the original climbs through, in order: the starting
-    /// blaster, then the laser, then the rocket launcher the ladder tops out on.
+    /// Everything the current rung decides: the shot the snail fires, how fast
+    /// he fires it and whether he is still taking damage at all.
+    var weapon: WeaponTier { WeaponTier(rung: weaponLevel) }
+
+    /// The shot the snail is carrying, named the way the HUD prints it.
     var weaponName: String {
-        switch weaponLevel {
-        case ..<2: "BLASTER"
-        case 2:    "LASER"
-        default:   "ROCKET"
+        weapon.name
+    }
+
+    /// Climbs one rung, the way `0x4456d7` does when the snail runs through a
+    /// power-up ring: an eighth-rung snail is dropped back to seven instead of
+    /// being left where he is, so a ring he had to steer for always pays out.
+    mutating func climbWeapon() {
+        if weaponLevel < WeaponTier.topRung {
+            weaponLevel += 1
+        } else if weaponLevel == WeaponTier.topRung {
+            weaponLevel = WeaponTier.topRung - 1
         }
     }
 
