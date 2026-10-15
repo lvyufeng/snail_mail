@@ -530,6 +530,11 @@ struct RaceState: Equatable {
 
     var invincible: Bool = false
     var sheet = ScoreSheet()
+    /// The completion award the results screen prints on its own line. The
+    /// retail build computes it in the results routine (`0x404920`, kept in
+    /// `0x48(%ebp)`) and adds it into the run's score, so it reaches the board
+    /// with everything else.
+    var completionBonus: Int = 0
     /// The tutorial line on screen: the script entry of the furthest piece the
     /// snail has reached (`TrackData.tutorialScript`), or empty when the run
     /// has no script.

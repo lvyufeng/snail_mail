@@ -2219,12 +2219,14 @@ final class GameScene: SKScene {
         }
         if won {
             state.sheet.bonus += 1000
-            // A full quota with the postal meter untouched is the original's
-            // "PERFECT SCORE!  >50,000 Bonus Points", worth the flat 50,000 the
-            // retail build's results screen advertises.
-            if state.quota > 0 && state.postalMeter >= state.maxMeter {
-                state.sheet.bonus += 50000
-            }
+            // The completion award the results routine works out at `0x404920`
+            // and pays into the run's score right after the gauges are read.
+            state.completionBonus = Self.completionBonus(
+                mode: mode,
+                collect: state.collectFraction,
+                deliver: state.deliverFraction
+            )
+            state.sheet.bonus += state.completionBonus
         }
         state.phase = .finished(won: won)
         // The results screen's own fanfare: a clean clear rings the "PERFECT
@@ -2246,5 +2248,34 @@ final class GameScene: SKScene {
         // before the frame's publish, so this is where the cheque clears.
         if state.bankMilestones() > 0 { Sound.shared.play(.extraLife) }
         onStateChange?(state)
+    }
+
+    // MARK: - Completion award
+
+    /// The bonus the results routine pays for finishing (`0x404920`).
+    ///
+    /// The arcade campaign's share is the flat 50,000 its own line advertises
+    /// (`PERFECT SCORE!>50,000 Bonus Points`, `0x4a11fc`), handed over as soon
+    /// as the whole quota is in. Every other mode instead reads the two rank
+    /// tables at `0x4a11ac` and `0x4a1194`, stepping 10,000 and 5,000 at a
+    /// time through six rungs taken from the two parcel gauges — the routine
+    /// divides each gauge reading by twenty (`0x4049a9`) and pins the result
+    /// between nought and five (`0x4049ba`–`0x4049de`) — with a full house on
+    /// both worth the flat 500,000 (`0x7a120`).
+    static func completionBonus(mode: GameMode, collect: Double, deliver: Double) -> Int {
+        if mode == .arcade { return 50_000 }
+        let collectRank = gaugeRank(collect)
+        let deliverRank = gaugeRank(deliver)
+        if collectRank == 5 && deliverRank == 5 { return 500_000 }
+        let collectTable = [10_000, 20_000, 30_000, 40_000, 50_000, 60_000]
+        let deliverTable = [5_000, 10_000, 15_000, 20_000, 25_000, 30_000]
+        return collectTable[collectRank] + deliverTable[deliverRank]
+    }
+
+    /// One gauge's rung: its reading over twenty, clamped to the tables' six
+    /// entries.
+    private static func gaugeRank(_ fraction: Double) -> Int {
+        let reading = Int((max(0, min(1, fraction)) * 100).rounded())
+        return max(0, min(5, reading / 20))
     }
 }

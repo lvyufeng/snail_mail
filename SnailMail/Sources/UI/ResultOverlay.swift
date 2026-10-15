@@ -34,7 +34,7 @@ struct ResultOverlay: View {
                             .foregroundStyle(won ? Palette.good : Palette.danger)
                             .multilineTextAlignment(.center)
                             .shadow(color: (won ? Palette.good : Palette.danger).opacity(0.6), radius: 10)
-                        if let subline {
+                        ForEach(sublines, id: \.self) { subline in
                             Text(subline)
                                 .font(.retail(14, weight: .heavy))
                                 .tracking(0.5)
@@ -60,7 +60,7 @@ struct ResultOverlay: View {
                             .padding(.vertical, 2)
 
                         // "NN Packages Delivered", singular for a lone package.
-                        Text("\(state.delivered) \(state.delivered == 1 ? "Package" : "Packages") Delivered")
+                        Text(packageLine)
                             .font(.retail(15, weight: .heavy))
                             .foregroundStyle(Palette.ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -97,20 +97,64 @@ struct ResultOverlay: View {
             }
             .padding(.horizontal, 24)
         }
+        #if DEBUG
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("-dumpresults") {
+                NSLog("RESULTS headline=<%@> sublines=%@ packages=<%@>",
+                      headline, "\(sublines)", packageLine)
+            }
+        }
+        #endif
     }
 
     private var headline: String {
         if !won { return "GONE POSTAL" }
-        return state.perfect ? "PERFECT SCORE!" : "LEVEL COMPLETE!"
+        // `0x404b5e`: the arcade campaign's win line is the pre-baked
+        // "PERFECT SCORE!>50,000 Bonus Points" (0x4a11fc) whatever the postal
+        // meter came through at; every other mode prints "LEVEL COMPLETE!>"
+        // (0x4a11e8) and has its bonus copied onto the line after it. The
+        // remake also keeps the perfect run's line for the other modes, which
+        // the original never draws because only the campaign is scored there.
+        return (mode == .arcade || state.perfect) ? "PERFECT SCORE!" : "LEVEL COMPLETE!"
     }
 
-    /// The second line the original prints under its headline: the perfect-run
-    /// bonus, or the note that the whole quota was handed over.
-    private var subline: String? {
-        guard won else { return nil }
-        if state.perfect { return "50,000 Bonus Points" }
-        if state.quota > 0 && state.delivered >= state.quota { return "Delivery Complete!" }
-        return nil
+    /// The lines the original prints under its headline: `Delivery Complete!`
+    /// (0x4a1250) once the whole quota has gone over the counter, then the
+    /// completion award — the arcade line's own `50,000 Bonus Points`, or the
+    /// `<bonus> Bonus Points` the routine appends at 0x404be8.
+    private var sublines: [String] {
+        guard won else { return [] }
+        var lines: [String] = []
+        if state.quota > 0 && state.delivered >= state.quota {
+            lines.append("Delivery Complete!")
+        }
+        if mode == .arcade || state.perfect {
+            lines.append("50,000 Bonus Points")
+        } else {
+            lines.append("\(Self.grouped(state.completionBonus)) Bonus Points")
+        }
+        return lines
+    }
+
+    /// "00 Packages Delivered" / " 0 Package Delivered" (0x4a1220, 0x4a1238):
+    /// the count sits in the leading two-character field, plural unless a
+    /// single package went over the counter.
+    private var packageLine: String {
+        let count = String(format: "%2d", state.delivered)
+        return "\(count) \(state.delivered == 1 ? "Package" : "Packages") Delivered"
+    }
+
+    /// The retail build groups its numbers by thousands with commas — the
+    /// append helper at 0x401030 drops one in as its divisor passes 100,000
+    /// and 100.
+    static func grouped(_ value: Int) -> String {
+        let digits = String(abs(value))
+        var out = ""
+        for (i, ch) in digits.enumerated() {
+            if i > 0 && (digits.count - i) % 3 == 0 { out.append(",") }
+            out.append(ch)
+        }
+        return value < 0 ? "-" + out : out
     }
 
     private func submit(_ board: HighScores.Board) {
