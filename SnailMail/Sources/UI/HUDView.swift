@@ -20,6 +20,8 @@ struct HUDView: View {
     let mode: GameMode
     let onPrimary: () -> Void
     let onPause: () -> Void
+    let onOptions: () -> Void
+    let onEndGame: () -> Void
     @State private var muted = Sound.shared.muted
 
     var body: some View {
@@ -64,14 +66,44 @@ struct HUDView: View {
                 }
 
                 if state.phase == .paused {
-                    Text("PAUSED")
-                        .font(.retail(34, weight: .heavy))
-                        .tracking(6)
-                        .foregroundStyle(Palette.ink)
-                        .shadow(color: Palette.cyan.opacity(0.7), radius: 12)
+                    pauseMenu(scale: s)
                 }
             }
             .animation(.easeInOut(duration: 0.2), value: state.phase)
+        }
+    }
+
+    /// The overlay the original opens while the race is held: three entries,
+    /// not a bare caption.
+    ///
+    /// `0x440640` builds them in this order and at these places in the 640x480
+    /// frame — `End Game` (0x4a4f34) at y=145, `Options` (0x4a3b60) at y=190
+    /// and `Resume` (0x4a4f2c) at y=320 — so the remake keeps the original's
+    /// order and its gap above `Resume` rather than tidying them up.
+    private func pauseMenu(scale s: CGFloat) -> some View {
+        ZStack {
+            Color.black.opacity(0.45).ignoresSafeArea()
+
+            VStack(spacing: 12 * s) {
+                Text("PAUSED")
+                    .font(.retail(34, weight: .heavy))
+                    .tracking(6)
+                    .foregroundStyle(Palette.ink)
+                    .shadow(color: Palette.cyan.opacity(0.7), radius: 12)
+                    .padding(.bottom, 8 * s)
+
+                ArcadeButton(title: "END GAME", tint: Palette.danger, icon: "⌂",
+                             action: onEndGame)
+                ArcadeButton(title: "OPTIONS", tint: Palette.cyan, icon: "⚙",
+                             action: onOptions)
+
+                // The original leaves a gap between the options and `Resume`,
+                // which sits where the third sprite is built.
+                ArcadeButton(title: "RESUME", tint: Palette.good, icon: "▶",
+                             action: onPause)
+                    .padding(.top, 14 * s)
+            }
+            .frame(maxWidth: 280 * s)
         }
     }
 

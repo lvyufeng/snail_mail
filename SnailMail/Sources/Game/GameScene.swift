@@ -372,6 +372,12 @@ final class GameScene: SKScene {
             damage(state.maxMeter + 1,
                    seg: segments[segmentIndex(at: positionZ + playerZ)])
         }
+        if ProcessInfo.processInfo.arguments.contains("-paused") {
+            startRace()
+            // Hold the race on the start line, so the pause overlay `0x440640`
+            // builds can be photographed.
+            togglePause()
+        }
         if ProcessInfo.processInfo.arguments.contains("-gaptop") {
             startRace()
             // Park the snail at the lip of the widest airborne gap so a jump

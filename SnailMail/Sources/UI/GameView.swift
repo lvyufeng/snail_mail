@@ -8,6 +8,7 @@ struct GameView: View {
     /// stack so the results screen's MENU works even when the race is the root.
     let onMenu: () -> Void
     @StateObject private var model: GameViewModel
+    @EnvironmentObject private var router: AppRouter
     /// The retail build ends a run on two pages: the results, then the
     /// `Thanks For Playing!` page. This tracks which of the two is up.
     /// `-thanks` opens straight on the second page for screenshots.
@@ -47,6 +48,15 @@ struct GameView: View {
                     model.primaryAction()
                 }, onPause: {
                     model.scene.togglePause()
+                }, onOptions: {
+                    // The original's pause overlay opens the same options
+                    // screen the title menu does, over the held race.
+                    router.push(.options)
+                }, onEndGame: {
+                    // `End Game` abandons the run rather than finishing it, so
+                    // the race is dropped without a results page.
+                    Sound.shared.setPostalAlarm(false)
+                    onMenu()
                 })
 
                 if case .finished(let won) = model.state.phase {
