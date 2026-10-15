@@ -37,9 +37,9 @@ effect cues at runtime. The shipped repository contains no images or sounds.
 
 ## Screenshots
 
-| Menu | Tutorial | Time Trial | Challenge |
-| --- | --- | --- | --- |
-| ![menu](docs/screenshots/menu.png) | ![tutorial](docs/screenshots/tutorial.png) | ![speed](docs/screenshots/speed.png) | ![challenge](docs/screenshots/challenge.png) |
+| Title | Modes | Tutorial | Time Trial | Challenge |
+| --- | --- | --- | --- | --- |
+| ![menu](docs/screenshots/menu.png) | ![modes](docs/screenshots/modes.png) | ![tutorial](docs/screenshots/tutorial.png) | ![speed](docs/screenshots/speed.png) | ![challenge](docs/screenshots/challenge.png) |
 
 | Galaxy map | Briefing | Results |
 | --- | --- | --- |

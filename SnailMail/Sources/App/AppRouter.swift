@@ -5,6 +5,8 @@ import SwiftUI
 /// screen's MENU button needs: popping a route always works, whereas the
 /// environment `dismiss` silently does nothing when the race is the root view.
 enum AppRoute: Hashable {
+    /// The retailer's mode list, one screen under `New Game` (0x417bc0).
+    case modes
     case galaxy
     /// The level's `GalaxyText:` briefing, shown between the map and the race
     /// the way the original prints it before a route starts.
@@ -58,6 +60,7 @@ final class AppRouter: ObservableObject {
         }
         if let i = args.firstIndex(of: "-screen"), i + 1 < args.count {
             switch args[i + 1] {
+            case "modes": return [.modes]
             case "help": return [.help]
             case "options": return [.options]
             case "highscores": return [.highScores]

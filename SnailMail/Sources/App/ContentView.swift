@@ -12,6 +12,8 @@ struct ContentView: View {
                 MenuView()
                     .navigationDestination(for: AppRoute.self) { route in
                         switch route {
+                        case .modes:
+                            ModeSelectView()
                         case .galaxy:
                             LevelSelectView()
                         case .briefing(let mode, let level):
