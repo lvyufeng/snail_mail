@@ -68,6 +68,7 @@ struct HelpView: View {
         Item(keys: "SALT", text: "Salt burns and cannot be shot. Steer around it."),
         Item(keys: "ASTEROIDS + SLUGS", text: "They slow you down and knock you off the road. Shoot them, or use a blast ring."),
         Item(keys: "GAPS", text: "A ramp carries you over a pit, and a jetpack carries you over the long ones. Fall in and you lose postal meter."),
+        Item(keys: "JUMP POD", text: "Bounce off one of these to clear a gap a ramp would not reach."),
         Item(keys: "POSTAL METER", text: "Your health, on the right. Hearts restore it. Lose it all and you go postal."),
         Item(keys: "RINGS", text: "Slow rings cost you speed. Yellow rings blow up nearby enemies."),
     ]
