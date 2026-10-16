@@ -103,19 +103,33 @@ though `EntityKind.trampoline` is implemented and bounces harder than a ramp
 (`launch(power: 1.5)` against `1.0`); the Help screen raised ramps and jetpacks
 under "GAPS" and never mentioned it, so nothing told a player what the `(((`
 pads do. A "JUMP POD" entry was added under the retail screen's own label.
-## Known limitation: the build cannot be driven on this host
 
-The build runs, renders and animates, but **it cannot be given input** on the
-machine this was worked out on, so screenshots are limited to what it shows on
-its own — the intro, the briefing pages and the menu. Reaching gameplay, and
-therefore anything that needs a pit or a collision to be observed, is not
-possible there.
+## Driving the build: what was and was not established
 
-The cause is not the game. Wine's own `notepad` renders correctly under the
-same X server and takes focus, but typing into it by every injection method
-tried — `xdotool type`, `xdotool key`, and `xdotool type --window` — leaves the
-document empty, and its status bar stays on "Ln 1, Col 1". Wine receives mouse
-*motion* (the menu highlights as the pointer passes over an item) but not the
-button or key events, which points at Wine's XInput path rather than at
-anything the game does. It needs a host whose X server delivers injected input
-to Wine, or a different injection route.
+An earlier note here claimed the build "cannot be driven on this host". That was
+**wrong**, and the way it was wrong is worth keeping.
+
+The evidence for it was that Wine's own `notepad` rendered but stayed empty
+under every `xdotool` injection method. A later run of the same test on the same
+host typed `HELLO` successfully — the difference was which window had focus, not
+whether input arrives. `xev` confirms the X server does deliver injected events
+(one ButtonPress and three KeyPress for a click and a keystroke).
+
+What is actually true: the build can be driven *sometimes*, and the failures are
+practical rather than fundamental —
+
+- The game's window is moved by the window manager between runs. Clicks aimed at
+  where it was land outside it. Read `xdotool getwindowgeometry` immediately
+  before clicking, or move the window to `0,0` and drop the WM.
+- With the window settled, **keyboard** input clearly reaches the game: repeated
+  `space` advanced the opening crawl, and `Return` moved on from a screen. That
+  is how the intro and briefing captures were taken.
+- **Mouse** input at the main menu was not made to work in the time spent.
+  Clicks produce a hover highlight but do not activate the item. Whether that is
+  Wine's DirectInput path, the missing WM, or the coordinates still being off is
+  not known — it was not run down.
+
+So: gameplay could not be reached for observation, and the fall recovery in the
+remake remains unverified against the original. Anyone continuing should aim at
+the menu-click problem specifically, and should not re-derive the notepad test —
+it proves nothing either way.
