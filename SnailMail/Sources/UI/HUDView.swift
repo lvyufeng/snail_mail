@@ -56,7 +56,7 @@ struct HUDView: View {
                 // font as the results page's headline (`0x445e70`).
                 if state.timedOut {
                     Text("Time's Up")
-                        .font(.retail(30, weight: .black))
+                        .font(.retailFixed(30, weight: .black))
                         .foregroundStyle(Palette.ink)
                         .shadow(color: .black.opacity(0.85), radius: 10)
                         .position(x: geo.size.width / 2, y: geo.size.height * 200 / 480)
@@ -66,7 +66,7 @@ struct HUDView: View {
                 if state.phase == .ready {
                     VStack(spacing: 12) {
                         Text("DRAG to steer * HOLD to fire")
-                            .font(.retail(13, weight: .semibold))
+                            .font(.retailFixed(13, weight: .semibold))
                             .foregroundStyle(Palette.ink.opacity(0.85))
                         Button(action: onPrimary) {
                             ArcadeLabel(title: "TAP TO START", tint: Palette.cyan)
@@ -98,7 +98,7 @@ struct HUDView: View {
 
             VStack(spacing: 12 * s) {
                 Text("PAUSED")
-                    .font(.retail(34, weight: .heavy))
+                    .font(.retailFixed(34, weight: .heavy))
                     .tracking(6)
                     .foregroundStyle(Palette.ink)
                     .shadow(color: Palette.cyan.opacity(0.7), radius: 12)
@@ -474,7 +474,7 @@ private struct ParcelGauges: View {
             .frame(width: w, height: h)
 
             Text("\(label):\(Int((clamped * 100).rounded()))%")
-                .font(.retail(max(10, 18 * scale), weight: .heavy))
+                .font(.retailFixed(max(10, 18 * scale), weight: .heavy))
                 .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.85), radius: 2)
                 .frame(width: w, height: h)
@@ -505,18 +505,18 @@ private struct ParcelCounter: View {
 
             VStack(alignment: .leading, spacing: 2 * scale) {
                 Text(state.quota > 0 ? "\(state.parcels)/\(state.quota)" : "\(state.parcels)")
-                    .font(.retail(valueFont, weight: .heavy))
+                    .font(.retailFixed(valueFont, weight: .heavy))
                     .foregroundStyle(Palette.gold)
                     .shadow(color: .black.opacity(0.7), radius: 2)
 
                 Text(state.weaponName)
-                    .font(.retail(labelFont, weight: .black))
+                    .font(.retailFixed(labelFont, weight: .black))
                     .tracking(1)
                     .foregroundStyle(Palette.cyan)
                     .shadow(color: .black.opacity(0.7), radius: 2)
 
                 Text(mode.title)
-                    .font(.retail(labelFont - 1, weight: .bold))
+                    .font(.retailFixed(labelFont - 1, weight: .bold))
                     .foregroundStyle(Palette.ink.opacity(0.75))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
@@ -562,7 +562,7 @@ private struct LifeCounter: View {
             .padding(.leading, -2 * scale)
 
             Text(String(format: "%.1fs", state.elapsed))
-                .font(.retail(13, weight: .bold))
+                .font(.retailFixed(13, weight: .bold))
                 .foregroundStyle(Palette.ink.opacity(0.85))
                 .shadow(color: .black.opacity(0.7), radius: 2)
         }
@@ -624,7 +624,7 @@ private struct TutorialBanner: View {
                         switch token {
                         case .words(let s):
                             Text(s)
-                                .font(.retail(fontSize, weight: .bold))
+                                .font(.retailFixed(fontSize, weight: .bold))
                                 .foregroundStyle(Palette.ink)
                         case .icon(let ch):
                             icon(ch)
