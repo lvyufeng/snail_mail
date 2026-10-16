@@ -62,3 +62,43 @@ take input. `metacity` does answer it.
 
 - The build needs its own data (`SnailMail.dat`) and the extracted content
   directories beside the executable; a bare `.exe` will not run.
+
+## What running it confirmed
+
+With the build actually running, the remake's fidelity claims could be checked
+against the real thing rather than against the retail *data* files alone. The
+textual checks are exact and need no interpretation:
+
+| Check | Result |
+|---|---|
+| Opening crawl vs `INTRO/Intro.txt` | **7/7** screens word-for-word |
+| Credits vs `INTRO/Credits.txt` | **12/12** screens word-for-word |
+| Level names, by `source` | **50/50** |
+| Level `Speed` / `Length` / `Salt` / `Trash` | **0** mismatches in 50 |
+| Road palettes vs `TRACK0-3.tga` | all four track tones match |
+| Road base colour | retail `#C0913E` vs remake `#C07C30`, 95% of the way |
+
+The geometric check is the one worth writing down, because it is the number the
+project argued about. Read off the running build's frame: the road reaches
+**80.0%** of the viewport width at the bottom edge, and extrapolating its width
+to zero puts its vanishing point at **46%** of the frame height. That is
+**1.49% of width per 1% of height** — "a ratio a little above 1.5", which is
+what `GameScene`'s camera comment claims. The remake measures **1.44** on the
+same reading (80.8% at the bottom, vanishing point at 44%), a ratio of 0.97×.
+So the camera height of 1000, chosen from this ratio, is right.
+
+One divergence found and *not* changed: the retail Help screen is a bitmap
+(`BACKGROUNDS/HELP_A.TGA`) that lists ten pickups with one-line explanations —
+
+    Packages: Collect for points.      White Rings:  Powerup Turbo.
+    Asteroids: Hurt and slow Turbo.    Red Rings:    Slow Turbo down.
+    Salt: Hurt Turbo.                  Yellow Rings: Blow up enemies.
+    Slugs: Kill Turbo.                 Jet Pack:     Fly across gaps.
+    Hearts: Restore your postal meter. Jump Pod:     Bounce off these.
+
+The remake replaces this with touch instructions, which is right — the retail
+text ends "Steer with Mouse. Press Left Button to Fire. Press ESC to Pause
+Game" — and it covers nine of the ten. The one it leaves out is **Jump Pod**,
+even though `EntityKind.trampoline` is implemented and bounces the snail; the
+Help screen raises ramps and jetpacks under "GAPS" and never mentions it. That
+is the entry worth adding if the Help screen is revisited.
