@@ -220,6 +220,7 @@ tools/
   make_app_icon.py   build the app icon
 docs/
   screenshots/
+  retail-reference/  how to run the original build, for fidelity comparisons
 ```
 
 ## Status
