@@ -164,3 +164,42 @@ Gaps that are real but were left deliberately, and why:
   beyond the fixed `cameraHeight`, because changing the field of view would
   move the road's fan-out, which is aligned against measured retail frames.
   Impacts do knock the frame about instead.
+
+## Driving the build: why input was refused
+
+The build reads the mouse and keyboard through **DirectInput 8**, not ordinary
+window messages, and that is the whole of the difficulty. From `WINEDEBUG=+dinput`
+on a running copy:
+
+- It creates both devices (keyboard `{6f1d2b60…}`, mouse `{6f1d2b61…}`) and
+  polls `GetDeviceState` continuously — 17,040 calls in a few minutes.
+- The **mouse** is grabbed `DISCL_EXCLUSIVE | DISCL_FOREGROUND`; the
+  **keyboard** is grabbed `DISCL_FOREGROUND`.
+
+`DISCL_FOREGROUND` means Wine only reports device state while the window is the
+one the window manager considers active. With no window manager, or with the
+window never activated, nothing is delivered — which looks exactly like "input
+does not work" and is easy to mistake for a Wine problem.
+
+The proof that the input path itself is healthy: Wine's own `notepad`, which
+takes plain window messages instead, accepts typed text reliably on the same
+host under the same injection (`xdotool type`), showing `Ln 1, Col 7` after
+`QWERTY`. The difference is DirectInput versus messages, not X versus Wine.
+
+What is needed to get in:
+
+1. Xvfb plus a window manager — **metacity**, not openbox, which lacks
+   `_NET_ACTIVE_WINDOW`.
+2. `xdotool windowactivate --sync` on the game window, so `_NET_ACTIVE_WINDOW`
+   actually points at it.
+3. Click using the coordinates in the *whole screen*, not the window: the
+   game's own 640x480 viewport sits at an offset inside the 1024x768 display,
+   and the window manager moves it between runs. Re-read
+   `xdotool getwindowgeometry` before every click, or pin the window and stop
+   the manager moving it.
+
+With that, a click on New Game does land — the opening crawl was reached this
+way. Reaching a *level* did not follow: the menu's own item hit boxes could not
+be pinned down from the outside, because the highlight reacts to pointer motion
+but the commit does not follow from the same injected click. That remains
+unresolved, and it is the one thing still needed to watch the original play.
