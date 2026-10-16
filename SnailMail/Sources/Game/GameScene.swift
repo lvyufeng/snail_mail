@@ -180,6 +180,13 @@ final class GameScene: SKScene {
     /// True once a slug has landed the killing blow: Turbo retreats into his
     /// shell and stays there for the results screen.
     private var slugged = false
+    /// How hard the camera is currently being knocked about, 0...1, and when
+    /// the knock started. Every hit and every scrape shakes the frame a little:
+    /// the snail is drawn at a fixed point on screen and the highway is what
+    /// moves, so without this a collision reads as a number changing rather
+    /// than as something that happened to the player.
+    private var shakePower: CGFloat = 0
+    private var shakeUntil: CGFloat = 0
     private var lastUpdate: TimeInterval = 0
     /// Screenshot hooks: a stream pinned by `-seed N`, so a scene lays its
     /// drifting stars out identically twice in a row, and `-freeze N`, which
@@ -1643,6 +1650,9 @@ final class GameScene: SKScene {
         guard !invincible else { return }
         invincibleUntil = elapsed + 0.75
         hurtUntil = elapsed + 0.3
+        // Knock the frame about in proportion to what the hit cost, so a slug
+        // that nearly ends the run does not read the same as a scrape.
+        shake(power: min(1, 0.35 + amount / 30), duration: 0.28)
         state.postalMeter = max(0, state.postalMeter - amount)
         Sound.shared.play(sound)
         if state.postalMeter <= 0 {
@@ -2165,6 +2175,31 @@ final class GameScene: SKScene {
     /// actually place geometry.
     private func fy(_ y: CGFloat) -> CGFloat { size.height - y }
 
+    /// Ask for a knock of the given strength, held for `duration` seconds.
+    /// A weaker request never cancels a stronger one still running, so a burst
+    /// of hits does not average itself down to nothing.
+    private func shake(power: CGFloat, duration: CGFloat) {
+        let remaining = shakeUntil - elapsed
+        if remaining <= 0 || power >= shakePower {
+            shakePower = power
+            shakeUntil = max(shakeUntil, elapsed + duration)
+        }
+    }
+
+    /// The camera's offset for this frame, in screen points: a decaying wobble
+    /// on both axes. Sampled from `elapsed` rather than accumulated so the same
+    /// instant of a race always shakes the same way — a replay and a fresh run
+    /// have to look alike.
+    private func shakeOffset() -> CGPoint {
+        let left = shakeUntil - elapsed
+        guard left > 0, shakePower > 0 else { return .zero }
+        // Decay to nothing over the tail of the knock.
+        let decay = min(1, left / 0.28)
+        let amp = shakePower * decay * 9
+        return CGPoint(x: sin(elapsed * 61) * amp,
+                       y: cos(elapsed * 47) * amp * 0.7)
+    }
+
     /// Which of the retail build's Turbo clips he should be playing. The ones
     /// that mark a moment — the plunge, the shell, a hit, a skid — outrank the
     /// two that run while he is simply travelling, so a hit is never hidden
@@ -2254,6 +2289,15 @@ final class GameScene: SKScene {
         }
 
         renderEntities(baseSegment: baseSegment)
+
+        // Knock the world about on impact. The road, the roadside and
+        // everything standing on them move together, so the whole scene
+        // shifts under the player; the sky and the HUD are separate layers and
+        // stay put, which is what keeps it reading as a jolt rather than as a
+        // wobbling screen.
+        let jolt = shakeOffset()
+        roadLayer.position = jolt
+        entityLayer.position = jolt
 
         // Player.
         // Turbo is scaled against the highway on his own row, not against the
