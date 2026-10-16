@@ -133,3 +133,34 @@ So: gameplay could not be reached for observation, and the fall recovery in the
 remake remains unverified against the original. Anyone continuing should aim at
 the menu-click problem specifically, and should not re-derive the notepad test —
 it proves nothing either way.
+
+## Coverage audit
+
+A pass over the retail data against the remake, for anything shipped but not
+carried across. Everything below was checked and found whole:
+
+- **Audio** — 6/6 music, 36/36 effects, 112/112 voice clips (the 113th file is
+  `_voice`, an index, not a clip).
+- **Galaxy art** — 17/17 maps.
+- **Levels** — 50 of the 51 arcade files. `ARCADE000.TXT` is deliberately left
+  out: it is named `Test` and its galaxy text reads "Use 7,8,9,0 to change
+  unlocked levels", which is a development level, not content.
+- **Level fields** — Speed, Salt and Slug are all present and carried over;
+  the remake's `trash` is the parcel quota, which the retail states as
+  `Parcels`/`Quota` rather than a `Trash` key.
+- **Grid glyphs** — every glyph the retail grids use is handled. `P`/`p` have no
+  case of their own because they only ever appear alongside a `Path=` attribute
+  (`@pppPPppp@ Path=Dip`), marking the shape of the road rather than a prop.
+  `NoFall` and `No Fall` both occur in the retail, in different files, and both
+  are read.
+
+Gaps that are real but were left deliberately, and why:
+
+- **Speed feedback** — the three speed penalties (`ringSlow` x0.6, `asteroid`
+  x0.5, `barrier` x0.35) mean a run spends most of its time accelerating and
+  then losing it again; top speed is rarely reached. This matches the retail's
+  own level tunings and its help text, so it was left alone.
+- **Camera** — there is no field-of-view shift with speed and no camera rig
+  beyond the fixed `cameraHeight`, because changing the field of view would
+  move the road's fan-out, which is aligned against measured retail frames.
+  Impacts do knock the frame about instead.
