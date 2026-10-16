@@ -197,6 +197,15 @@ private struct StarMapCanvas: View {
         .frame(width: 64 * scale, height: 64 * scale)
         .contentShape(Rectangle())
         .onTapGesture { open(level) }
+        // The star is a bare `ZStack` over a `Canvas`, so without these
+        // VoiceOver sees the whole map as one unlabelled element and no level
+        // can be chosen at all. The label says what the drawing says: which
+        // star, its name, and whether it has been posted.
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityLabel("Star \(level.star + 1), \(level.name)\(cleared.contains(i) ? ", cleared" : "")")
+        .accessibilityHint(i == frontier ? "Your next route" : "Play this route")
+        .accessibilitySortPriority(Double(50 - i))
     }
 
     @ViewBuilder
@@ -224,6 +233,12 @@ private struct StarMapCanvas: View {
             // servo samples for exactly this.
             Sound.shared.play(.servo)
         }
+        // Portraits are also bare artwork; VoiceOver needs to know this moves
+        // the cursor rather than starting anything.
+        .accessibilityElement(children: .ignore)
+        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityLabel("Galaxy \(g + 1), \(LevelCatalog.galaxies[g])")
+        .accessibilityHint("Show this galaxy's stars")
     }
 
     private func open(_ level: ArcadeLevel) {
