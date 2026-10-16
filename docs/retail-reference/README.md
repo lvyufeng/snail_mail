@@ -103,3 +103,19 @@ though `EntityKind.trampoline` is implemented and bounces harder than a ramp
 (`launch(power: 1.5)` against `1.0`); the Help screen raised ramps and jetpacks
 under "GAPS" and never mentioned it, so nothing told a player what the `(((`
 pads do. A "JUMP POD" entry was added under the retail screen's own label.
+## Known limitation: the build cannot be driven on this host
+
+The build runs, renders and animates, but **it cannot be given input** on the
+machine this was worked out on, so screenshots are limited to what it shows on
+its own — the intro, the briefing pages and the menu. Reaching gameplay, and
+therefore anything that needs a pit or a collision to be observed, is not
+possible there.
+
+The cause is not the game. Wine's own `notepad` renders correctly under the
+same X server and takes focus, but typing into it by every injection method
+tried — `xdotool type`, `xdotool key`, and `xdotool type --window` — leaves the
+document empty, and its status bar stays on "Ln 1, Col 1". Wine receives mouse
+*motion* (the menu highlights as the pointer passes over an item) but not the
+button or key events, which points at Wine's XInput path rather than at
+anything the game does. It needs a host whose X server delivers injected input
+to Wine, or a different injection route.
