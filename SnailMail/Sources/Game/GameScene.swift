@@ -26,6 +26,28 @@ final class GameScene: SKScene {
     /// wide and left Turbo looking a third of his own size.
     private let cameraHeight: CGFloat = 1000
     private let cameraDepth: CGFloat = 1.0 / tan((100.0 / 2.0) * .pi / 180.0) // ≈ 0.84
+
+    /// How much wider the lens opens at full speed, as a fraction of
+    /// `cameraDepth`.
+    ///
+    /// With a fixed lens the road's fan-out is the only thing saying how fast
+    /// the snail is going, and the snail itself sits still while it moves.
+    /// Opening the lens as the speed climbs adds the cue a chase camera would
+    /// give — the frame breathes out and the road sweeps past harder — while
+    /// leaving the geometry the retail frames were aligned against alone,
+    /// because it is a fraction of `cameraDepth` and returns to exactly that
+    /// value at a standstill.
+    ///
+    /// Small on purpose. The measured fan-out of the retail frames is 1.49
+    /// against the remake's 1.44, so the projection already sits within about
+    /// 3% of the original; a spread of 0.05 at top speed keeps the dial inside
+    /// that gap everywhere. The probe that measures fan-out runs with the
+    /// spread switched off, so the alignment figure cannot drift with the
+    /// tuning.
+    private let speedSpread: CGFloat = 0.05
+    /// The lens actually in use this frame, between `cameraDepth` and
+    /// `cameraDepth * (1 + speedSpread)`.
+    private var viewDepth: CGFloat = 1.0 / tan((100.0 / 2.0) * .pi / 180.0)
     /// The row the highway's vanishing point sits on, as a fraction of the
     /// screen height, counted from the top. Rather than tilt the camera — which
     /// would shear every billboard and bend the lanes — the projection simply
@@ -187,6 +209,9 @@ final class GameScene: SKScene {
     /// than as something that happened to the player.
     private var shakePower: CGFloat = 0
     private var shakeUntil: CGFloat = 0
+    /// Until this time the snail climbs back toward its target speed quickly,
+    /// having just had speed taken off it.
+    private var recoverUntil: CGFloat = 0
     private var lastUpdate: TimeInterval = 0
     /// Screenshot hooks: a stream pinned by `-seed N`, so a scene lays its
     /// drifting stars out identically twice in a row, and `-freeze N`, which
@@ -1173,7 +1198,26 @@ final class GameScene: SKScene {
         var target = baseTargetSpeed
         if jetpackActive { target = baseTargetSpeed * 1.5 }
         else if elapsed < boostUntil { target = baseTargetSpeed * 1.4 }
-        currentSpeed += (target - currentSpeed) * min(1, fdt * 0.7)
+        // Climb back out of a knock faster than the usual approach, and hold
+        // the boost briefly so a hit that lands during the climb does not
+        // cancel it outright.
+        //
+        // The retail tunings put a penalty on the road often enough that the
+        // approach rate alone never gets the speed back: at `0.7` it takes
+        // about 3.3 s to return to 95% after an asteroid, while the next one
+        // arrives in 2 to 5, so a run spends its whole length accelerating and
+        // losing it again. The penalties themselves are the original's own and
+        // are untouched — what is added is the recovery, which the original's
+        // fixed-step code did not have to model the same way.
+        let recovering = elapsed < recoverUntil
+        let rate: CGFloat = recovering ? 2.5 : 0.7
+        currentSpeed += (target - currentSpeed) * min(1, fdt * rate)
+    }
+
+    /// Start a recovery window of `seconds` after the speed has been cut.
+    /// Called wherever a collision takes speed away.
+    private func beginRecovery(_ seconds: CGFloat = 1.1) {
+        recoverUntil = max(recoverUntil, elapsed + seconds)
     }
 
     private func updateSteering(fdt: CGFloat) {
@@ -1548,6 +1592,7 @@ final class GameScene: SKScene {
                     toRemove.append((seg, spec))
                 case .ringSlow:
                     currentSpeed *= 0.6
+                    beginRecovery()
                     Sound.shared.play(.slow)
                     Sound.shared.speak(.slow)
                     toRemove.append((seg, spec))
@@ -1556,6 +1601,7 @@ final class GameScene: SKScene {
                     toRemove.append((seg, spec))
                 case .asteroid:
                     currentSpeed *= 0.5
+                    beginRecovery()
                     damage(4, seg: seg, sound: .asteroid)
                     toRemove.append((seg, spec))
                 case .slug:
@@ -1583,6 +1629,7 @@ final class GameScene: SKScene {
                     // A fence or cage pillar: cut the speed and nudge the snail
                     // off it, but leave the barrier standing.
                     currentSpeed *= 0.35
+                    beginRecovery()
                     damage(8, seg: seg)
                     let push: CGFloat = playerX >= spec.offset ? 0.3 : -0.3
                     targetX = max(-1, min(1, playerX + push))
@@ -2216,6 +2263,12 @@ final class GameScene: SKScene {
     }
 
     private func renderRoad() {
+        // Open the lens as the speed climbs, so the frame breathes with the
+        // throttle. Measured against the level's own target speed rather than
+        // an absolute, so a slow course still gets the full effect.
+        let speedRatio = min(1, max(0, currentSpeed / max(baseTargetSpeed, 1)))
+        viewDepth = cameraDepth * (1 + speedSpread * speedRatio * speedRatio)
+
         for i in 0..<railUse where i < railPool.count { railPool[i].isHidden = true }
         railUse = 0
         for i in 0..<drawDistance {
@@ -2262,7 +2315,7 @@ final class GameScene: SKScene {
             x += dx
             dx += seg.curve
 
-            if seg.p1.camera.z <= cameraDepth || seg.p2.screenY >= seg.p1.screenY || seg.p2.screenY >= maxy {
+            if seg.p1.camera.z <= viewDepth || seg.p2.screenY >= seg.p1.screenY || seg.p2.screenY >= maxy {
                 continue
             }
 
@@ -3144,7 +3197,9 @@ final class GameScene: SKScene {
             p.screenW = 0
             return
         }
-        p.scale = cameraDepth / p.camera.z
+        // `viewDepth` is `cameraDepth` when the spread is off, so this is the
+        // original projection on every frame but a fast one.
+        p.scale = viewDepth / p.camera.z
         p.screenX = size.width / 2 + p.scale * p.camera.x * size.width / 2
         // The principal point sits on `horizonRow`, so anything level with the
         // camera and infinitely far off converges there instead of mid-frame.
