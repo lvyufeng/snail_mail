@@ -198,8 +198,28 @@ What is needed to get in:
    `xdotool getwindowgeometry` before every click, or pin the window and stop
    the manager moving it.
 
-With that, a click on New Game does land — the opening crawl was reached this
-way. Reaching a *level* did not follow: the menu's own item hit boxes could not
-be pinned down from the outside, because the highlight reacts to pointer motion
-but the commit does not follow from the same injected click. That remains
-unresolved, and it is the one thing still needed to watch the original play.
+With that, the build can be driven as far as its menus, and the sticking point
+turns out to be further in than input routing.
+
+**A bare click does not commit.** Moving the pointer over an item highlights it,
+but `xdotool click` leaves the highlight where it is and the menu stays put.
+What does commit is a press with motion still held — `mousedown`, a small
+`mousemove_relative`, then `mouseup`. That is consistent with a DirectInput
+title polling the device each frame rather than acting on button messages: the
+button has to still be down on a frame that sees movement. Every earlier attempt
+failed because it sent a click and nothing else.
+
+**But every menu transition then hangs the build.** After moving off the main
+menu — reproducibly, into High Scores — the process sits at ~117% CPU with the
+screen frozen: a three-second comparison of two captures gives a difference of
+zero, and no further input of any kind is answered, including the drag that had
+just worked. A fresh launch is fine, and the opening crawl animates normally
+(a 284,671-pixel change over three seconds), so high CPU on its own is not the
+signal — a *still* capture is.
+
+That is where this stops. The hang is in the build under Wine rather than in the
+injection, and reaching a level needs it fixed first. Anyone picking this up
+should chase the hang, not the coordinates: the calibration that works is
+`(444, 293)` on a 1024x768 screen moving off the main menu, and anything aimed
+near there lands on the second item. Watching the original play a level still
+needs a host where that transition does not wedge.
