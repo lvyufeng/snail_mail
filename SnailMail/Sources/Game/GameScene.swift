@@ -1770,14 +1770,22 @@ final class GameScene: SKScene {
         if fallTimer >= fallDuration { endFall() }
     }
 
-    /// Climb back out: rewind a few segments, plant the snail on the side of the
-    /// pit it did not fall through, and hand out a moment of mercy invincibility
-    /// so it cannot immediately drop in again.
+    /// Climb back out: rewind to a row that is actually walkable, plant the snail
+    /// on the side of the pit it did not fall through, and hand out a moment of
+    /// mercy invincibility so it cannot immediately drop in again.
+    ///
+    /// The rewind used to be a flat three segments — 600 units, which at this
+    /// game's speeds is 0.04 to 0.12 seconds of travel. That is barely the
+    /// snail's own length, so he was set down on the pit's lip and the next
+    /// frames carried him straight back in unless the player reacted instantly.
+    /// It now walks back to the first row whose cell under the chosen side is
+    /// neither a pit nor the void a jump crosses, which is what the retail data
+    /// supports: in 76 of the 81 pits it ships, the row immediately before the
+    /// pit is already walkable, so a rewind almost never has to travel far.
     private func endFall() {
         fallTimer = -1
         let side: CGFloat = fallOffset >= 0 ? -0.62 : 0.62
-        positionZ = max(0, positionZ - segmentLength * 3)
-        previousZ = positionZ
+        rewindToWalkableRow(side: side)
         playerX = side
         targetX = side
         currentSpeed = baseTargetSpeed * 0.35
@@ -1798,6 +1806,62 @@ final class GameScene: SKScene {
             }
         }
         invincibleUntil = elapsed + 1.4
+    }
+
+    /// Move the snail back to the nearest row ahead of where he fell whose
+    /// chosen side is solid road, so a fall never puts him straight back in.
+    ///
+    /// `side` is the lane he is being planted in, in the same -1...1 units
+    /// `playerX` uses. A row counts as walkable when the cell under that lane
+    /// holds neither a pit (`#`) nor the gap a jump crosses — the retail
+    /// grids mark those with a blank column and, where a trampoline covers
+    /// one, a `NoFall` tag. The search is capped so a course that is pits all
+    /// the way back cannot spin here; the caller's invincibility is the
+    /// backstop if the cap is reached.
+    private func rewindToWalkableRow(side: CGFloat) {
+        let here = segmentIndex(at: positionZ + playerZ)
+        let maxRows = 40
+        for back in 1...maxRows {
+            let idx = ((here - back) % segments.count + segments.count) % segments.count
+            // The camera sits `playerZ` behind the snail, so parking the
+            // camera at this row's own start puts the snail there.
+            let z = CGFloat(idx) * segmentLength - playerZ
+            guard z >= 0 else { break }
+            if isWalkable(seg: segments[idx], side: side) {
+                // Land half a segment short, so the pit is still ahead of him
+                // rather than under him when the invincibility runs out.
+                positionZ = max(0, z - segmentLength * 0.5)
+                previousZ = positionZ
+                return
+            }
+        }
+        // Nothing walkable behind: fall back to the old fixed rewind rather
+        // than leaving him sitting in the pit.
+        positionZ = max(0, positionZ - segmentLength * 3)
+        previousZ = positionZ
+    }
+
+    /// Whether a segment's own row leaves the given lane on solid ground.
+    ///
+    /// A pit is a `.hole` sprite spanning `width` of the row at `offset`. The
+    /// test uses the same rule `handleCollisions` does — the snail's box
+    /// touching the pit's, so half of each — rather than asking only whether
+    /// the snail's centre is over the hole. A centre test would call a lane
+    /// safe while his flank was still over the pit, and he would be dropped
+    /// in again on the next frame.
+    private func isWalkable(seg: RoadSegment, side: CGFloat) -> Bool {
+        guard !seg.airborne else { return false }
+        // A jump's void is road the whole way across, so it is not a fall.
+        if seg.noFall { return true }
+        for spec in seg.sprites where spec.kind == .hole {
+            let fraction = spec.width > 0
+                ? spec.width
+                : Sprites.entityModelWidth(.hole) / roadModelWidth
+            let half = fraction / 2
+            let snailHalf = Sprites.snailModelWidth / 2 / (roadModelWidth / 2)
+            if abs(side - spec.offset) < half + snailHalf { return false }
+        }
+        return true
     }
 
     /// The fail-safe's own three seconds. The build draws `Time's Up` over the
