@@ -2206,15 +2206,14 @@ final class GameScene: SKScene {
         if fallTimer >= 0 {
             // Down the pit: drop out of sight, tumbling as he goes.
             //
-            // The sink used to be `95 * ease * snailScale`, which at the scale
-            // a phone gives him is about 45 points — a little over half his own
-            // height. He dipped rather than fell, so the pit read as a bump and
-            // the reset that follows looked like it came from nowhere. The drop
-            // is now measured against him instead of a fixed number: two of his
-            // own heights, so he is clear of the rim whatever the frame size.
+            // The drop is measured against him instead of a fixed number
+            // so it stays proportionate if the art or the frame size changes.
+            // Three of his own heights carries him clear of the rim and off
+            // the bottom of the visible pit, where two still left his shell
+            // cresting the lip on a short frame.
             let p = min(1, fallTimer / fallDuration)
             let ease = p * p
-            let drop = snailNodeHeight * 2
+            let drop = snailNodeHeight * 3
             snail.position = CGPoint(x: size.width * 0.5,
                                      y: size.height * 0.26 - drop * ease)
             snail.zRotation = p * 5.6
