@@ -49,13 +49,19 @@ final class GameScene: SKScene {
     private var bandProbe = false
     /// Set by `-roadcells`: prints the highway's tall subpaths on the right.
     private var roadCellsProbe = false
+    #endif
     /// Set by `-hide road|walls|rails`: keeps that part of the highway off the
     /// frame. The flags are checked where the drawing happens, because the
     /// pools are re-shown on every frame and a plain `isHidden` does not last.
+    ///
+    /// These are declared outside the `#if DEBUG` above, unlike the probes
+    /// beside them: the guards that read them are in the ordinary drawing path,
+    /// so gating the declarations on DEBUG stops a Release build compiling.
+    /// Only the argument that sets them is debug-only, which leaves them false
+    /// in Release — the same thing the flags meant before.
     private var hideRoad = false
     private var hideWalls = false
     private var hideRails = false
-    #endif
     /// How wide Turbo is drawn, as a fraction of the highway's full width at
     /// his own row on screen.
     ///
