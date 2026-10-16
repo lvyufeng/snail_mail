@@ -133,6 +133,9 @@ final class GameScene: SKScene {
     // MARK: - Player
 
     private var positionZ: CGFloat = 0        // camera z along the track
+    /// Where the snail was before this frame's move. Collision sweeps the gap
+    /// between the two, so a fast frame cannot step over a piece.
+    private var previousZ: CGFloat = 0
     private var playerX: CGFloat = 0         // -1...1 across the road
     private var targetX: CGFloat = 0
     private var currentSpeed: CGFloat = 0
@@ -494,6 +497,7 @@ final class GameScene: SKScene {
             // Faithful to a real finish: the player has driven to the end of the
             // route, which is the state REPLAY has to recover from.
             positionZ = trackLength
+            previousZ = positionZ
             state.distance = Double(positionZ)
             state.parcels = state.quota
             state.sheet.parcelCollect = state.quota * 100
@@ -555,6 +559,7 @@ final class GameScene: SKScene {
             if let widest = segments.max(by: { $0.gapRun < $1.gapRun }), widest.airborne {
                 let mid = CGFloat(widest.gapStart + widest.gapRun / 2) * segmentLength
                 positionZ = max(0, mid - playerZ - 10 * segmentLength)
+                previousZ = positionZ
             }
         }
         if let arg = ProcessInfo.processInfo.arguments.firstIndex(of: "-park"),
@@ -565,6 +570,7 @@ final class GameScene: SKScene {
             // wants to measure sits in the near half of the frame where the
             // road is widest and a prop's drawn width reads cleanly.
             positionZ = max(0, CGFloat(row - 5) * segmentLength - playerZ)
+                previousZ = positionZ
         }
         if ProcessInfo.processInfo.arguments.contains("-givesjet") {
             startRace()
@@ -590,6 +596,7 @@ final class GameScene: SKScene {
             // bare edge would drop it.
             if let idx = segments.firstIndex(where: { $0.noFall && !$0.airborne }) {
                 positionZ = max(0, CGFloat(idx) * segmentLength - playerZ)
+                previousZ = positionZ
             }
             playerX = 1.15
             targetX = 1.15
@@ -861,6 +868,7 @@ final class GameScene: SKScene {
         baseTargetSpeed = baseSpeed(for: config.speed)
         currentSpeed = baseTargetSpeed * 0.4
         positionZ = 0
+        previousZ = 0
         playerX = 0
         targetX = 0
         elapsed = 0
@@ -1065,6 +1073,7 @@ final class GameScene: SKScene {
         updateRoadEdge()
 
         let move = currentSpeed * fdt
+        previousZ = positionZ
         positionZ += move
         if recordsReplay && !isReplay { recordReplaySample() }
         state.distance = Double(positionZ)
@@ -1079,6 +1088,7 @@ final class GameScene: SKScene {
 
         if positionZ >= trackLength {
             positionZ = trackLength
+            previousZ = positionZ
             finish(won: state.quotaMet, handedOver: true)
             renderRoad()
             return
@@ -1421,11 +1431,43 @@ final class GameScene: SKScene {
 
     private func handleCollisions() {
         let playerSegIndex = segmentIndex(at: positionZ + playerZ)
+        // The snail's own z along the track, and the span it swept this frame.
+        // Testing only "is this piece in one of four segments" matched a piece
+        // up to two whole segments — 400 units — ahead of the bumper, so
+        // obstacles were collected and hazards taken well before the sprite
+        // reached Turbo, while a piece just passed still counted: everything
+        // read as out of step with the drawing. The test is now a real swept
+        // gap, using the same `depth` the renderer places the sprite with, so
+        // what is drawn is what is hit.
+        let head = positionZ + playerZ
+        // The frame's own travel, so a teleport is not mistaken for a sweep.
+        // `previousZ` is reset to the new position wherever `positionZ` jumps
+        // (see `movePositionZ`), which leaves this the real per-frame move.
+        let tail = min(previousZ, positionZ) + playerZ
+        let sweptBack = min(head, tail)
+        // How long Turbo is along the track, in world units. Derived from the
+        // width his mesh is modelled at rather than invented: he is about as
+        // long as he is wide, and `roadModelWidth` of model units span the
+        // world's `roadWidth`, which is the conversion this needs.
+        let snailLength = Sprites.snailModelWidth * roadWidth / roadModelWidth
         let window = [playerSegIndex - 1, playerSegIndex, playerSegIndex + 1, playerSegIndex + 2]
         var toRemove: [(RoadSegment, EntitySpec)] = []
         for idx in window {
             let seg = segments[((idx % segments.count) + segments.count) % segments.count]
             for spec in seg.sprites {
+                // Where along the track the piece actually stands: its
+                // segment's own start plus the depth the track data gave it.
+                // The renderer reads the same number, so what is drawn is what
+                // is hit.
+                let pieceZ = CGFloat(seg.index) * segmentLength
+                    + max(0, min(1, spec.depth)) * segmentLength
+                // Swept, not point: the snail can move a whole segment in a
+                // frame at the top speed, so a piece is hit when it lies
+                // between where the snail was and where it now is — widened by
+                // half the snail's own length so the contact reads from its
+                // nose rather than its centre.
+                guard pieceZ <= head + snailLength / 2,
+                      pieceZ >= sweptBack - snailLength / 2 else { continue }
                 // Every piece catches the snail across the width its own
                 // design gives it, and the renderer draws each of those the
                 // same width, so what is drawn is what is hit: a pit and a ramp
@@ -1725,6 +1767,7 @@ final class GameScene: SKScene {
         fallTimer = -1
         let side: CGFloat = fallOffset >= 0 ? -0.62 : 0.62
         positionZ = max(0, positionZ - segmentLength * 3)
+        previousZ = positionZ
         playerX = side
         targetX = side
         currentSpeed = baseTargetSpeed * 0.35
@@ -2862,8 +2905,16 @@ final class GameScene: SKScene {
                 // back post is the only fence there is.
                 if spec.kind == .barrier && railTexture != nil { continue }
                 let node = obtainEntity(EntityKey(kind: spec.kind, tier: spec.tier))
-                let ex = p.screenX + spec.offset * p.screenW
-                let ey = fy(p.screenY)
+                // Where inside its segment the piece stands. Placing every
+                // sprite on `p1` put it on the segment's near edge whatever
+                // `depth` said, so the drawing sat up to a whole segment —
+                // 200 units, 14 to 67 ms of travel — away from the row the
+                // track data put it on, and from the row it was hit on. Both
+                // now read the same interpolated spot.
+                let d = max(0, min(1, spec.depth))
+                let at = interpolate(p, seg.p2, d)
+                let ex = at.screenX + spec.offset * at.screenW
+                let ey = fy(at.screenY)
                 node.position = CGPoint(x: ex, y: ey)
                 // How much of the road the sprite covers. A pit and a sign
                 // carry their own width in the track data; everything else is
@@ -2887,7 +2938,7 @@ final class GameScene: SKScene {
                 }
                 // A road fraction is measured against the whole road, and
                 // `screenW` is half of it on screen, so it doubles.
-                let spriteWidth = roadFraction * p.screenW * 2
+                let spriteWidth = roadFraction * at.screenW * 2
                 // Every body is built at its `entityBaseWidth`, so this scales
                 // the art to the road rather than the road to the art. A
                 // turret's tiers come out of their own artwork on top of this:
@@ -2896,12 +2947,15 @@ final class GameScene: SKScene {
                 let scale = spriteWidth / Sprites.entityBaseWidth(spec.kind)
                 node.setScale(max(0.02, scale))
                 node.isHidden = false
-                node.zPosition = -CGFloat(n) + 0.5
+                // Depth order follows where in its segment the piece stands,
+                // so a sprite part-way in cannot be drawn behind the row ahead
+                // of it.
+                node.zPosition = -CGFloat(n) - CGFloat(d) + 0.5
                 #if DEBUG
                 if sizeProbeOn {
                     let prev = sizeProbe["\(spec.kind)"]?.0 ?? 0
                     if spriteWidth > prev {
-                        sizeProbe["\(spec.kind)"] = (spriteWidth, p.screenW * 2)
+                        sizeProbe["\(spec.kind)"] = (spriteWidth, at.screenW * 2)
                     }
                 }
                 #endif
@@ -2999,6 +3053,28 @@ final class GameScene: SKScene {
 
     private func interpolate(_ a: CGFloat, _ b: CGFloat, _ p: CGFloat) -> CGFloat {
         a + (b - a) * p
+    }
+
+    /// The same blend over a projected point, so a piece placed part-way into
+    /// its segment is drawn and hit between the segment's two rows rather than
+    /// snapped to the near one. `scale` is left alone: it is only a depth
+    /// measure, and both callers that need it use the segment's own.
+    private func interpolate(_ a: Projection, _ b: Projection, _ p: CGFloat) -> Projection {
+        var out = a
+        out.world = Vec3(
+            x: interpolate(a.world.x, b.world.x, p),
+            y: interpolate(a.world.y, b.world.y, p),
+            z: interpolate(a.world.z, b.world.z, p)
+        )
+        out.camera = Vec3(
+            x: interpolate(a.camera.x, b.camera.x, p),
+            y: interpolate(a.camera.y, b.camera.y, p),
+            z: interpolate(a.camera.z, b.camera.z, p)
+        )
+        out.screenX = interpolate(a.screenX, b.screenX, p)
+        out.screenY = interpolate(a.screenY, b.screenY, p)
+        out.screenW = interpolate(a.screenW, b.screenW, p)
+        return out
     }
 
     // MARK: - Finish
