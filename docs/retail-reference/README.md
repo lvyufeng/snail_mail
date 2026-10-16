@@ -87,7 +87,7 @@ what `GameScene`'s camera comment claims. The remake measures **1.44** on the
 same reading (80.8% at the bottom, vanishing point at 44%), a ratio of 0.97×.
 So the camera height of 1000, chosen from this ratio, is right.
 
-One divergence found and *not* changed: the retail Help screen is a bitmap
+One divergence found here, since fixed: the retail Help screen is a bitmap
 (`BACKGROUNDS/HELP_A.TGA`) that lists ten pickups with one-line explanations —
 
     Packages: Collect for points.      White Rings:  Powerup Turbo.
@@ -98,7 +98,8 @@ One divergence found and *not* changed: the retail Help screen is a bitmap
 
 The remake replaces this with touch instructions, which is right — the retail
 text ends "Steer with Mouse. Press Left Button to Fire. Press ESC to Pause
-Game" — and it covers nine of the ten. The one it leaves out is **Jump Pod**,
-even though `EntityKind.trampoline` is implemented and bounces the snail; the
-Help screen raises ramps and jetpacks under "GAPS" and never mentions it. That
-is the entry worth adding if the Help screen is revisited.
+Game" — but it covered only nine of the ten. **Jump Pod** was missing even
+though `EntityKind.trampoline` is implemented and bounces harder than a ramp
+(`launch(power: 1.5)` against `1.0`); the Help screen raised ramps and jetpacks
+under "GAPS" and never mentioned it, so nothing told a player what the `(((`
+pads do. A "JUMP POD" entry was added under the retail screen's own label.
