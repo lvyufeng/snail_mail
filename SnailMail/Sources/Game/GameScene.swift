@@ -83,8 +83,18 @@ final class GameScene: SKScene {
     /// Half the highway's on-screen width on Turbo's row, refreshed by
     /// `renderRoad()` from the segment he is racing over.
     private var snailRowHalfWidth: CGFloat = 0
-    /// Seconds the snail spends tumbling down a hole before climbing out.
-    private let fallDuration: CGFloat = 0.9
+    /// Seconds the snail spends falling before the round resets him.
+    ///
+    /// The retail build authors the plunge as a 6-second once-through
+    /// animation (`X/_ANIMATION.TXT`, "Falling to his snaily death": pose
+    /// `000`, then eleven of `001`, 0.5 s each). What the player actually
+    /// hears is the fall line, which runs 1.28 to 1.72 s across `fall1`..
+    /// `fall3`, so the drop is held about that long — long enough to read as
+    /// a plunge and let the voice finish, short enough not to stall the race.
+    ///
+    /// This was 0.9 s, shorter than the shortest of those three lines, so the
+    /// voice was still going when the snail was already back on the road.
+    private let fallDuration: CGFloat = 1.5
     /// Seconds the snail spends airborne after hitting a ramp or trampoline.
     private let hopDuration: CGFloat = 0.7
     /// Where the muzzle sits, measured up the road from the camera. The snail
@@ -2186,15 +2196,37 @@ final class GameScene: SKScene {
         // screen, so a tall portrait phone does not inflate him.
         let halfRoad = snailRowHalfWidth > 0 ? snailRowHalfWidth : size.width * 0.48
         snailScale = max(0.05, halfRoad * 2 * snailRoadFraction / Sprites.snailNativeWidth)
+        // How tall Turbo draws. The node's own height at the scale the art
+        // arrives at, times `snailScale`: reading the drawn frame directly
+        // would give last frame's size, which during a fall is already part
+        // shrunk, and the drop would then chase its own tail.
+        let snailNaturalHeight = snail.calculateAccumulatedFrame().height
+            / max(0.01, abs(snail.xScale))
+        let snailNodeHeight = snailNaturalHeight * snailScale
         if fallTimer >= 0 {
-            // Tumbling down the pit: sink below the road, spin and shrink.
-                let p = min(1, fallTimer / fallDuration)
+            // Down the pit: drop out of sight, tumbling as he goes.
+            //
+            // The sink used to be `95 * ease * snailScale`, which at the scale
+            // a phone gives him is about 45 points — a little over half his own
+            // height. He dipped rather than fell, so the pit read as a bump and
+            // the reset that follows looked like it came from nowhere. The drop
+            // is now measured against him instead of a fixed number: two of his
+            // own heights, so he is clear of the rim whatever the frame size.
+            let p = min(1, fallTimer / fallDuration)
             let ease = p * p
+            let drop = snailNodeHeight * 2
             snail.position = CGPoint(x: size.width * 0.5,
-                                     y: size.height * 0.26 - 95 * ease * snailScale)
+                                     y: size.height * 0.26 - drop * ease)
             snail.zRotation = p * 5.6
             snail.setScale(snailScale * (1 - 0.5 * ease))
             snail.alpha = 1 - 0.3 * p
+            // Play the build's own plunge, which is a descending pose rather
+            // than a tumble. This branch used to leave the clip alone, so the
+            // retail `turbo-fall` poses never appeared and a spinning `move`
+            // frame stood in for them. Only the retail billboard can swap
+            // poses, so without the art this is a no-op and the sink below
+            // carries the fall on its own.
+            Sprites.setSnailClip(snail, "fall", dt: frameDelta)
         } else {
             snail.position = CGPoint(x: size.width * 0.5, y: size.height * 0.26)
             // Steer with the road, then add the roll of a loop or a screw so
