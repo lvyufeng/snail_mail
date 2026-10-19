@@ -1699,7 +1699,7 @@ final class GameScene: SKScene {
         hurtUntil = elapsed + 0.3
         // Knock the frame about in proportion to what the hit cost, so a slug
         // that nearly ends the run does not read the same as a scrape.
-        shake(power: min(1, 0.35 + amount / 30), duration: 0.28)
+        shake(power: min(1, 0.25 + amount / 40), duration: 0.2)
         state.postalMeter = max(0, state.postalMeter - amount)
         Sound.shared.play(sound)
         if state.postalMeter <= 0 {
@@ -1876,18 +1876,26 @@ final class GameScene: SKScene {
     /// the way back cannot spin here; the caller's invincibility is the
     /// backstop if the cap is reached.
     private func rewindToWalkableRow(side: CGFloat) {
+        // The snail sits `playerZ` ahead of the camera, so the row under him
+        // for a camera at `positionZ` is the one holding `positionZ + playerZ`.
+        // Working it the other way — choose a row, then park the camera on it —
+        // leaves him in the row *before* the one that was checked, which was
+        // often the pit he had just fallen into, and he went straight back in.
         let here = segmentIndex(at: positionZ + playerZ)
         let maxRows = 40
         for back in 1...maxRows {
             let idx = ((here - back) % segments.count + segments.count) % segments.count
-            // The camera sits `playerZ` behind the snail, so parking the
-            // camera at this row's own start puts the snail there.
-            let z = CGFloat(idx) * segmentLength - playerZ
-            guard z >= 0 else { break }
+            // Where the camera has to sit for the snail to stand in this row.
+            let cameraZ = CGFloat(idx) * segmentLength - playerZ
+            // A camera behind the start of the course means the search has run
+            // off the front; nothing further back is reachable.
+            guard cameraZ >= 0 else { break }
             if isWalkable(seg: segments[idx], side: side) {
-                // Land half a segment short, so the pit is still ahead of him
-                // rather than under him when the invincibility runs out.
-                positionZ = max(0, z - segmentLength * 0.5)
+                // Park exactly on the row that was just checked. Nudging him
+                // further back — which an earlier version did, half a segment
+                // at a time — drops him into the row *before* the one that was
+                // tested, which can be the very pit he fell into.
+                positionZ = cameraZ
                 previousZ = positionZ
                 return
             }
@@ -2241,10 +2249,19 @@ final class GameScene: SKScene {
         let left = shakeUntil - elapsed
         guard left > 0, shakePower > 0 else { return .zero }
         // Decay to nothing over the tail of the knock.
-        let decay = min(1, left / 0.28)
-        let amp = shakePower * decay * 9
-        return CGPoint(x: sin(elapsed * 61) * amp,
-                       y: cos(elapsed * 47) * amp * 0.7)
+        let decay = min(1, left / 0.2)
+        let amp = shakePower * decay * 5
+        // Four and five cycles a second. The frequencies are low on purpose:
+        // at sixty frames a second anything much above this advances most of a
+        // half-cycle per frame, so the two axes land on unrelated points each
+        // time and the picture reads as random jitter rather than as a knock.
+        // The earlier pair (61 and 47 radians, near ten and eight a second) did
+        // exactly that. Slightly different rates keep the two axes from moving
+        // as one and settling into an obvious ellipse.
+        let wx = 4.0 * 2 * Double.pi
+        let wy = 5.0 * 2 * Double.pi
+        return CGPoint(x: sin(elapsed * wx) * amp,
+                       y: cos(elapsed * wy) * amp * 0.7)
     }
 
     /// Which of the retail build's Turbo clips he should be playing. The ones
