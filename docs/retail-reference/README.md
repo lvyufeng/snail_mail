@@ -251,3 +251,26 @@ nothing crosses anything.
 The one thing worth remembering: on a static frame the model will happily
 describe an idle scene as broken, because it has no idea the picture is a
 single instant of motion.
+
+## Running a race hands-free
+
+There is no way to inject touches into the simulator from here — `simctl` has no
+input command, and window automation could not raise the Simulator window at all
+(the terminal covers the screen and neither `activate` nor `AXRaise` moved it).
+So `-autopilot` exists for exactly this: it steers for the first lane that stays
+clear for several rows ahead and holds the trigger, and the race plays itself
+under the real game loop.
+
+    xcrun simctl launch booted com.lvyufeng.SnailMail \
+        -autostart arcade -level 39 -autopilot
+
+What it actually exercises is everything except the input: collisions, damage,
+death, fall and recovery, scoring, music and the results screen. What it does not
+do is judge how any of it feels.
+
+Measured with it: level 4 clears in 26.9 s with a perfect score, level 39 in
+52.7 s; levels 12 and 47 kill it, because it only avoids pits and not salt or
+asteroids. Over a continuous 60 s run on level 39 the process held 391-427 MB
+with no upward trend and 37-48% CPU in a Debug build.
+
+It is `#if DEBUG` only and compiles out of a release build.

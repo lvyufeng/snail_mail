@@ -191,6 +191,10 @@ final class GameScene: SKScene {
     /// Until this time the snail climbs back toward its target speed quickly,
     /// having just had speed taken off it.
     private var recoverUntil: CGFloat = 0
+    #if DEBUG
+    /// `-autopilot`: a stand-in player, so a race can be run hands-free.
+    private var autopilot = false
+    #endif
     private var lastUpdate: TimeInterval = 0
     /// Screenshot hooks: a stream pinned by `-seed N`, so a scene lays its
     /// drifting stars out identically twice in a row, and `-freeze N`, which
@@ -593,6 +597,9 @@ final class GameScene: SKScene {
             positionZ = max(0, CGFloat(row - 5) * segmentLength - playerZ)
                 previousZ = positionZ
         }
+        #if DEBUG
+        autopilot = ProcessInfo.processInfo.arguments.contains("-autopilot")
+        #endif
         if ProcessInfo.processInfo.arguments.contains("-givesjet") {
             startRace()
             // Drop a jetpack under the snail so its flight can be watched
@@ -1110,6 +1117,9 @@ final class GameScene: SKScene {
         if isReplay {
             applyReplaySample()
         } else {
+            #if DEBUG
+            if autopilot { autopilotSteer() }
+            #endif
             updateSteering(fdt: fdt)
         }
         updateRoadEdge()
@@ -1219,6 +1229,37 @@ final class GameScene: SKScene {
     private func beginRecovery(_ seconds: CGFloat = 1.1) {
         recoverUntil = max(recoverUntil, elapsed + seconds)
     }
+
+    /// A stand-in player, so a race can be run without a finger on the glass:
+    /// `-autopilot` steers for the first lane that stays clear for several
+    /// rows ahead and holds the trigger. It exists to exercise the game loop —
+    /// steering, hits, falls, the recovery — on a machine that cannot inject
+    /// touches, and it is compiled out of release builds.
+    #if DEBUG
+    private func autopilotSteer() {
+        let here = segmentIndex(at: positionZ + playerZ)
+        var bestLane = targetX
+        var bestClear = -1
+        var lane: CGFloat = -0.8
+        while lane <= 0.801 {
+            var clear = 0
+            for ahead in 0..<6 {
+                let idx = ((here + ahead) % segments.count + segments.count) % segments.count
+                guard isWalkable(seg: segments[idx], side: lane) else { break }
+                clear += 1
+            }
+            // Prefer a lane that stays clear, and among those the nearest one,
+            // so the stand-in does not saw back and forth across the road.
+            if clear > bestClear || (clear == bestClear && abs(lane - playerX) < abs(bestLane - playerX)) {
+                bestClear = clear
+                bestLane = lane
+            }
+            lane += 0.1
+        }
+        targetX = bestLane
+        touching = true
+    }
+    #endif
 
     private func updateSteering(fdt: CGFloat) {
         playerX += (targetX - playerX) * min(1, fdt * 6)
