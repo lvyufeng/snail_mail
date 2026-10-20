@@ -223,3 +223,31 @@ should chase the hang, not the coordinates: the calibration that works is
 `(444, 293)` on a 1024x768 screen moving off the main menu, and anything aimed
 near there lands on the second item. Watching the original play a level still
 needs a host where that transition does not wedge.
+
+## Visual review: what actually looks wrong
+
+Reviewed at native resolution with the frames cropped, since a whole-screen
+read is what produced the wrong answers the first few times. Three separate
+"problems" turned out to be the design:
+
+- **Hard-edged road and visible stair-stepping** — the retail build renders at
+  640x480 with no antialiasing, so the remake's sharper edges are the faithful
+  choice, not a regression.
+- **The vertical cut where the road meets the backdrop** — that is the roadside
+  wall, drawn at `wallRatio` 0.45 of the road's width. The retail help text
+  talks about the blue barriers for the same reason: there is meant to be a
+  wall there.
+- **Banding in the backdrop** — real, but it comes from the source art. The
+  space paintings are 512x256 and get stretched about 3.4x vertically to fill a
+  phone. Measured step size: one colour change every 2.2 rows in the remake
+  against every 3.3 rows in the original, so the remake is the smoother of the
+  two. Nothing to fix without new art.
+
+What a whole-screen read *did* misreport, and cropping corrected: "a vertical
+line crosses a HUD icon" and "the HUD elements overlap". The top-left HUD is
+clean — the wrapper icon and its count are level, `LASER` sits under them, and
+nothing crosses anything.
+
+The one thing worth remembering: on a static frame the model will happily
+describe an idle scene as broken, because it has no idea the picture is a
+single instant of motion.
