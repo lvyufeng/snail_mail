@@ -1046,11 +1046,16 @@ final class GameScene: SKScene {
         // draining the meter first.
         if let lock = debugMeterLock { state.postalMeter = state.maxMeter * lock }
         #endif
-        scrollStars(fdt: fdt)
-        scrollSky(fdt: fdt)
+        // A paused race holds the whole world, not just the snail. The stars
+        // and the backdrop's swing are driven from here rather than by an
+        // `SKAction` precisely so a pause can stop them, so they take the same
+        // delta the animation does.
+        let worldDelta: CGFloat = state.phase == .paused ? 0 : fdt
+        scrollStars(fdt: worldDelta)
+        scrollSky(fdt: worldDelta)
         // Turbo's animation rides the same clock, but a paused race holds its
         // pose; a finished one keeps playing so a loss can fall into its shell.
-        frameDelta = state.phase == .paused ? 0 : fdt
+        frameDelta = worldDelta
         guard state.phase == .running else {
             // Paused or finished: the "going postal" alarm has nothing left to
             // warn about.
@@ -1820,8 +1825,11 @@ final class GameScene: SKScene {
     /// pit is already walkable, so a rewind almost never has to travel far.
     private func endFall() {
         fallTimer = -1
-        let side: CGFloat = fallOffset >= 0 ? -0.62 : 0.62
-        rewindToWalkableRow(side: side)
+        // The side the fall pushed him toward is the one to avoid, so aim for
+        // the far one and let the rewind report back where it could actually
+        // put him.
+        let preferred: CGFloat = fallOffset >= 0 ? -0.62 : 0.62
+        let side = rewindToWalkableRow(preferred: preferred)
         playerX = side
         targetX = side
         currentSpeed = baseTargetSpeed * 0.35
@@ -1854,35 +1862,59 @@ final class GameScene: SKScene {
     /// one, a `NoFall` tag. The search is capped so a course that is pits all
     /// the way back cannot spin here; the caller's invincibility is the
     /// backstop if the cap is reached.
-    private func rewindToWalkableRow(side: CGFloat) {
-        // The snail sits `playerZ` ahead of the camera, so the row under him
-        // for a camera at `positionZ` is the one holding `positionZ + playerZ`.
-        // Working it the other way — choose a row, then park the camera on it —
-        // leaves him in the row *before* the one that was checked, which was
-        // often the pit he had just fallen into, and he went straight back in.
+    /// Move the snail back to the nearest row ahead of where he fell whose
+    /// lane is solid ground, and return the lane to plant him in.
+    ///
+    /// Two cases the first version got wrong. It only ever looked behind, so a
+    /// fall in the opening stretch — before the camera has a `playerZ` of road
+    /// behind it — found nothing and dropped him at a fixed offset, which could
+    /// be the pit he had just left. And it planted him on one side without
+    /// checking that side cleared the next pit, so a fall beside a wide one put
+    /// him straight back in.
+    private func rewindToWalkableRow(preferred: CGFloat) -> CGFloat {
         let here = segmentIndex(at: positionZ + playerZ)
+        let count = segments.count
+        guard count > 0 else { positionZ = max(0, positionZ); return preferred }
         let maxRows = 40
+
+        // The far side of the fall first, then the near one: dropping him back
+        // on the side he tumbled from is the least surprising, but not if it is
+        // still over the hole.
+        func lane(in seg: RoadSegment) -> CGFloat? {
+            for candidate in [preferred, -preferred] where isWalkable(seg: seg, side: candidate) {
+                return candidate
+            }
+            return nil
+        }
+
         for back in 1...maxRows {
-            let idx = ((here - back) % segments.count + segments.count) % segments.count
-            // Where the camera has to sit for the snail to stand in this row.
+            let idx = ((here - back) % count + count) % count
             let cameraZ = CGFloat(idx) * segmentLength - playerZ
-            // A camera behind the start of the course means the search has run
-            // off the front; nothing further back is reachable.
+            // A camera behind the start of the course has run off the front.
             guard cameraZ >= 0 else { break }
-            if isWalkable(seg: segments[idx], side: side) {
-                // Park exactly on the row that was just checked. Nudging him
-                // further back — which an earlier version did, half a segment
-                // at a time — drops him into the row *before* the one that was
-                // tested, which can be the very pit he fell into.
+            if let lane = lane(in: segments[idx]) {
                 positionZ = cameraZ
                 previousZ = positionZ
-                return
+                return lane
             }
         }
-        // Nothing walkable behind: fall back to the old fixed rewind rather
-        // than leaving him sitting in the pit.
-        positionZ = max(0, positionZ - segmentLength * 3)
-        previousZ = positionZ
+
+        // Nothing behind — the first few rows. Look ahead instead: the course
+        // has ground further on, and landing forward beats landing back inside
+        // the pit, which is what made an early fall repeat.
+        for ahead in 0...maxRows {
+            let idx = (here + ahead) % count
+            let cameraZ = CGFloat(idx) * segmentLength - playerZ
+            if let lane = lane(in: segments[idx]) {
+                positionZ = max(0, cameraZ)
+                previousZ = positionZ
+                return lane
+            }
+        }
+
+        // Nowhere on the row is clear. Hold position rather than teleport
+        // somewhere worse; the invincibility the caller grants is the backstop.
+        return preferred
     }
 
     /// Whether a segment's own row leaves the given lane on solid ground.
