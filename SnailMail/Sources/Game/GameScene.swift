@@ -896,6 +896,15 @@ final class GameScene: SKScene {
         boostUntil = 0
         invincibleUntil = 0
         hurtUntil = 0
+        // Every one of these is an absolute moment compared against `elapsed`,
+        // and a new race starts that clock at zero. Leaving any of them set
+        // makes the previous race's last hit bleed into the next one: a knock
+        // taken at 30 s held `shakeUntil` at 30.2, which read as thirty seconds
+        // of full-amplitude shake on the restart.
+        skidUntil = 0
+        shakePower = 0
+        shakeUntil = 0
+        recoverUntil = 0
         slugged = false
         timeUpAt = -1
         fallTimer = -1
