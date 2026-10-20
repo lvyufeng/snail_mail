@@ -41,7 +41,7 @@ enum GameMode: String, CaseIterable, Identifiable {
 
     var subtitle: String {
         switch self {
-        case .arcade: "The original galaxy campaign, star by star"
+        case .arcade: "The galaxy campaign, star by star"
         case .tutorial: "Learn to steer, fire and deliver"
         case .speedRun: "Finish the route, fastest wins"
         case .challenge: "Endless hazard gauntlet"

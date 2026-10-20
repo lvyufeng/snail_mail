@@ -261,9 +261,12 @@ private struct QuitConfirmOverlay: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.55).ignoresSafeArea()
+            Color.black.opacity(0.7).ignoresSafeArea()
 
-            NeonPanel(border: Palette.danger) {
+            // Opaque on purpose: the question has to sit over the menu, and a
+            // see-through card let the menu's own labels show through it, so
+            // the two layers read as one cluttered block.
+            NeonPanel(border: Palette.danger, fill: Palette.panelSolid) {
                 VStack(spacing: 18) {
                     Text("Do you really want to quit?")
                         .font(.retail(20, weight: .black))

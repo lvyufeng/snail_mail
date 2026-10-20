@@ -20,6 +20,9 @@ enum Palette {
 
     static let ink       = Color(hex: "#F3ECFF")
     static let panelFill = Color(hex: "#150A2E").opacity(0.72)
+    /// The same panel colour with nothing showing through, for cards that sit
+    /// over other content rather than over the background.
+    static let panelSolid = Color(hex: "#150A2E")
 }
 
 /// Shared deep-space background: gradient, two soft nebulae, a distant ringed
@@ -141,6 +144,11 @@ struct Starfield: View {
 /// every piece of UI.
 struct NeonPanel<Content: View>: View {
     var border: Color = Palette.magenta
+    /// The panel's own fill. The default lets a little of the scene through,
+    /// which is what a menu card wants; anything that sits *over* other
+    /// content — a confirmation, say — should pass an opaque colour, or the
+    /// text underneath reads through the panel and the two layers fight.
+    var fill: Color = Palette.panelFill
     @ViewBuilder var content: Content
 
     var body: some View {
@@ -148,7 +156,7 @@ struct NeonPanel<Content: View>: View {
             .padding(16)
             .background(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Palette.panelFill)
+                    .fill(fill)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
