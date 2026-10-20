@@ -1003,6 +1003,13 @@ final class GameScene: SKScene {
     private func applyReplaySample() {
         guard let trace = replayTrace, !trace.samples.isEmpty else { return }
         let distance = Double(positionZ)
+        // A fall rewinds the run, and the cursor has to follow it back. Without
+        // this the cursor stays parked past where the snail now is, the
+        // interpolation clamps to the front of the next span, and playback
+        // steers by a position the run has not reached yet.
+        while replayCursor > 0, trace.samples[replayCursor].distance > distance {
+            replayCursor -= 1
+        }
         while replayCursor + 1 < trace.samples.count,
               trace.samples[replayCursor + 1].distance <= distance {
             replayCursor += 1
