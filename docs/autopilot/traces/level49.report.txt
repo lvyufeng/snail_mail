@@ -1,0 +1,4 @@
+frames=2123 elapsed=36.31s distance=611147 falls=0 meter=86 phase=running
+hazards=asteroid:11, barrier:197, heart:23, hole:4, parcel:57, postOffice:5, ramp:38, ringExplode:56, ringUpgrade:2, salt:33, signBang:4, signConstruction:4, slug:1, turret:3
+finishes=1
+finish frame=2123 won=True elapsed=36.31s meter=86 parcels=16 falls=0

@@ -1,0 +1,4 @@
+frames=2312 elapsed=39.33s distance=446178 falls=0 meter=92 phase=running
+hazards=asteroid:26, barrier:140, heart:7, hole:4, parcel:15, postOffice:8, ramp:56, ringUpgrade:2, slug:3
+finishes=1
+finish frame=2312 won=True elapsed=39.33s meter=92 parcels=33 falls=0

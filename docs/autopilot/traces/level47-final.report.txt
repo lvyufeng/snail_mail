@@ -1,0 +1,4 @@
+frames=1543 elapsed=26.42s distance=386998 falls=0 meter=100 phase=running
+hazards=arch:2, barrier:2, ramp:5, salt:3
+finishes=1
+finish frame=1543 won=False elapsed=26.42s meter=100 parcels=0 falls=0

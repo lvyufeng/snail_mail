@@ -1,0 +1,4 @@
+frames=1503 elapsed=25.69s distance=386953 falls=0 meter=96 phase=running
+hazards=arch:6, asteroid:28, barrier:10, heart:1, hole:2, parcel:12, postOffice:7, ramp:32, salt:24, slug:10, turret:2
+finishes=1
+finish frame=1503 won=True elapsed=25.69s meter=96 parcels=24 falls=0

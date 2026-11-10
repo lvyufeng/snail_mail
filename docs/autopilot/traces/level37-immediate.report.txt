@@ -1,0 +1,4 @@
+frames=2373 elapsed=39.83s distance=414527 falls=0 meter=82 phase=running
+hazards=barrier:16, hole:6, ramp:18, salt:12, slug:1
+finishes=1
+finish frame=2373 won=False elapsed=39.83s meter=82 parcels=0 falls=0

@@ -1,6 +1,11 @@
 import SpriteKit
 import UIKit
 
+private func alignmentIndex(at z: CGFloat, trackSize: Int) -> Int {
+    guard trackSize > 0 else { return 0 }
+    return ((Int(floor(z / 200)) % trackSize) + trackSize) % trackSize
+}
+
 /// Pseudo-3D highway racer. The road is projected from a list of segments
 /// (curved, with hills) and everything on it — parcels, salt, asteroids,
 /// slugs, turrets, rings and the post office — is billboarded on top, exactly
@@ -194,6 +199,45 @@ final class GameScene: SKScene {
     #if DEBUG
     /// `-autopilot`: a stand-in player, so a race can be run hands-free.
     private var autopilot = false
+    /// `-autopilot-trace PATH`: one JSON line per frame for a hands-free race.
+    private var autopilotTracePath: String?
+    private var autopilotTraceFile: FileHandle?
+    private var autopilotFrame = 0
+    private var autopilotChosenLane: CGFloat = 0
+    private var autopilotClearRows = 0
+    private var autopilotPlan: [EntitySpec] = []
+    private var autopilotHazards = 0
+    private var autopilotRewards = 0
+    /// The hop timer is updated after collisions. Keep the part of that tick
+    /// that has not run yet to measure the midair landing precisely.
+    private var autopilotHopPending: CGFloat = 0
+    /// `-autopilot-shot DIR`: save the drawn frame near an autopilot fence.
+    /// The snapshots sit beside the state trace for visual comparison.
+    private var autopilotShotDirectory: String?
+    private var autopilotShotFrames: Set<Int> = []
+    private var autopilotPauseFrame = -1
+    private var autopilotRun = 0
+    /// `-autopilot-collect`: score parcel paths on their road clearance while
+    /// the autopilot is still safely ahead of the pickup.
+    private var autopilotCollect = false
+    /// Write the engine's exact road geometry at the same animation frames
+    /// as the visual capture. The delays in saving the bitmap can be measured
+    /// separately instead of being mistaken for steering errors.
+    private var autopilotCameraRecordFile: FileHandle?
+    private var autopilotEvents: [[String: Any]] = []
+    private var autopilotLastRecord: [String: Any]?
+    private var autopilotFalls = 0
+    private var fallRecordedAtX: CGFloat = 0
+    private var fallRecordedAtRow = -1
+    private var fallRecordedOffset: CGFloat = 0
+    /// `-frames PATH`: save individual road frames without simulator chrome.
+    private var frameDirectory: String?
+    private var frameInterval = 0
+    private var frameHarvestDelay = -1
+    private var frameHarvestFrames: Set<Int> = []
+    private var autopilotRunLimit = 1
+    private var autopilotCompletedRuns = 0
+    private var autopilotLastResult = "running"
     #endif
     private var lastUpdate: TimeInterval = 0
     /// Screenshot hooks: a stream pinned by `-seed N`, so a scene lays its
@@ -206,6 +250,9 @@ final class GameScene: SKScene {
     /// own, which would scatter the stars a little differently every time the
     /// view was resized.
     private let sceneSeed: UInt64
+    /// The frozen capture may save its first 5,000 frames. Clearing the clock
+    /// after that lets the live autopilot runs build, play and exit normally.
+    private var freezeMaximum = 5000
     private var framesToFreeze = -1
     private var framesRun = 0
     /// `-meterlock F`: debug only — the fraction of the postal tube the race is
@@ -599,6 +646,49 @@ final class GameScene: SKScene {
         }
         #if DEBUG
         autopilot = ProcessInfo.processInfo.arguments.contains("-autopilot")
+        autopilotCollect = ProcessInfo.processInfo.arguments.contains("-autopilot-collect")
+        if let arg = ProcessInfo.processInfo.arguments.firstIndex(of: "-autopilot-runs"),
+           arg + 1 < ProcessInfo.processInfo.arguments.count,
+           let count = Int(ProcessInfo.processInfo.arguments[arg + 1]) {
+            autopilotRunLimit = max(0, count)
+        }
+        if let arg = ProcessInfo.processInfo.arguments.firstIndex(of: "-autopilot-trace"),
+           arg + 1 < ProcessInfo.processInfo.arguments.count {
+            let path = ProcessInfo.processInfo.arguments[arg + 1]
+            FileManager.default.createFile(atPath: path, contents: nil)
+            autopilotTracePath = path
+            autopilotTraceFile = FileHandle(forWritingAtPath: path)
+        }
+        if let arg = ProcessInfo.processInfo.arguments.firstIndex(of: "-autopilot-shot"),
+           arg + 1 < ProcessInfo.processInfo.arguments.count {
+            autopilotShotDirectory = ProcessInfo.processInfo.arguments[arg + 1]
+            autopilotShotFrames = Set(stride(from: -50, through: 40, by: 10).map { 760 + $0 })
+            if ProcessInfo.processInfo.arguments.contains("-autopilot-second") {
+                autopilotShotFrames.formUnion([1685, 1695, 1705, 1715, 1725])
+            }
+        }
+        if let path = ProcessInfo.processInfo.arguments.firstIndex(of: "-autopilot-camera-trace"),
+           path + 1 < ProcessInfo.processInfo.arguments.count {
+            autopilotShotFrames = Set(stride(from: -50, through: 40, by: 10).map { 760 + $0 })
+            let file = ProcessInfo.processInfo.arguments[path + 1]
+            FileManager.default.createFile(atPath: file,
+                                           contents: nil)
+            autopilotCameraRecordFile = FileHandle(forWritingAtPath: file)
+        }
+        if let arg = ProcessInfo.processInfo.arguments.firstIndex(of: "-frames"),
+           arg + 1 < ProcessInfo.processInfo.arguments.count {
+            frameDirectory = ProcessInfo.processInfo.arguments[arg + 1]
+            frameInterval = 15
+            // Taking a scene texture synchronously from SpriteKit's update
+            // waits on the render command buffer. Capture between short runs
+            // rather than slowing the game loop on every third frame.
+            if let freeze = ProcessInfo.processInfo.arguments.firstIndex(of: "-freeze"),
+               freeze + 1 < ProcessInfo.processInfo.arguments.count,
+               let frames = Int(ProcessInfo.processInfo.arguments[freeze + 1]) {
+                frameHarvestDelay = frames
+                frameHarvestFrames = Set(stride(from: 30, through: frames, by: frameInterval))
+            }
+        }
         #endif
         if ProcessInfo.processInfo.arguments.contains("-givesjet") {
             startRace()
@@ -931,6 +1021,9 @@ final class GameScene: SKScene {
         snail.setScale(snailScale)
         snail.zRotation = 0
         snail.alpha = 1
+        #if DEBUG
+        autopilotPauseFrame = -1
+        #endif
         state.phase = .ready
         publish()
     }
@@ -1048,12 +1141,27 @@ final class GameScene: SKScene {
         #if DEBUG
         // `-freeze N` runs N frames and then holds: the scene stops ticking, so
         // a screenshot taken seconds later still shows the same instant.
-        if framesToFreeze >= 0 {
+        if framesToFreeze >= 0, framesRun < freezeMaximum {
             if framesRun >= framesToFreeze {
                 isPaused = true
+                if frameHarvestDelay >= 0 { captureHarvestFrame() }
                 return
             }
             framesRun += 1
+            if frameDirectory != nil, frameHarvestFrames.contains(framesRun) {
+                captureHarvestFrame()
+            }
+        }
+        // `-autopilot-shot DIR` uses the same clock. The pause lands after a
+        // rendered update, and a screenshot can wait for `isPaused`.
+        if autopilotShotDirectory != nil, autopilotPauseFrame < 0,
+           framesRun >= freezeMaximum {
+            isPaused = true
+            return
+        }
+        if autopilotShotDirectory != nil, autopilotPauseFrame >= 0 {
+            isPaused = true
+            return
         }
         #endif
         // A frozen capture steps on a fixed clock: the race the Nth frame draws
@@ -1113,12 +1221,30 @@ final class GameScene: SKScene {
             return
         }
 
+        #if DEBUG
+        // `-autopilot-shot` holds the scene at the exact frame whose engine
+        // projection was just written. A simulator screenshot then reads the
+        // same road and Turbo position instead of a later drawn frame.
+        if autopilotShotDirectory != nil, autopilotShotFrames.contains(autopilotFrame) {
+            isPaused = true
+            autopilotPauseFrame = autopilotFrame
+            // Command-line capture runs step the course one fixed animation
+            // frame at a time; a screenshot can wait until `isPaused` rather
+            // than racing a frame that may not reach render.
+            renderRoad()
+            publish()
+            return
+        }
+        #endif
+
         updateSpeed(fdt: fdt)
         if isReplay {
             applyReplaySample()
         } else {
             #if DEBUG
             if autopilot { autopilotSteer() }
+            if autopilot { autopilotJumpFullWall() }
+            if autopilot { recordAutopilotCamera() }
             #endif
             updateSteering(fdt: fdt)
         }
@@ -1167,7 +1293,15 @@ final class GameScene: SKScene {
         }
         if hopTimer >= 0 {
             hopTimer += fdt
-            if hopTimer >= hopDuration { hopTimer = -1 }
+            // An autopilot flight ends after collision on this tick. Carrying
+            // the overshoot keeps the airborne span exact instead of dropping
+            // up to a segment between the drawn arc and the route planner.
+            if hopTimer >= hopDuration {
+                #if DEBUG
+                autopilotHopPending = autopilot ? hopTimer - hopDuration : 0
+                #endif
+                hopTimer = -1
+            }
         }
         updateGapFlight()
         handleCollisions()
@@ -1237,27 +1371,475 @@ final class GameScene: SKScene {
     /// touches, and it is compiled out of release builds.
     #if DEBUG
     private func autopilotSteer() {
-        let here = segmentIndex(at: positionZ + playerZ)
-        var bestLane = targetX
+        autopilotFrame += 1
+        // `updateFall` returns before this chooser runs. Once the rewind has
+        // placed the snail on solid ground, let the autopilot pick the far
+        // lane before the same pit is swept again; otherwise it retries the
+        // exact lane that just fell and damages the run on every loop.
+        if !autopilotCollect && invincible && elapsed < invincibleUntil - 1.2 {
+            let idx = segmentIndex(at: positionZ + playerZ)
+            let holes = segments[idx].sprites.filter { $0.kind == .hole }
+            let holesAhead = segments[(idx + 1) % segments.count].sprites
+                .filter { $0.kind == .hole }
+            if let hole = holesAhead.first ?? holes.first {
+                let side = hole.offset >= 0 ? -0.8 : 0.8
+                targetX = side
+                playerX = side
+                return recordAutopilotFrame()
+            }
+        }
+        var bestLane = playerX
         var bestClear = -1
+        var bestPlan: [EntitySpec] = []
+        var bestHazards = Int.max
+        var bestRewards = -1
+        var bestCollection = -1
+        let firstAhead = segmentIndex(at: positionZ + playerZ - segmentLength * 2)
+        let aheadRows = (0..<8).map {
+            ((firstAhead + $0) % segments.count + segments.count) % segments.count
+        }
+        // A single ramp followed by a pit forms one jump run down the same
+        // lane. Keep steering through it rather than treating the landing as
+        // an impassable row; otherwise the snap to avoid the ramp also carries
+        // the snail back into the hole.
+        let ramps = aheadRows.filter { idx in
+            segments[idx].sprites.contains(where: { $0.kind == .ramp })
+        }
+        let launchRows = Set(ramps.flatMap { idx -> [Int] in
+            let landing = alignmentIndex(at: CGFloat(segments[idx].index) * segmentLength
+                                            + segmentLength * 1.5,
+                                         trackSize: segments.count)
+            return segments[landing].sprites.contains(where: { $0.kind == .hole })
+                ? [idx, landing] : []
+        })
+        var rampPits = Set<Int>()
+        for idx in aheadRows {
+            let ramps = segments[idx].sprites.filter { $0.kind == .ramp }
+            guard !ramps.isEmpty else { continue }
+            for spec in ramps {
+                let rampStart = CGFloat(segments[idx].index) * segmentLength
+                    + spec.depth * segmentLength
+                let landing = alignmentIndex(at: rampStart + 1_500,
+                                             trackSize: segments.count)
+                if segments[landing].sprites.contains(where: { $0.kind == .hole }) {
+                    rampPits.formUnion([idx, landing])
+                }
+            }
+        }
+        if let gate = nearestAutopilotGate(to: positionZ + playerZ) {
+            let posts = gate.segment.sprites.filter { $0.kind == .barrier }
+            let reach = (Sprites.entitySolidWidth(.barrier, tier: 1) + turboContactWidth)
+                / 2 / (roadModelWidth / 2)
+            let free = stride(from: -0.9, through: 0.9, by: 0.05).filter { lane in
+                !posts.contains { abs($0.offset - lane) <= reach }
+                    && (0..<4).allSatisfy { d in
+                        let idx = (gate.segment.index + d) % segments.count
+                        return isWalkable(seg: segments[idx], side: lane)
+                            && !segments[idx].sprites.contains(where: {
+                                near(spec: $0, lane: lane)
+                                    && ($0.kind == .turret || $0.kind == .salt)
+                            })
+                    }
+            }
+            if let safe = free.min(by: { abs($0 - playerX) < abs($1 - playerX) }) {
+                targetX = safe
+                playerX = safe
+            }
+        }
         var lane: CGFloat = -0.8
         while lane <= 0.801 {
             var clear = 0
-            for ahead in 0..<6 {
-                let idx = ((here + ahead) % segments.count + segments.count) % segments.count
-                guard isWalkable(seg: segments[idx], side: lane) else { break }
+            for idx in aheadRows {
+                let seg = segments[idx]
+                guard isWalkable(seg: seg, side: lane) || launchRows.contains(idx)
+                    || rampPits.contains(idx) else { break }
+                if launchRows.contains(idx),
+                   !seg.sprites.contains(where: { $0.kind == .ramp && near(spec: $0, lane: lane) }) {
+                    continue
+                }
+                // The standalone barrier at the end of a full rail is part
+                // of the ledge it finishes: the route launches over it.
+                if !rampPits.contains(idx), seg.sprites.contains(where: {
+                    near(spec: $0, lane: lane) && isRoadHazard($0.kind)
+                }) { break }
                 clear += 1
             }
+            let plan = aheadRows.flatMap { segments[$0].sprites }.filter { spec in
+                let span = EntitySpec.width(for: spec.kind, explicit: spec.width,
+                                            tier: spec.tier)
+                let reach = (span + turboContactWidth) / 2 / (roadModelWidth / 2)
+                return abs(spec.offset - lane) < reach
+            }
+            // Fence posts side by side span the lane. A lone rail can be
+            // steered around, but a row is a gate to clear with a jump.
+            var fenceByRow: [Int: Int] = [:]
+            for idx in aheadRows {
+                fenceByRow[idx, default: 0] += segments[idx].sprites.filter {
+                    $0.kind == .barrier && near(spec: $0, lane: lane)
+                }.count
+            }
+            let hazards = plan.filter { spec in
+                switch spec.kind {
+                case .salt, .slug, .turret, .ringSlow: true
+                default: false
+                }
+            }.count
+            let rewards = plan.filter { spec in
+                switch spec.kind {
+                case .parcel, .heart, .ringUpgrade, .ringExplode, .ringNormal: true
+                default: false
+                }
+            }.count
+            var collection = 0
+            if autopilotCollect {
+                let here = alignmentIndex(at: positionZ + playerZ + segmentLength,
+                                          trackSize: segments.count)
+                let parcelRows = (1..<7).map { (here + $0) % segments.count }
+                let leadRows = (-2..<8).map {
+                    alignmentIndex(at: positionZ + playerZ
+                                        + CGFloat($0) * segmentLength,
+                                   trackSize: segments.count)
+                }
+                let nearbyHazards = parcelRows.flatMap { idx in
+                    (idx - 2...idx + 2).flatMap { offset in
+                        let row = ((offset % segments.count) + segments.count) % segments.count
+                        return segments[row].sprites.filter { isRoadHazard($0.kind) }
+                    }
+                }
+                let leadHazards = leadRows.flatMap { idx in
+                    segments[idx].sprites.filter { isRoadHazard($0.kind) }
+                }
+                for idx in parcelRows {
+                    for parcel in segments[idx].sprites where parcel.kind == .parcel {
+                        guard near(spec: parcel, lane: lane),
+                              parcelRows.allSatisfy({ isWalkable(seg: segments[$0], side: lane) }),
+                              leadRows.allSatisfy({ isWalkable(seg: segments[$0], side: lane) }),
+                              !nearbyHazards.contains(where: { near(spec: $0, lane: lane) }),
+                              !leadHazards.contains(where: { near(spec: $0, lane: lane) })
+                        else { continue }
+                        collection += 1
+                    }
+                }
+            }
+            if plan.contains(where: { $0.kind.isShootable }) {
+                clear -= 1
+            } else if plan.isEmpty {
+                clear += 1
+            }
+            if fenceByRow.values.contains(where: { $0 >= 2 }) { clear -= 1 }
             // Prefer a lane that stays clear, and among those the nearest one,
-            // so the stand-in does not saw back and forth across the road.
-            if clear > bestClear || (clear == bestClear && abs(lane - playerX) < abs(bestLane - playerX)) {
+            // then the one with the fewest unavoidable hazards, so the stand-in
+            // does not saw back and forth across the road.
+            if clear > bestClear
+                || (clear == bestClear && hazards < bestHazards)
+                || (clear == bestClear && hazards == bestHazards
+                    && rewards > bestRewards)
+                || (clear == bestClear && hazards == bestHazards
+                    && rewards == bestRewards && collection > bestCollection)
+                || (clear == bestClear && hazards == bestHazards
+                    && rewards == bestRewards
+                    && collection == bestCollection
+                    && abs(lane - playerX) < abs(bestLane - playerX)) {
                 bestClear = clear
                 bestLane = lane
+                bestPlan = plan
+                bestHazards = hazards
+                bestRewards = rewards
+                bestCollection = collection
             }
             lane += 0.1
         }
         targetX = bestLane
         touching = true
+        // Pits immediately behind the bumper still decide this frame's lane.
+        // Shortening the first look-ahead from eight rows hid the first part
+        // of a pair of holes; include the two rows just behind the snail so
+        // the lateral sweep can choose the gap before it reaches the bumper.
+        let immediate = [-2, -1, 0, 1, 2].map {
+            alignmentIndex(at: positionZ + playerZ + CGFloat($0) * segmentLength,
+                           trackSize: segments.count)
+        }
+        func immediateHole(at lane: CGFloat) -> Bool {
+            immediate.contains { idx in
+                segments[idx].sprites.contains { $0.kind == .hole && near(spec: $0, lane: lane) }
+            }
+        }
+        let chosenBeforePitCheck = bestLane
+        if immediateHole(at: bestLane) {
+            let clear = stride(from: -0.8, through: 0.8, by: 0.1)
+                .filter { !immediateHole(at: $0) }
+                .min { abs($0 - playerX) < abs($1 - playerX) }
+            if let clear { bestLane = clear }
+        }
+        if autopilotCollect, bestLane == chosenBeforePitCheck {
+            // A parcel is worth a small detour. Steer to the nearest lane that
+            // reaches it and stays on clear road all the way to it.
+            let lead = (-6...3).map {
+                alignmentIndex(at: positionZ + playerZ + CGFloat($0) * segmentLength,
+                               trackSize: segments.count)
+            }
+            let parcels = lead.flatMap { segments[$0].sprites }.filter {
+                $0.kind == .parcel
+            }
+            if let lane = parcels.compactMap({ parcel -> CGFloat? in
+                let span = EntitySpec.width(for: .parcel, explicit: parcel.width,
+                                            tier: parcel.tier)
+                let reach = (span + turboContactWidth) / 2 / (roadModelWidth / 2)
+                return stride(from: -0.8, through: 0.8, by: 0.1)
+                    .filter { candidate in
+                        abs(candidate - parcel.offset) < reach
+                            && lead.allSatisfy { isWalkable(seg: segments[$0], side: candidate) }
+                            && !lead.flatMap({ segments[$0].sprites }).contains {
+                                isRoadHazard($0.kind) && near(spec: $0, lane: candidate)
+                            }
+                    }
+                    .min { abs($0 - playerX) < abs($1 - playerX) }
+            }).min(by: { abs($0 - playerX) < abs($1 - playerX) }) {
+                bestLane = lane
+            }
+        }
+        // At 100 Gph the route moves a segment per frame, so a correction has
+        // to land on the frame it is chosen rather than easing into a pit.
+        playerX = bestLane
+        autopilotChosenLane = bestLane
+        autopilotClearRows = bestClear
+        autopilotPlan = bestPlan
+        autopilotHazards = bestHazards
+        autopilotRewards = bestRewards
+        recordAutopilotFrame()
+    }
+
+    /// `-autopilot-trace PATH` writes what the stand-in saw and did each frame.
+    /// Keeping it beside the existing autopilot, rather than in a test-only
+    /// simulation, means a steering or fall failure can be played back against
+    /// the actual track and collision code that drew it.
+    private func recordAutopilotFrame() {
+        guard autopilotTracePath != nil, let file = autopilotTraceFile else { return }
+        if fallTimer >= 0, autopilotLastRecord?["falling"] as? Bool != true {
+            autopilotEvents.append([
+                "kind": "fall", "frame": autopilotFrame, "row": fallRecordedAtRow,
+                "x": fallRecordedAtX, "offset": fallRecordedOffset,
+            ])
+        }
+        let row = segments.isEmpty ? -1 : segmentIndex(at: positionZ + playerZ)
+        let current = row >= 0 ? segments[row] : nil
+        let camera = roadPoint(z: positionZ + playerZ, offset: 0)
+        let wobble = shakeOffset()
+        let nearby = [
+            row - 1, row, row + 1, row + 2, segmentIndex(at: positionZ + playerZ + segmentLength * 3),
+        ].compactMap { index -> [String: Any]? in
+            let idx = ((index % segments.count) + segments.count) % segments.count
+            guard index >= 0, idx < segments.count else { return nil }
+            let seg = segments[idx]
+            return [
+                "row": idx,
+                "airborne": seg.airborne,
+                "noFall": seg.noFall,
+                "wall": seg.wall,
+                "sprites": seg.sprites.map {
+                    ["kind": "\($0.kind)", "offset": $0.offset,
+                     "width": $0.width, "depth": $0.depth]
+                },
+            ]
+        }
+        let previous = autopilotLastRecord
+        let previousMeter = (previous?["meter"] as? Double) ?? state.postalMeter
+        if previousMeter != state.postalMeter {
+            autopilotEvents.append([
+                "kind": "damage", "frame": autopilotFrame, "row": row,
+                "x": playerX, "distance": positionZ, "meterBefore": previousMeter,
+                "meterAfter": state.postalMeter,
+            ])
+            let snailLength = Sprites.snailModelWidth * roadWidth / roadModelWidth
+            let nearbyHazards = [-1, 0, 1, 2].flatMap { index -> [(String, EntitySpec)] in
+                let idx = ((index % segments.count) + segments.count) % segments.count
+                guard index >= 0, idx < segments.count else { return [] }
+                return segments[idx].sprites.compactMap { spec in
+                    let pieceZ = CGFloat(segments[idx].index) * segmentLength
+                        + max(0, min(1, spec.depth)) * segmentLength
+                    guard pieceZ <= positionZ + playerZ + snailLength / 2,
+                          pieceZ >= positionZ + playerZ - snailLength / 2 - currentSpeed * 0.02,
+                          near(spec: spec, lane: playerX) else { return nil }
+                    return ("\(spec.kind)", spec)
+                }
+            }
+            autopilotEvents.append([
+                "kind": "damageHazard", "frame": autopilotFrame, "row": row,
+                "hazards": nearbyHazards.map { item -> [String: Any] in
+                    ["kind": item.0, "offset": item.1.offset]
+                },
+            ])
+        }
+        if fallTimer >= 0, (previous?["falling"] as? Bool) != true {
+            autopilotEvents.append([
+                "kind": "fall", "frame": autopilotFrame, "row": fallRecordedAtRow,
+                "x": fallRecordedAtX,
+            ])
+        }
+        let record: [String: Any] = [
+            "frame": autopilotFrame,
+            "elapsed": elapsed,
+            "distance": positionZ,
+            "row": row,
+            "x": playerX,
+            "targetX": targetX,
+            "lane": autopilotChosenLane,
+            "clearRows": autopilotClearRows,
+            "hazards": autopilotHazards,
+            "rewards": autopilotRewards,
+            "plan": autopilotPlan.map { "\($0.kind)" },
+            "falling": fallTimer >= 0,
+            "fallTime": fallTimer,
+            "fallOffset": fallOffset,
+            "playerXAtFall": fallRecordedAtX,
+            "playerRowAtFall": fallRecordedAtRow,
+            "fallSideBeforeRewind": fallRecordedOffset,
+            "falls": autopilotFalls,
+            "speed": currentSpeed,
+            "meter": state.postalMeter,
+            "parcels": state.parcels,
+            "weapon": state.weaponLevel,
+            "invincible": invincible,
+            "phase": "\(state.phase)",
+            "runResult": autopilotLastResult,
+            "airborne": current?.airborne ?? false,
+            "noFall": current?.noFall ?? false,
+            "cameraShakeX": wobble.x,
+            "cameraShakeY": wobble.y,
+            "cameraX": camera?.point.x ?? 0,
+            "cameraHalfWidth": camera?.halfWidth ?? 0,
+            "nearby": nearby,
+            "events": autopilotEvents,
+        ]
+        autopilotLastRecord = record
+        // The event list is written out with this frame and then cleared, so
+        // each frame carries only what happened during it. Leaving it to build
+        // up meant every frame repeated every earlier event: a run with three
+        // hits wrote ten thousand of them, and the file grew for no reason.
+        autopilotEvents.removeAll(keepingCapacity: true)
+        guard JSONSerialization.isValidJSONObject(record),
+              var data = try? JSONSerialization.data(withJSONObject: record) else { return }
+        data.append(0x0A)
+        do {
+            try file.write(contentsOf: data)
+        } catch {
+            autopilotTracePath = nil
+            autopilotTraceFile = nil
+        }
+    }
+
+    private func near(spec: EntitySpec, lane: CGFloat) -> Bool {
+        let span = EntitySpec.width(for: spec.kind, explicit: spec.width, tier: spec.tier)
+        let reach = (span + turboContactWidth) / 2 / (roadModelWidth / 2)
+        return abs(spec.offset - lane) < reach
+    }
+
+    private func isRoadHazard(_ kind: EntityKind) -> Bool {
+        switch kind {
+        case .salt, .slug, .barrier, .turret, .ringSlow: true
+        default: false
+        }
+    }
+
+    /// A full-width fence is drawn as ordinary road, but it sits a little above
+    /// the camera eye. The route clears it with a short ramp flight rather than
+    /// steering around the fence.
+    private func autopilotJumpFullWall() {
+        guard hopTimer < 0, fallTimer < 0, !jetpackActive else { return }
+        let head = positionZ + playerZ
+        guard let gate = nearestAutopilotGate(to: head) else { return }
+        let barrierZ = gate.z
+        let hopFlight = currentSpeed * CGFloat(hopDuration) / 2
+        if barrierZ - head <= hopFlight, barrierZ - head >= hopFlight - segmentLength * 0.5 {
+            launch(power: 1.0, sound: .boost)
+        }
+    }
+
+    private func nearestAutopilotGate(to head: CGFloat) -> (segment: RoadSegment, z: CGFloat)? {
+        let snailLength = Sprites.snailModelWidth * roadWidth / roadModelWidth
+        let first = alignmentIndex(at: head - segmentLength, trackSize: segments.count)
+        return (0..<6).compactMap { ahead -> (RoadSegment, CGFloat)? in
+            let segment = segments[(first + ahead) % segments.count]
+            let posts = segment.sprites.filter { $0.kind == .barrier }
+            guard !posts.isEmpty else { return nil }
+            let z = CGFloat(segment.index) * segmentLength
+                + (posts.first?.depth ?? 0.5) * segmentLength
+            let span = posts.reduce((lo: CGFloat.infinity, hi: -CGFloat.infinity)) {
+                (min($0.lo, $1.offset), max($0.hi, $1.offset))
+            }
+            let solid = CGFloat(posts.count)
+                * Sprites.entitySolidWidth(.barrier, tier: 1) / roadModelWidth
+            return span.hi - span.lo < segmentLength / roadModelWidth + solid
+                ? (segment, z) : nil
+        }.first
+    }
+
+    /// Never called from inside the lane chooser. Once `-freeze N` has stopped
+    /// the race, SpriteKit has finished drawing that frame and can hand over a
+    /// texture without backpressuring the update loop.
+    private func captureHarvestFrame() {
+        guard let directory = frameDirectory,
+              let image = view?.texture(from: self)?.cgImage(),
+              let png = UIImage(cgImage: image).pngData() else { return }
+        let url = URL(fileURLWithPath: directory)
+            .appendingPathComponent(String(format: "frame-%05d.png", framesRun))
+        try? png.write(to: url, options: .atomic)
+        frameHarvestDelay = -1
+    }
+
+    private func recordAutopilotCamera() {
+        guard autopilot, let file = autopilotCameraRecordFile,
+              autopilotShotFrames.contains(autopilotFrame),
+              let camera = roadPoint(z: positionZ + playerZ, offset: 0),
+              let vehicle = roadPoint(z: positionZ + playerZ, offset: playerX) else { return }
+        // Save the exact projection before `-autopilot-shot` captures pixels.
+        let data: [String: Any] = [
+            "frame": autopilotFrame, "engineX": playerX,
+            "snailPx": vehicle.point.x, "roadCentrePx": camera.point.x,
+            "halfWidthPx": camera.halfWidth,
+        ]
+        if var line = try? JSONSerialization.data(withJSONObject: data) {
+            line.append(0x0A)
+            try? file.write(contentsOf: line)
+        }
+    }
+
+    /// `-autopilot-runs N` records N complete races and then stops on the last
+    /// results screen. `-autopilot-runs 0` continues until the app is closed.
+    private func autopilotFinished(won: Bool) {
+        autopilotLastResult = won ? "won" : "lost"
+        autopilotRun += 1
+        if let directory = frameDirectory, let image = view?.texture(from: self)?.cgImage(),
+           let png = UIImage(cgImage: image).pngData() {
+            let url = URL(fileURLWithPath: directory)
+                .appendingPathComponent(String(format: "finish-%05d.png", autopilotFrame))
+            try? png.write(to: url, options: .atomic)
+        }
+        if autopilotTracePath != nil {
+            guard let file = autopilotTraceFile else { return }
+            let event: [String: Any] = [
+                "kind": "finish", "frame": autopilotFrame,
+                "elapsed": elapsed, "distance": positionZ,
+                "meter": state.postalMeter, "parcels": state.parcels,
+                "falls": autopilotFalls, "won": won, "phase": "\(state.phase)",
+            ]
+            if var data = try? JSONSerialization.data(withJSONObject: event) {
+                data.append(0x0A)
+                try? file.write(contentsOf: data)
+            }
+        }
+        autopilotFrame = 0
+        autopilotFalls = 0
+        autopilotCompletedRuns += 1
+        guard autopilotRunLimit == 0 || autopilotCompletedRuns < autopilotRunLimit else {
+            return
+        }
+        autopilotFrame = 0
+        autopilotFalls = 0
+        autopilotEvents.removeAll(keepingCapacity: true)
+        autopilotLastRecord = nil
+        resetTrack()
+        startRace()
     }
     #endif
 
@@ -1396,6 +1978,11 @@ final class GameScene: SKScene {
 
             if let (seg, spec, hitZ) = firstTarget(from: from, to: bullet.z,
                                                    offset: bullet.offset) {
+                #if DEBUG
+                if spec.kind == .barrier && autopilot {
+                    print("AUTOPILOT_BARRIER_SHOT row=\(seg.index) head=\(positionZ + playerZ)")
+                }
+                #endif
                 // Stop the tracer on the target, then pop it.
                 bullet.z = hitZ
                 place(&bullet)
@@ -1597,7 +2184,7 @@ final class GameScene: SKScene {
                 // own 0.606 units come on top of the piece's width. `playerX`
                 // runs -1...1 across the road, so half of the nine model units
                 // the road is across is one of those.
-                let tolerance = (span + Sprites.snailModelWidth) / 2 / (roadModelWidth / 2)
+                let tolerance = (span + turboContactWidth) / 2 / (roadModelWidth / 2)
                 guard abs(spec.offset - playerX) < tolerance else { continue }
                 switch spec.kind {
                 case .parcel:
@@ -1836,7 +2423,19 @@ final class GameScene: SKScene {
     /// with a burst of speed for the landing.
     private func launch(power: CGFloat, sound: Sound.Effect) {
         guard fallTimer < 0, hopTimer < 0 else { return }
+        // A hop that ended on a collision overshot its span by a fraction of a
+        // frame. Carrying that into the next hop keeps the flight time exact,
+        // so the drawn arc and the route the planner reads agree.
+        #if DEBUG
+        if autopilotHopPending > 0 {
+            hopTimer = autopilotHopPending
+            autopilotHopPending = 0
+        } else {
+            hopTimer = 0
+        }
+        #else
         hopTimer = 0
+        #endif
         hopPower = power
         invincibleUntil = max(invincibleUntil, elapsed + hopDuration + 0.15)
         currentSpeed = min(baseTargetSpeed * 1.6,
@@ -1850,6 +2449,12 @@ final class GameScene: SKScene {
     /// the plunge itself is the punishment, and it is applied on the way out.
     private func beginFall(offset: CGFloat) {
         guard fallTimer < 0, state.phase == .running else { return }
+        #if DEBUG
+        autopilotFalls += 1
+        fallRecordedAtX = playerX
+        fallRecordedAtRow = segmentIndex(at: positionZ + playerZ)
+        fallRecordedOffset = offset
+        #endif
         fallTimer = 0
         fallOffset = offset
         gapFlight = -1
@@ -1990,8 +2595,13 @@ final class GameScene: SKScene {
             let fraction = spec.width > 0
                 ? spec.width
                 : Sprites.entityModelWidth(.hole) / roadModelWidth
-            let half = fraction / 2
-            let snailHalf = Sprites.snailModelWidth / 2 / (roadModelWidth / 2)
+            // `fraction` is a share of the whole road, and the road is two
+            // `playerX` units across, so the pit's own half-width is that
+            // share of a `playerX` unit. Halving it here made the planner
+            // read every pit as half as wide as the collision test does, and
+            // it steered Turbo so his flank hung over the rim.
+            let half = fraction
+            let snailHalf = turboContactWidth / 2 / (roadModelWidth / 2)
             if abs(side - spec.offset) < half + snailHalf { return false }
         }
         return true
@@ -3387,6 +3997,9 @@ final class GameScene: SKScene {
         Sound.shared.play(won ? (state.perfect ? .perfect : .win) : .lose)
         Sound.shared.speak(signOff ?? (won ? .victory : .dying))
         if recordsReplay && !isReplay { fileReplay() }
+        #if DEBUG
+        autopilotFinished(won: won)
+        #endif
         publish()
         onFinish?(won)
     }

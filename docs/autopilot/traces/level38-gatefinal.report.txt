@@ -1,0 +1,4 @@
+frames=1801 elapsed=31.87s distance=315338 falls=1 meter=66 phase=running
+hazards=barrier:30, heart:5, hole:1, parcel:7, ramp:26, ringExplode:56, salt:9, turret:10
+finishes=1
+finish frame=1801 won=False elapsed=31.87s meter=66 parcels=1 falls=1

@@ -251,7 +251,29 @@ struct EntitySpec {
     /// wants, so every turret a piece places is the slim first tier and this
     /// only carries the size a debug hook or the procedural art asks for.
     var tier: Int = 1
+
+    /// The span `handleCollisions` uses for this object. The track data's own
+    /// width wins, then the design width for pits and ramps, then the solid
+    /// width of the entity.
+    static func width(for kind: EntityKind, explicit: CGFloat, tier: Int) -> CGFloat {
+        switch kind {
+        case .hole, .ramp:
+            let fraction = explicit > 0
+                ? explicit
+                : Sprites.entityModelWidth(kind) / roadModelWidth
+            return fraction * roadModelWidth
+        default:
+            return Sprites.entitySolidWidth(kind, tier: tier)
+        }
+    }
+
 }
+
+/// Turbo's physical contact box, `1.469` model units from the retail build's
+/// `TURBOHOTSPOTS`. The drawn character is 0.16 of the road, while this box is
+/// wider; collision code uses the box so a pickup touches Turbo's flanks as it
+/// does under the original pointer contact.
+let turboContactWidth: CGFloat = 1.469
 
 /// One slice of road. The list of these forms the whole course, exactly like
 /// the segment files the original shipped with.
@@ -289,6 +311,11 @@ final class RoadSegment {
     /// lies under a trampoline's bounce, where the road is left behind and has
     /// to be picked up again on the way down.
     var noFall = false
+    /// True when the retail grid spells a complete fence across every drivable
+    /// column. The last proc course writes seven rails across its eight-column
+    /// piece, so reading only the occupied cells as the fence left the gap at
+    /// the kerb unmarked and made a route that is meant to launch land on it.
+    var wall = false
 
     init(index: Int) { self.index = index }
 }
@@ -1015,15 +1042,31 @@ enum TrackBuilder {
 
             var sprites: [EntitySpec] = []
             var saltCount = 0
-            // A row wall-to-wall of one fence character is the lip of a ledge
-            // the road runs across, not a fence to weave through, so it must
-            // stay passable. Only a fence that leaves a gap to thread counts.
-            let band = row[lo...hi]
+            // A complete row of fence characters is the lip of a ledge the
+            // road runs across, not a fence to weave through. Only a fence that
+            // leaves a gap to thread counts. The proc courses draw their road
+            // as eight columns and sometimes use a seven-cell fence, so the
+            // occupied span counts here; checking only `lo...hi` treated that
+            // as a lone fence and placed the autopilot on its far rail.
             let fenceChars: Set<Character> = ["|", "=", "-"]
             // The ramp markers: a run of these cells is the road itself
             // turning into a ramp, not a prop standing on it.
             let rampChars: Set<Character> = ["<", ">", "{", "}"]
-            let solidRow = band.allSatisfy { fenceChars.contains($0) }
+            var solidRow = row[0..<8].allSatisfy { $0 == "@" || fenceChars.contains($0) }
+            // A rail at both kerbs is a gate over the road, even where there
+            // are blank lanes between its posts. `Under Over` uses that shape
+            // to frame the hump the player drives over.
+            solidRow = solidRow || (fenceChars.contains(row[0])
+                && fenceChars.contains(row[7]))
+            if solidRow {
+                // A lone `-` row is a seam across the eight-column proc road,
+                // like its `@@@@@@@@` seams. It carries no rails on either
+                // side and is the road itself. The authored pieces spell a
+                // fence across seven cells, leaving the eighth clear.
+                let band = row[lo...hi]
+                solidRow = band.count < 8 || !band.allSatisfy { $0 == "-" }
+            }
+            seg.wall = solidRow
             var col = 0
             while col < 8 {
                 let ch = row[col]

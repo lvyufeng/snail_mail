@@ -1,0 +1,4 @@
+frames=1972 elapsed=33.23s distance=315392 falls=0 meter=30 phase=running
+hazards=asteroid:17, barrier:331, heart:10, hole:3, parcel:60, postOffice:9, ramp:43, ringExplode:72, ringUpgrade:4, salt:46
+finishes=1
+finish frame=1972 won=True elapsed=33.23s meter=30 parcels=19 falls=0

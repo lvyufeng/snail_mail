@@ -1,0 +1,4 @@
+frames=1503 elapsed=25.65s distance=146396 falls=0 meter=86 phase=running
+hazards=
+finishes=1
+finish frame=1503 won=False elapsed=25.65s meter=86 parcels=0 falls=0

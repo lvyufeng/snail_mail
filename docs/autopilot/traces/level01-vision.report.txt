@@ -1,0 +1,4 @@
+frames=710 elapsed=12.02s distance=65920 falls=0 meter=86 phase=running
+hazards=
+vision=1/1 matched engine_frames=1 median_error=0.075 within_0.30=1/1
+vision frame=710 engine_x=-0.800 camera_x=-0.875 error=0.075

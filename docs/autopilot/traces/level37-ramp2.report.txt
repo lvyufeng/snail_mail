@@ -1,0 +1,2 @@
+frames=2099 elapsed=74.59s distance=351748 falls=26 meter=4 phase=running
+hazards=barrier:20, hole:107, ramp:19, salt:9, slug:1

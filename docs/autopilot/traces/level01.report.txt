@@ -1,0 +1,4 @@
+frames=1512 elapsed=25.63s distance=146310 falls=0 meter=100 phase=running
+hazards=asteroid:1, heart:10, parcel:11, postOffice:16, turret:7
+finishes=1
+finish frame=1512 won=True elapsed=25.63s meter=100 parcels=15 falls=0

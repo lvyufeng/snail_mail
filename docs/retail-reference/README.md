@@ -274,3 +274,39 @@ asteroids. Over a continuous 60 s run on level 39 the process held 391-427 MB
 with no upward trend and 37-48% CPU in a Debug build.
 
 It is `#if DEBUG` only and compiles out of a release build.
+
+### Recording a hands-free run
+
+`-autopilot-trace PATH` writes one JSON line per frame from inside the lane
+chooser. Each line names the lane it chose, the snail's actual lane, nearby
+objects, falls, postal meter and camera shake. The snapshots make a bad lane
+choice reproducible: for the high-speed track, a gap ahead of the car was
+missing from the old six-row lookahead, so the autopilot moved at the pit's lip
+and fell in. Widening the lookahead and applying a high-speed correction in the
+frame it is chosen was the recorded early 39 race; the final 39 verification
+reached the post office with no falls. The ledger distinguishes that checkpoint
+from the final result.
+Level 47 also finishes a seed with 0 falls while planning around salt and pillars.
+
+```sh
+xcrun simctl launch booted com.lvyufeng.SnailMail \
+    -autostart arcade -level 39 -seed 4242 -autopilot \
+    -autopilot-trace /tmp/snailmail.jsonl
+python3 tools/check_autopilot.py /tmp/snailmail.jsonl
+```
+
+The checker exits nonzero whenever a run falls. This is proof that the race
+continued without a pit hit; it does not establish that its turns feel like the
+retail game.
+
+## 自动跑关记录
+
+方案 2 的自动跑关、碰撞与掉坑汇总、关键帧和复跑命令见
+[自动试玩记录](../autopilot/README.md)。
+
+**边界：** 当前原版未能进入可稳定驾驶的关卡，因此没有据此宣称重制版
+的操作手感或碰撞完全符合原版；这一轮保存的是重制版的实际运行记录。
+
+**未验证项：** 碰撞盒宽度（`TURBOHOTSPOTS` 的 1.469 模型单位）是按原版
+数据文件实现的，重制版因此能收起到路中的包裹；这一点还没有在可驾驶的
+原版里实测过。

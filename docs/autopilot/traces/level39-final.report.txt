@@ -1,0 +1,4 @@
+frames=2311 elapsed=38.82s distance=446173 falls=0 meter=100 phase=running
+hazards=asteroid:5, barrier:2, hole:1, ramp:23
+finishes=1
+finish frame=2311 won=False elapsed=38.82s meter=100 parcels=0 falls=0
