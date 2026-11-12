@@ -310,3 +310,35 @@ retail game.
 **未验证项：** 碰撞盒宽度（`TURBOHOTSPOTS` 的 1.469 模型单位）是按原版
 数据文件实现的，重制版因此能收起到路中的包裹；这一点还没有在可驾驶的
 原版里实测过。
+
+## Why the shipped build does not look like the original
+
+The remake draws its own artwork and its own music; the retail files are kept
+on disk for comparison only, and the gate is one line:
+
+    static let installed = imported
+        && ProcessInfo.processInfo.arguments.contains("-retailart")
+
+Everything behind that gate — the artwork, the music, the voice — is off unless
+a run asks for it. The decision is deliberate (commit `1377cf3`): the 2005
+content stays on the machine that owns a copy of the game rather than going
+into the repo or the bundle.
+
+Measured side by side, `-retailart` is clearly the better-looking build:
+
+- **Turbo** — the procedural snail is flat colour with a geometric eye and a
+  hard elliptical shadow; the retail frames carry a gradient across the shell,
+  a soft highlight along its curve, and modelled body.
+- **The road** — the remake paints a blue-and-white lattice of sixteen cells;
+  the retail surface is a mosaic of blocks with lit squares on it.
+- **The sky** — a single hue gradient against the retail painted nebula.
+- **The music** — `buildMusic()` synthesises a four-bar loop of square waves at
+  138 bpm (A A D E) against the retail's own tracks.
+
+The gate costs nothing in play: a run with `-retailart` finished level 37 in
+45.99 s with no falls, sixteen parcels and 92 of 100 meter, the same as the
+procedural build.
+
+One thing the richer art costs is legibility: the nebula is busy behind the
+highway, and the HUD text reads less clearly against it than against the plain
+gradient. That is the trade the switch makes.
