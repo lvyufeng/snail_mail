@@ -302,6 +302,14 @@ final class Sound {
         for music in [Music.menu, .intro, .race(0), .race(1), .race(2), .race(3)] {
             lines.append("music \(music.retailPath): \(describe(retail(music.retailPath, format: musicFormat)))")
         }
+        // The synthesised fallback is the music a checkout without the retail
+        // tracks actually plays, so it belongs in the report too — with its
+        // peak and RMS, since a clipping mix or a silent one shows in numbers
+        // when there are no speakers to check by ear.
+        let race = buildMusic(menu: false)
+        lines.append("synth race: \(describe(race)) \(peakAndRMS(race))")
+        let menu = buildMusic(menu: true)
+        lines.append("synth menu: \(describe(menu)) \(peakAndRMS(menu))")
         let effects: [Effect] = [.shoot(1), .shoot(2), .shoot(3), .enemyFire, .collect, .deliver,
                                  .upgrade(1), .upgrade(7), .hit, .asteroid, .boost, .jetpack,
                                  .skid, .heart, .extraLife, .slow, .explodeRing, .invincible,
@@ -343,6 +351,21 @@ final class Sound {
                       Int(buffer.format.channelCount),
                       buffer.format.sampleRate)
     }
+
+    /// Peak and RMS of the first channel, the two numbers that say whether a
+    /// rendered buffer is alive: silent mixes read rms 0.000, clipping ones
+    /// peak at 1.00.
+    private func peakAndRMS(_ buffer: AVAudioPCMBuffer) -> String {
+        guard let data = buffer.floatChannelData else { return "no data" }
+        let n = Int(buffer.frameLength)
+        var peak = 0.0, sum = 0.0
+        for i in 0..<n {
+            let v = abs(Double(data[0][i]))
+            peak = max(peak, v)
+            sum += v * v
+        }
+        return String(format: "peak %.2f rms %.3f", peak, (sum / Double(max(1, n))).squareRoot())
+    }
 #endif
 
     func setMuted(_ value: Bool) {
@@ -381,7 +404,12 @@ final class Sound {
             return
         }
         musicSelection = music
-        musicBuffer = retail(music.retailPath, format: musicFormat) ?? buildMusic()
+        // The race loop gets the full arrangement; the menu and the intro get
+        // the verse, softer.
+        var calm = true
+        if case .race = music { calm = false }
+        musicBuffer = retail(music.retailPath, format: musicFormat)
+            ?? buildMusic(menu: calm)
         guard ready, let buffer = musicBuffer else { return }
         musicNode.stop()
         scheduleMusic(buffer)
@@ -688,23 +716,106 @@ final class Sound {
         }
     }
 
-    /// A four-bar loop: a driving bass, an arpeggio lead and a soft kick.
-    private func buildMusic() -> AVAudioPCMBuffer {
-        let bpm = 138.0
+    /// The shipped soundtrack. The retail tracks stay behind `-retailart`, so
+    /// a checkout without them synthesises its own: a rock loop in A minor —
+    /// a low-passed bass and power chords driving eighth notes, a pentatonic
+    /// lead answering itself an octave up, and a kit — rendered once into a
+    /// buffer and looped. Sixteen bars split into a verse and a chorus, so a
+    /// race does not wear as one four-bar figure; the menu and the intro get
+    /// the verse alone, softer and without the snare.
+    private var synthMusicCache: [Bool: AVAudioPCMBuffer] = [:]
+
+    private func buildMusic(menu: Bool) -> AVAudioPCMBuffer {
+        if let hit = synthMusicCache[menu] { return hit }
+        let bpm = 140.0
         let beat = 60.0 / bpm
-        let bars = 4
-        let total = beat * 4 * Double(bars)
-        let roots = [110.0, 110.0, 146.83, 164.81]          // A A D E
-        let arp = [440.0, 554.37, 659.25, 554.37, 493.88, 659.25, 880.0, 659.25]
-        return buffer(duration: total, format: musicFormat) { t in
-            let bar = min(bars - 1, Int(t / (beat * 4)))
+        let eighth = beat / 2
+        let sixteenth = beat / 4
+        // i VI III VII in A minor — A F C G — and the chorus lands on
+        // VI VII i VII so the loop turns the corner back to A.
+        let verse: [Double] = [110, 110, 87.31, 87.31, 130.81, 130.81, 98, 98]
+        let chorusRoots: [Double] = [87.31, 87.31, 98, 98, 110, 110, 98, 98]
+        let roots = menu ? verse : verse + chorusRoots
+        let total = beat * 4 * Double(roots.count)
+        // Two bars of A-minor pentatonic, a rest on the seventh sixteenth of
+        // each half so the figure breathes. The chorus answers an octave up.
+        let verseLead: [Double] = [
+            440, 0, 523.25, 0, 587.33, 0, 659.25, 0,
+            0, 587.33, 523.25, 0, 440, 0, 0, 0,
+            440, 0, 523.25, 0, 587.33, 0, 659.25, 0,
+            783.99, 0, 659.25, 0, 587.33, 0, 0, 0,
+        ]
+        let chorusLead: [Double] = [
+            659.25, 0, 659.25, 0, 783.99, 0, 880, 0,
+            0, 783.99, 659.25, 0, 587.33, 0, 523.25, 0,
+            587.33, 0, 659.25, 0, 783.99, 0, 880, 0,
+            659.25, 0, 587.33, 0, 523.25, 0, 440, 0,
+        ]
+        let sr = musicFormat.sampleRate
+
+        var bassPhase = 0.0, chordPhase = 0.0, leadPhase = 0.0
+        var lpBass = 0.0, lpChord = 0.0
+        var seed: UInt64 = 0x9E3779B97F4A7C15
+
+        let rendered = buffer(duration: total, format: musicFormat) { t in
+            let bar = min(roots.count - 1, Int(t / (beat * 4)))
             let root = roots[bar]
-            let step = Int(t / (beat / 2)) % arp.count
-            let bassPhase = t * root
-            let leadPhase = t * arp[step]
-            let beatPhase = t.truncatingRemainder(dividingBy: beat) / beat
-            let kick = exp(-beatPhase * 12) * sin(2 * .pi * 55 * t)
-            return square(bassPhase) * 0.16 + square(leadPhase) * 0.09 + kick * 0.25
+            let chorus = !menu && bar >= 8
+
+            // Bass: square through a one-pole low-pass, eighths with a fifth
+            // pick-up into each chord change.
+            let bLocal = t.truncatingRemainder(dividingBy: eighth) / eighth
+            let bassFreq = Int(t / eighth) % 8 == 7 ? root * 1.5 : root
+            bassPhase += bassFreq / sr
+            let raw = square(bassPhase)
+            lpBass += (raw - lpBass) * 0.18
+            let bass = lpBass * 0.34 * exp(-bLocal * 1.5)
+
+            // Power chord: root, fifth, octave, the octave detuned a third of
+            // a per cent so the top stirs. Quarter notes in the verse, eighths
+            // in the chorus.
+            let chordStep = chorus ? eighth : beat
+            let cLocal = t.truncatingRemainder(dividingBy: chordStep) / chordStep
+            chordPhase += root / sr
+            let chordRaw = square(chordPhase) * 0.55
+                + square(chordPhase * 1.5) * 0.40
+                + square(chordPhase * 2.003) * 0.30
+            lpChord += (chordRaw - lpChord) * 0.10
+            let chord = lpChord * (chorus ? 0.15 : 0.09) * exp(-cLocal * 1.1)
+
+            // Lead: square with a per-note decay, resting where the pattern
+            // says so.
+            let pattern = chorus ? chorusLead : verseLead
+            let leadFreq = pattern[Int(t / sixteenth) % pattern.count]
+            var lead = 0.0
+            if leadFreq > 0 {
+                let lLocal = t.truncatingRemainder(dividingBy: sixteenth) / sixteenth
+                leadPhase += leadFreq / sr
+                lead = square(leadPhase) * 0.10 * exp(-lLocal * 4.5)
+            }
+
+            // Kit. The kick lands on one and three, and the chorus pushes the
+            // "and" of four; the snare backs beats two and four in the race
+            // loop only; hats tick every eighth with the off-beats accented.
+            let halfIdx = Int(t / eighth) % 8
+            let hLocal = t.truncatingRemainder(dividingBy: eighth)
+            var kick = 0.0
+            if halfIdx == 0 || halfIdx == 4 || (chorus && halfIdx == 7) {
+                kick = sin(2 * .pi * 52 * hLocal) * exp(-hLocal * 11) * 0.52
+            }
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            let rnd = Double((seed >> 33) & 0xFFFF) / 32768.0 - 1
+            var snare = 0.0
+            if !menu, halfIdx == 2 || halfIdx == 6 {
+                let sLocal = t.truncatingRemainder(dividingBy: beat)
+                snare = rnd * exp(-sLocal * 18) * 0.26
+                    + sin(2 * .pi * 185 * sLocal) * exp(-sLocal * 30) * 0.18
+            }
+            let hat = rnd * exp(-hLocal * 110) * (halfIdx % 2 == 1 ? 0.085 : 0.05)
+
+            return tanh(bass + chord + lead + kick + snare + hat)
         }
+        synthMusicCache[menu] = rendered
+        return rendered
     }
 }
