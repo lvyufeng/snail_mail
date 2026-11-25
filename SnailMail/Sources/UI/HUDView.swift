@@ -548,17 +548,25 @@ private struct ParcelCounter: View {
                     .foregroundStyle(Palette.gold)
                     .shadow(color: .black.opacity(0.7), radius: 2)
 
-                Text(state.weaponName)
-                    .font(.retailFixed(labelFont, weight: .black))
-                    .tracking(1)
-                    .foregroundStyle(Palette.cyan)
-                    .shadow(color: .black.opacity(0.7), radius: 2)
-
-                Text(mode.title)
-                    .font(.retailFixed(labelFont - 1, weight: .bold))
-                    .foregroundStyle(Palette.ink.opacity(0.75))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                // The weapon and the mode ride in one chip of the casing
+                // colour, so the corner carries the same gauge language as
+                // both edges instead of three loose lines of type.
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(state.weaponName)
+                        .font(.retailFixed(labelFont, weight: .black))
+                        .tracking(1)
+                        .foregroundStyle(Palette.cyan)
+                    Text(mode.title)
+                        .font(.retailFixed(labelFont - 1, weight: .bold))
+                        .foregroundStyle(Palette.ink.opacity(0.9))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                }
+                .padding(.horizontal, 8 * scale)
+                .padding(.vertical, 4 * scale)
+                .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    .fill(Color(hex: "#10081F").opacity(0.72)))
+                .shadow(color: .black.opacity(0.4), radius: 3)
             }
             .padding(.top, 4 * scale)
         }
