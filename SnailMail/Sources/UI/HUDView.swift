@@ -137,9 +137,11 @@ struct HUDView: View {
 
                 PostalMeter(fraction: state.meterFraction, scale: s)
                     // The retail tube runs from y=70 to y=466 of the 640x480
-                    // frame, so it stops 14 rows short of the bottom edge
-                    // rather than running off it.
-                    .frame(width: 64 * s, height: max(1, height - 84 * sy))
+                    // frame — but that frame is landscape, and this screen is
+                    // not: copying "fourteen rows short of the bottom" sent
+                    // the tube down through the touch controls the PC build
+                    // never had. It stops above the bottom row instead.
+                    .frame(width: 64 * s, height: max(1, height - 70 * sy - 150 * s))
                     .padding(.trailing, 16 * s)
                     .padding(.top, 70 * sy)
             }
@@ -266,24 +268,33 @@ private struct PostalMeter: View {
                     }
                 } else {
                     // Without the art the meter still reads: the same line
-                    // between the spent tube and the pink below it, in the two
-                    // colours the retail tube files themselves paint — the
-                    // washed violet `damageguage` and the hot pink
-                    // `damageguagefull` — and at the strength those files carry
-                    // them, so the tube stays glass over the sky instead of
-                    // turning into a solid bar of colour down the edge.
-                    VStack(spacing: 0) {
+                    // between the spent tube and the pink below it, in the
+                    // two colours the retail tube files themselves paint.
+                    // The tube used to be plain glass over the sky, which on
+                    // the painted nebula and the mosaic road read as a
+                    // rendering fault rather than a gauge — it now sits in a
+                    // dark casing with a lit lip, the way a gauge is built.
+                    ZStack(alignment: .topLeading) {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Color(hex: "#10081F").opacity(0.78))
+                        VStack(spacing: 0) {
+                            Rectangle()
+                                .fill(Color(hex: "#89459B").opacity(0.58))
+                                .frame(height: h * split / 393)
+                            Rectangle()
+                                .fill(Color(hex: "#E03A75").opacity(0.90))
+                        }
+                        // The lit lip down the left edge: the highlight that
+                        // makes a cylinder read as glass, not as a sticker.
                         Rectangle()
-                            .fill(Color(hex: "#89459B").opacity(0.35))
-                            .frame(height: h * split / 393)
-                        Rectangle()
-                            .fill(Color(hex: "#E03A75").opacity(0.51))
+                            .fill(Color.white.opacity(0.22))
+                            .frame(width: w * 0.14)
                     }
                     .frame(width: w, height: h)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(Palette.ink.opacity(0.55), lineWidth: 1.5)
+                            .stroke(Palette.ink.opacity(0.65), lineWidth: 1.5)
                     )
                 }
             }
