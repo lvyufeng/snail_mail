@@ -107,6 +107,75 @@ enum RetailAssets {
         }
     }
 
+    /// A synthesised tiling for the checkout that runs without the retail
+    /// texture: the same 32x32 grid the renderer samples, carrying a diamond
+    /// lattice in the track's two tones plus hashed decorative accents, so
+    /// the shipped road keeps the mosaic depth the flat two-tone checker
+    /// never had. Hashed deterministically, so a given cell reads the same on
+    /// every launch and the surface does not shimmer under the camera.
+    static func syntheticSurface(track: Int) -> TrackSurface {
+        let family = max(0, min(3, track))
+        // dark, light, deep accent, pale accent, mid accent — from the same
+        // families `roadColours` names for each track.
+        let palette: [UIColor]
+        switch family {
+        case 1:  palette = [UIColor(hex: "#007D17"), UIColor(hex: "#00B016"),
+                            UIColor(hex: "#0A4A0E"), UIColor(hex: "#3EC830"),
+                            UIColor(hex: "#006412")]
+        case 2:  palette = [UIColor(hex: "#517CA6"), UIColor(hex: "#6AA7CB"),
+                            UIColor(hex: "#40648C"), UIColor(hex: "#8FBCDC"),
+                            UIColor(hex: "#5E85AC")]
+        case 3:  palette = [UIColor(hex: "#7D006C"), UIColor(hex: "#AF00A6"),
+                            UIColor(hex: "#40003A"), UIColor(hex: "#C820BC"),
+                            UIColor(hex: "#5A0050")]
+        default: palette = [UIColor(hex: "#C07C30"), UIColor(hex: "#D0AE7B"),
+                            UIColor(hex: "#8A4A20"), UIColor(hex: "#E2C08A"),
+                            UIColor(hex: "#A06028")]
+        }
+        var tone = [UInt8](repeating: 0, count: 32 * 32)
+        let seed = UInt64(0x5EED) &+ UInt64(family) &* 0x9E37
+        // The lattice: light cells on a 4-cell diagonal period, which is the
+        // diamond the retail texture draws.
+        for by in 0..<32 {
+            for bx in 0..<32 {
+                tone[by * 32 + bx] = (bx + by) % 4 == 0 ? 1 : 0
+            }
+        }
+        // Decorative tiles: hashed 2x2 patches on a coarse grid — sparse
+        // enough to read as placed stones, clustered enough to read as tiles
+        // rather than salt-and-pepper noise. Single scattered cells were
+        // tried first and the road looked broken.
+        func patchHash(_ gx: Int, _ gy: Int, _ salt: UInt64) -> Double {
+            var h = seed &+ salt
+            h = h &+ UInt64(gx) &* 0xBF58476D1CE4E5B9
+            h = h &+ UInt64(gy) &* 0x94D049BB133111EB
+            h ^= h >> 30
+            h = h &* 0xBF58476D1CE4E5B9
+            h ^= h >> 27
+            return Double(h & 0xFFFF) / 65536.0
+        }
+        for gy in 0..<16 {
+            for gx in 0..<16 {
+                guard patchHash(gx, gy, 1) < 0.11 else { continue }
+                let pick = patchHash(gx, gy, 2)
+                let t: UInt8 = pick < 0.38 ? 2 : (pick < 0.74 ? 3 : 4)
+                let ox = gx * 2, oy = gy * 2
+                for dy in 0..<2 {
+                    for dx in 0..<2 {
+                        tone[(oy + dy) * 32 + ox + dx] = t
+                    }
+                }
+            }
+        }
+        let components = palette.map { color -> (r: Double, g: Double, b: Double) in
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            color.getRed(&r, green: &g, blue: &b, alpha: &a)
+            return (Double(r) * 255, Double(g) * 255, Double(b) * 255)
+        }
+        return TrackSurface(blocks: 32, tone: tone, palette: palette,
+                            components: components)
+    }
+
     // MARK: - Road surface
 
     /// One level's highway tiling, reduced to the tones it is drawn from. The

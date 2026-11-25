@@ -342,3 +342,21 @@ procedural build.
 One thing the richer art costs is legibility: the nebula is busy behind the
 highway, and the HUD text reads less clearly against it than against the plain
 gradient. That is the trade the switch makes.
+
+## Correction to the props-commit note
+
+The message on the props commit (`18d1e23`) claims the sky and the road were
+already the retail art in the shipped build. That was wrong, and it came from
+checking that the files were in the bundle while forgetting that every
+`RetailAssets` lookup is gated behind `installed`, which is false without
+`-retailart`. So until the nebula commit the shipped sky was the procedural
+gradient and the road was the flat two-tone checker; the pixel statistics that
+"confirmed" the retail nebula could not tell a smooth gradient with glow knots
+from a painted one.
+
+The nebula commit (`paint the sky and the road mosaic procedurally`) closes
+that gap the legal way: the sky is a hashed value-noise nebula in the level's
+own hue with stars, and the road samples a synthesised 32x32 tiling — diamond
+lattice plus clustered decorative tiles — through the same renderer the retail
+texture uses. A dark base quad under each segment's cells keeps the seams
+between cells reading as road instead of showing the black behind.

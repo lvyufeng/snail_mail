@@ -140,6 +140,125 @@ enum Sprites {
         return node
     }
 
+    // MARK: - Painted nebula
+
+    /// Deterministic hash — the same field on every launch, so a level keeps
+    /// one sky instead of re-rolling it each time the size changes.
+    private static func nebulaHash(_ x: Int, _ y: Int, _ seed: UInt64) -> Double {
+        var h = seed &* 0x9E3779B97F4A7C15
+        h = h &+ UInt64(truncatingIfNeeded: x) &* 0xBF58476D1CE4E5B9
+        h = h &+ UInt64(truncatingIfNeeded: y) &* 0x94D049BB133111EB
+        h ^= h >> 30
+        h = h &* 0xBF58476D1CE4E5B9
+        h ^= h >> 27
+        h = h &* 0x94D049BB133111EB
+        h ^= h >> 31
+        return Double(h & 0xFFFF_FFFF) / Double(0xFFFF_FFFF)
+    }
+
+    /// Smooth value noise: the hash field bilinearly eased between cells.
+    private static func nebulaNoise(_ x: Double, _ y: Double, _ seed: UInt64) -> Double {
+        let xi = Int(floor(x)), yi = Int(floor(y))
+        let xf = x - Double(xi), yf = y - Double(yi)
+        let u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf)
+        let a = nebulaHash(xi, yi, seed), b = nebulaHash(xi + 1, yi, seed)
+        let c = nebulaHash(xi, yi + 1, seed), d = nebulaHash(xi + 1, yi + 1, seed)
+        return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v
+    }
+
+    /// FBm — several noise octaves stacking, which is what gives a cloud its
+    /// big shapes with ragged edges instead of obvious squares.
+    private static func nebulaCloud(_ x: Double, _ y: Double, _ seed: UInt64,
+                                    octaves: Int) -> Double {
+        var amp = 0.5, f = 1.0, sum = 0.0, norm = 0.0
+        for o in 0..<octaves {
+            sum += nebulaNoise(x * f, y * f, seed &+ UInt64(o) &* 7919) * amp
+            norm += amp
+            amp *= 0.55
+            f *= 2.15
+        }
+        return sum / norm
+    }
+
+    /// Paints one level's nebula. A near-black field of the level's hue, two
+    /// value-noise clouds over it — one warmed toward magenta, one cooled
+    /// toward blue — and a field of stars, the brightest few carrying a thin
+    /// cross flare. The glow knots the caller layers on top stay where they
+    /// were; this replaces only the flat gradient they used to sit on.
+    /// Rendered at half resolution (the clouds are soft, the sprite scales)
+    /// and cached per hue, so a size change re-renders at most twice.
+    static func nebulaTexture(size: CGSize, tint: UIColor, seed: UInt64) -> SKTexture {
+        let key = "nebula-\(Int(size.width))x\(Int(size.height))-\(tint)-\(seed)"
+        if let hit = bakedTextures[key] { return hit }
+        let w = max(2, Int(size.width / 2)), h = max(2, Int(size.height / 2))
+
+        var hs: CGFloat = 0, ss: CGFloat = 0, vs: CGFloat = 0, av: CGFloat = 0
+        tint.getHue(&hs, saturation: &ss, brightness: &vs, alpha: &av)
+        func shade(_ dh: CGFloat, _ s: CGFloat, _ b: CGFloat) -> (Double, Double, Double) {
+            var r: CGFloat = 0, g: CGFloat = 0, bl: CGFloat = 0, al: CGFloat = 0
+            UIColor(hue: fmod(hs + dh + 1, 1), saturation: min(1, s),
+                    brightness: min(1, b), alpha: 1).getRed(&r, green: &g, blue: &bl, alpha: &al)
+            return (Double(r), Double(g), Double(bl))
+        }
+        // The field: the level's hue taken down to near black at the bottom.
+        let top = shade(0, 0.80, 0.16), bot = shade(0, 0.90, 0.035)
+        // The warm cloud leans magenta, the cool one leans blue.
+        let warm = shade(0.055, 0.95, 0.62)
+        let cool = shade(-0.085, 0.75, 0.38)
+
+        var data = [UInt8](repeating: 0, count: w * h * 4)
+        let seedA = seed &+ 0x1234, seedB = seed &+ 0xABCD
+        for y in 0..<h {
+            let ty = Double(y) / Double(h)
+            for x in 0..<w {
+                let n1 = nebulaCloud(Double(x) / 64, Double(y) / 64, seedA, octaves: 4)
+                let n2 = nebulaCloud(Double(x) / 38, Double(y) / 38, seedB, octaves: 3)
+                var m1 = min(1, max(0, (n1 - 0.52) / 0.26))
+                var m2 = min(1, max(0, (n2 - 0.56) / 0.24))
+                m1 = m1 * m1 * (3 - 2 * m1)
+                m2 = m2 * m2 * (3 - 2 * m2)
+                let o = (y * w + x) * 4
+                data[o] = UInt8(max(0, min(255, (top.0 + (bot.0 - top.0) * ty
+                    + warm.0 * m1 * 0.60 + cool.0 * m2 * 0.45) * 255)))
+                data[o + 1] = UInt8(max(0, min(255, (top.1 + (bot.1 - top.1) * ty
+                    + warm.1 * m1 * 0.60 + cool.1 * m2 * 0.45) * 255)))
+                data[o + 2] = UInt8(max(0, min(255, (top.2 + (bot.2 - top.2) * ty
+                    + warm.2 * m1 * 0.60 + cool.2 * m2 * 0.45) * 255)))
+                data[o + 3] = 255
+            }
+        }
+        // Stars over the top two thirds, brightness hashed.
+        let count = w * h / 9_000
+        for i in 0..<count {
+            let sx = Int(nebulaHash(i, 11, seed &+ 77) * Double(w))
+            let sy = Int(nebulaHash(i, 23, seed &+ 77) * Double(h) * 0.66)
+            let bright = 0.30 + 0.70 * nebulaHash(i, 37, seed &+ 77)
+            let big = nebulaHash(i, 41, seed &+ 77) > 0.94
+            let v = UInt8(max(0, min(255, 255 * bright)))
+            let o = (min(h - 1, sy) * w + min(w - 1, sx)) * 4
+            data[o] = v; data[o + 1] = v; data[o + 2] = UInt8(min(255, Int(v) + 20)); data[o + 3] = 255
+            if big {
+                for k in -6...6 where k != 0 {
+                    let fx = min(w - 1, max(0, sx + k))
+                    let fo = (sy * w + fx) * 4
+                    let fv = UInt8(max(0, min(255, 255 * bright * (1 - Double(abs(k)) / 7))))
+                    data[fo] = fv; data[fo + 1] = fv; data[fo + 2] = UInt8(min(255, Int(fv) + 20))
+                    let fy = min(h - 1, max(0, sy + k))
+                    let vo = (fy * w + sx) * 4
+                    data[vo] = fv; data[vo + 1] = fv; data[vo + 2] = UInt8(min(255, Int(fv) + 20))
+                }
+            }
+        }
+
+        let ctx = CGContext(data: &data, width: w, height: h, bitsPerComponent: 8,
+                            bytesPerRow: w * 4, space: CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        let tex = SKTexture(cgImage: ctx.makeImage()!)
+        tex.filteringMode = .linear
+        bakedTextures[key] = tex
+        return tex
+    }
+
     // MARK: - Retail artwork
 
     /// The imported retail sprite for `path`, sized so its artwork spans `width`

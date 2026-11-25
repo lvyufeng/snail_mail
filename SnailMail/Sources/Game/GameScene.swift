@@ -361,6 +361,11 @@ final class GameScene: SKScene {
     /// gets its own path. Empty when the retail art is missing, in which case
     /// the two-tone `roadPool`/`roadPoolB` checkerboard takes over.
     private var roadTonePool: [[SKShapeNode]] = []
+    /// The dark base under each segment's tone cells. The cells sample the
+    /// tiling and do not necessarily tile edge to edge at every depth, so a
+    /// hairline of whatever is behind the road used to show through at the
+    /// seams; the base keeps those seams reading as road.
+    private var roadBasePool: [SKShapeNode] = []
     private let roadSurface: RetailAssets.TrackSurface?
     /// How much of the road's width one retail tile covers, and how many cells
     /// the tiling has on a side. The lattice is 32 cells square and half of it
@@ -452,6 +457,7 @@ final class GameScene: SKScene {
         self.roadOrange = palette.dark
         self.roadTan = palette.light
         self.roadSurface = RetailAssets.trackSurface(config.track)
+            ?? RetailAssets.syntheticSurface(track: config.track)
         super.init(size: size)
         self.scaleMode = .resizeFill
         self.backgroundColor = GameScene.skyShade(GameScene.skyTint(for: config.background),
@@ -773,13 +779,14 @@ final class GameScene: SKScene {
         // so the level's hue is taken down to a near-black field and then lit
         // again in the glow above the horizon.
         let tint = GameScene.skyTint(for: config.background)
-        let top = GameScene.skyShade(tint, saturation: 0.72, brightness: 0.24)
-        let grad = Sprites.gradientTexture(size: CGSize(width: 8, height: size.height),
-                                           colors: [top,
-                                                    GameScene.skyShade(tint, saturation: 0.85,
-                                                                       brightness: 0.10),
-                                                    UIColor(hex: "#04020A")])
-        let backdrop = SKSpriteNode(texture: grad)
+        // The backdrop is a painted nebula now, not a gradient: two hashed
+        // value-noise clouds over the level's near-black field, with stars.
+        // The seed comes from the level's own name, so the same level always
+        // wears the same sky.
+        var skySeed = UInt64(0)
+        for byte in config.background.utf8 { skySeed = skySeed &* 131 &+ UInt64(byte) }
+        let nebula = Sprites.nebulaTexture(size: size, tint: tint, seed: skySeed &+ 0x5EED)
+        let backdrop = SKSpriteNode(texture: nebula)
         backdrop.size = size
         backdrop.position = CGPoint(x: size.width / 2, y: size.height / 2)
         #if DEBUG
@@ -931,6 +938,11 @@ final class GameScene: SKScene {
                     row.append(node)
                 }
                 roadTonePool.append(row)
+                // The base sits between this segment's cells and the next
+                // segment back, so the cells always paint over it.
+                let base = makeQuadNode(fill: surface.palette[0], z: -CGFloat(i) - 0.02)
+                roadLayer.addChild(base)
+                roadBasePool.append(base)
             } else {
                 roadPool.append(makeQuadNode(fill: .black, z: -CGFloat(i)))
                 roadPoolB.append(makeQuadNode(fill: .black, z: -CGFloat(i) + 0.05))
@@ -2967,6 +2979,7 @@ final class GameScene: SKScene {
             if i < roadTonePool.count {
                 for node in roadTonePool[i] { node.isHidden = true }
             }
+            if i < roadBasePool.count { roadBasePool[i].isHidden = true }
             wallLeftPool[i].isHidden = true
             wallRightPool[i].isHidden = true
         }
@@ -3577,6 +3590,19 @@ final class GameScene: SKScene {
                                surface: RetailAssets.TrackSurface) {
         let tones = roadTonePool[n]
         guard !tones.isEmpty else { return }
+        // The base under the cells: one trapezoid over the whole segment, so
+        // the seams between cells read as the road's own dark tone.
+        if n < roadBasePool.count {
+            let base = roadBasePool[n]
+            let whole = CGMutablePath()
+            whole.move(to: CGPoint(x: seg.p1.screenX - seg.p1.screenW, y: fy(seg.p1.screenY)))
+            whole.addLine(to: CGPoint(x: seg.p1.screenX + seg.p1.screenW, y: fy(seg.p1.screenY)))
+            whole.addLine(to: CGPoint(x: seg.p2.screenX + seg.p2.screenW, y: fy(seg.p2.screenY)))
+            whole.addLine(to: CGPoint(x: seg.p2.screenX - seg.p2.screenW, y: fy(seg.p2.screenY)))
+            whole.closeSubpath()
+            base.path = whole
+            base.isHidden = false
+        }
 
         let l1 = seg.p1.screenX - seg.p1.screenW, r1 = seg.p1.screenX + seg.p1.screenW
         let l2 = seg.p2.screenX - seg.p2.screenW, r2 = seg.p2.screenX + seg.p2.screenW
