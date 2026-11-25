@@ -960,10 +960,9 @@ final class GameScene: SKScene {
         snail.setScale(snailScale)
         addChild(snail)
 
-        // Soft shadow under the snail so it sits on the road.
-        let shadow = SKShapeNode(ellipseOf: CGSize(width: 120, height: 26))
-        shadow.fillColor = UIColor.black.withAlphaComponent(0.28)
-        shadow.strokeColor = .clear
+        // Soft shadow under the snail so it sits on the road. The shadow fades
+        // out at its rim — a filled ellipse stops dead and reads as a hole.
+        let shadow = Sprites.softShadowSprite(width: 120, height: 26)
         shadow.zPosition = 29
         shadow.name = "snailshadow"
         addChild(shadow)

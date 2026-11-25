@@ -58,6 +58,88 @@ enum Sprites {
         return n
     }
 
+    // MARK: - Baked gradients
+
+    /// Gradient textures already rendered, keyed by the call that asked for
+    /// them. Every scene asks for the same few, so they are rendered once.
+    private static var bakedTextures: [String: SKTexture] = [:]
+
+    /// Renders a gradient through an arbitrary path into a texture — the one
+    /// thing `SKShapeNode` cannot do itself, since a shape's fill is one flat
+    /// colour. This is the difference between a ball that reads as lit and one
+    /// that reads as a sticker.
+    private static func bakedTexture(_ key: String, size: CGSize,
+                                     draw: (CGContext, CGSize) -> Void) -> SKTexture {
+        if let hit = bakedTextures[key] { return hit }
+        let scale: CGFloat = 2
+        let ctx = CGContext(data: nil, width: Int(size.width * scale),
+                            height: Int(size.height * scale), bitsPerComponent: 8,
+                            bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.scaleBy(x: scale, y: scale)
+        draw(ctx, size)
+        let tex = SKTexture(cgImage: ctx.makeImage()!)
+        tex.filteringMode = .linear
+        bakedTextures[key] = tex
+        return tex
+    }
+
+    /// A ball lit from `focus`, given as the share of the square across and up
+    /// the highlight sits. The gradient falls from `inner` through `mid` into
+    /// `outer` at the rim, so the sphere turns away into shadow.
+    static func radialSprite(_ diameter: CGFloat, inner: UIColor, mid: UIColor,
+                             outer: UIColor, focus: CGPoint) -> SKSpriteNode {
+        let key = "radial-\(diameter)-\(inner)-\(mid)-\(outer)-\(focus.x)-\(focus.y)"
+        let tex = bakedTexture(key, size: CGSize(width: diameter, height: diameter)) { ctx, size in
+            let rect = CGRect(origin: .zero, size: size)
+            ctx.addEllipse(in: rect.insetBy(dx: 1, dy: 1))
+            ctx.clip()
+            let grad = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                  colors: [inner.cgColor, mid.cgColor, outer.cgColor] as CFArray,
+                                  locations: [0, 0.55, 1])!
+            ctx.drawRadialGradient(
+                grad,
+                startCenter: CGPoint(x: rect.midX + (focus.x - 0.5) * rect.width,
+                                     y: rect.midY + (focus.y - 0.5) * rect.height),
+                startRadius: 0,
+                endCenter: CGPoint(x: rect.midX, y: rect.midY),
+                endRadius: rect.width / 2, options: [])
+        }
+        let node = SKSpriteNode(texture: tex)
+        node.size = CGSize(width: diameter, height: diameter)
+        return node
+    }
+
+    /// A contact shadow that fades out at its rim, where a filled ellipse
+    /// stops dead and reads as a hole punched in the road.
+    static func softShadowSprite(width: CGFloat, height: CGFloat) -> SKSpriteNode {
+        let key = "shadow-\(width)x\(height)"
+        let tex = bakedTexture(key, size: CGSize(width: width, height: height)) { ctx, size in
+            let rect = CGRect(origin: .zero, size: size)
+            ctx.saveGState()
+            // The gradient itself has to be elliptical, not a circle clipped
+            // by an ellipse: a circle of the shadow's width still carries most
+            // of its alpha where the flat ellipse's top and bottom edge cut
+            // it, which puts a hard edge on the soft thing.
+            ctx.translateBy(x: rect.midX, y: rect.midY)
+            ctx.scaleBy(x: rect.width / 2, y: rect.height / 2)
+            let r: CGFloat = 1
+            ctx.addEllipse(in: CGRect(x: -r, y: -r, width: r * 2, height: r * 2))
+            ctx.clip()
+            let grad = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                  colors: [UIColor.black.withAlphaComponent(0.52).cgColor,
+                                           UIColor.black.withAlphaComponent(0.26).cgColor,
+                                           UIColor.black.withAlphaComponent(0).cgColor] as CFArray,
+                                  locations: [0, 0.45, 1])!
+            ctx.drawRadialGradient(grad, startCenter: .zero, startRadius: 0,
+                                   endCenter: .zero, endRadius: r, options: [])
+            ctx.restoreGState()
+        }
+        let node = SKSpriteNode(texture: tex)
+        node.size = CGSize(width: width, height: height)
+        return node
+    }
+
     // MARK: - Retail artwork
 
     /// The imported retail sprite for `path`, sized so its artwork spans `width`
@@ -362,9 +444,25 @@ enum Sprites {
         let bellyPath = CGMutablePath()
         bellyPath.addEllipse(in: CGRect(x: -52, y: -22, width: 104, height: 48))
         root.addChild(shape(bellyPath, fill: body, line: 0))
+        // The cream is not one flat colour on the retail model either: light
+        // sits along the top of the body and the surface darkens where it
+        // meets the road.
+        root.addChild(shape(CGPath(ellipseIn: CGRect(x: -40, y: -12, width: 80, height: 26),
+                                   transform: nil),
+                            fill: UIColor.white.withAlphaComponent(0.16), stroke: .clear, line: 0))
+        root.addChild(shape(CGPath(ellipseIn: CGRect(x: -46, y: -30, width: 92, height: 20),
+                                   transform: nil),
+                            fill: ink.withAlphaComponent(0.13), stroke: .clear, line: 0))
 
-        // Shell with a spiral.
-        root.addChild(circle(40, CGPoint(x: 0, y: 18), fill: shell, stroke: ink, line: 4))
+        // Shell — the retail model's shell is not one flat purple: it lightens
+        // toward a highlight above and left of the spiral and falls away dark
+        // at the rim. A baked radial gradient does what a shape's flat fill
+        // cannot, and the outline circle on top keeps the ink edge.
+        let shellBall = radialSprite(80, inner: shellHi, mid: shell, outer: shellLo,
+                                     focus: CGPoint(x: 0.38, y: 0.68))
+        shellBall.position = CGPoint(x: 0, y: 18)
+        root.addChild(shellBall)
+        root.addChild(circle(40, CGPoint(x: 0, y: 18), fill: .clear, stroke: ink, line: 4))
         let spiral = CGMutablePath()
         var radius: CGFloat = 30
         var angle: CGFloat = 0
@@ -378,15 +476,30 @@ enum Sprites {
         spiralNode.strokeColor = shellHi
         spiralNode.lineWidth = 5
         spiralNode.lineCap = .round
+        spiralNode.alpha = 0.8
         root.addChild(spiralNode)
-        root.addChild(circle(9, CGPoint(x: -14, y: 34), fill: shellHi.withAlphaComponent(0.7), stroke: .clear, line: 0))
+        // A curved sheen along the highlight side, where the light catches the
+        // shell's shoulder — the flat dot this replaces sat on the gradient
+        // like a spot of paint.
+        let sheenPath = CGMutablePath()
+        sheenPath.addArc(center: CGPoint(x: 0, y: 18), radius: 27,
+                         startAngle: .pi * 0.45, endAngle: .pi * 1.05, clockwise: false)
+        let sheen = SKShapeNode(path: sheenPath)
+        sheen.strokeColor = UIColor.white.withAlphaComponent(0.35)
+        sheen.lineWidth = 6
+        sheen.lineCap = .round
+        sheen.alpha = 0.8
+        root.addChild(sheen)
 
-        // Eye stalks peeking over the shell.
+        // Eye stalks peeking over the shell. Each pupil carries a catchlight,
+        // which is what stops it reading as a punched hole.
         for sgn in [-1.0, 1.0] as [CGFloat] {
             root.addChild(line(from: CGPoint(x: sgn * 12, y: 48),
                                to: CGPoint(x: sgn * 22, y: 74), width: 7, color: body))
             root.addChild(circle(9, CGPoint(x: sgn * 22, y: 76), fill: .white, stroke: ink, line: 3))
             root.addChild(circle(4, CGPoint(x: sgn * 22 + sgn * 2, y: 77), fill: ink, stroke: .clear, line: 0))
+            root.addChild(circle(1.5, CGPoint(x: sgn * 22 + sgn * 0.6, y: 78.6),
+                                 fill: .white, stroke: .clear, line: 0))
         }
 
         return root
