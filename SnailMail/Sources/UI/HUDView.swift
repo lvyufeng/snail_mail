@@ -398,10 +398,19 @@ private struct RouteSpine: View {
                         .frame(width: lineWidth, height: h)
                         .position(x: centre, y: h / 2)
                 } else {
-                    Capsule()
-                        .fill(Color.black.opacity(0.4))
-                        .frame(width: 6, height: h)
-                        .position(x: centre, y: h / 2)
+                    // The cased spine: the meter's dark shell with a hint of
+                    // lit lip, so both edges of the screen carry the same
+                    // gauge language.
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color(hex: "#10081F").opacity(0.78))
+                        Capsule()
+                            .fill(Color.white.opacity(0.12))
+                            .frame(width: 3 * scale)
+                            .padding(.leading, 2 * scale)
+                    }
+                    .frame(width: 13 * scale, height: h)
+                    .position(x: centre, y: h / 2)
                 }
 
                 if let lit = RetailAssets.billboardImage("Art/Sprites/progress-bar-lit.png") {
@@ -412,6 +421,16 @@ private struct RouteSpine: View {
                         .frame(height: h, alignment: .top)
                         .clipped()
                         .position(x: centre, y: h / 2)
+                } else {
+                    // The travelled stretch, lit gold down from the top — the
+                    // same read as the meter's fill, so the left edge speaks
+                    // the same language as the right one.
+                    Capsule()
+                        .fill(LinearGradient(colors: [Palette.gold.opacity(0.85),
+                                                      Palette.gold.opacity(0.30)],
+                                             startPoint: .top, endPoint: .bottom))
+                        .frame(width: 6 * scale, height: max(1, cursorTop + cursorH / 2))
+                        .position(x: centre, y: (cursorTop + cursorH / 2) / 2)
                 }
 
                 Group {
@@ -420,7 +439,11 @@ private struct RouteSpine: View {
                             .resizable()
                             .interpolation(.medium)
                     } else {
-                        Circle().fill(Palette.gold)
+                        Circle()
+                            .fill(Palette.gold)
+                            .overlay(Circle().stroke(Color.white.opacity(0.75),
+                                                     lineWidth: 2 * scale))
+                            .shadow(color: Palette.gold.opacity(0.75), radius: 7 * scale)
                     }
                 }
                 .frame(width: cursorH * 43 / 61, height: cursorH)
@@ -464,9 +487,14 @@ private struct ParcelGauges: View {
                     .interpolation(.medium)
                     .frame(width: w, height: h)
             } else {
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(Color.black.opacity(0.45))
-                    .frame(width: w, height: h)
+                // The same dark casing the meter and the spine wear, so the
+                // three gauges read as one family.
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(Color(hex: "#10081F").opacity(0.78))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .stroke(Palette.ink.opacity(0.65), lineWidth: 1)
+                    )
             }
 
             GeometryReader { geo in
@@ -474,8 +502,8 @@ private struct ParcelGauges: View {
                     if let full = RetailAssets.image("Art/Sprites/sliderbarfull.png") {
                         Image(uiImage: full).resizable().interpolation(.medium)
                     } else {
-                        LinearGradient(colors: [tint, tint.opacity(0.6)],
-                                       startPoint: .leading, endPoint: .trailing)
+                        LinearGradient(colors: [tint, tint.opacity(0.55)],
+                                       startPoint: .top, endPoint: .bottom)
                     }
                 }
                 .frame(width: geo.size.width * clamped, alignment: .leading)
@@ -554,8 +582,9 @@ private struct LifeCounter: View {
 
     var body: some View {
         HStack(spacing: 6 * scale) {
-            // Slots overlap by eight pixels at the retail pitch, so the icons
-            // sit 24 apart while each keeps its own 32-pixel width.
+            // The slots ride in a chip of the casing colour the other gauges
+            // wear, so the lives read as part of the HUD rather than as dots
+            // adrift on the road.
             HStack(spacing: -8 * scale) {
                 ForEach(0..<RaceState.maxLives, id: \.self) { slot in
                     Group {
@@ -564,6 +593,8 @@ private struct LifeCounter: View {
                                 .aspectRatio(contentMode: .fit)
                         } else {
                             Circle().fill(Palette.good)
+                                .overlay(Circle().stroke(Color.white.opacity(0.35),
+                                                         lineWidth: 1.5))
                         }
                     }
                     .frame(width: 32 * scale, height: 19 * scale)
@@ -571,6 +602,9 @@ private struct LifeCounter: View {
                 }
             }
             .padding(.leading, -2 * scale)
+            .padding(.horizontal, 8 * scale)
+            .padding(.vertical, 4 * scale)
+            .background(Capsule().fill(Color(hex: "#10081F").opacity(0.78)))
 
             Text(String(format: "%.1fs", state.elapsed))
                 .font(.retailFixed(13, weight: .bold))
