@@ -798,6 +798,14 @@ enum Sprites {
     private static func makeParcel() -> SKNode {
         let root = SKNode()
         root.addChild(roundRect(46, 46, .zero, radius: 5, fill: UIColor(hex: "#B5783C")))
+        // Light along the top edge and shade at the base, so the box sits in
+        // the world rather than floating as a flat brown square.
+        root.addChild(shape(CGPath(ellipseIn: CGRect(x: -19, y: 10, width: 38, height: 12),
+                                   transform: nil),
+                            fill: UIColor.white.withAlphaComponent(0.16), stroke: .clear, line: 0))
+        root.addChild(shape(CGPath(ellipseIn: CGRect(x: -20, y: -21, width: 40, height: 9),
+                                   transform: nil),
+                            fill: ink.withAlphaComponent(0.16), stroke: .clear, line: 0))
         root.addChild(line(from: CGPoint(x: 0, y: -22), to: CGPoint(x: 0, y: 22), width: 6,
                            color: UIColor(hex: "#7A4C25")))
         root.addChild(line(from: CGPoint(x: -22, y: 0), to: CGPoint(x: 22, y: 0), width: 6,
@@ -811,6 +819,10 @@ enum Sprites {
         let pts = [CGPoint(x: 0, y: 26), CGPoint(x: 18, y: -6), CGPoint(x: -18, y: -6)]
         let p = CGMutablePath(); p.addLines(between: pts); p.closeSubpath()
         root.addChild(shape(p, fill: UIColor(hex: "#EAF2FF"), line: 3))
+        // A bright edge down the lit face, so the crystal reads as cut rather
+        // than printed.
+        root.addChild(line(from: CGPoint(x: 1, y: 24), to: CGPoint(x: 17, y: -4), width: 3,
+                           color: UIColor.white.withAlphaComponent(0.65)))
         let p2 = CGMutablePath()
         p2.addLines(between: [CGPoint(x: -22, y: 8), CGPoint(x: -6, y: -6), CGPoint(x: -22, y: -20)])
         p2.closeSubpath()
@@ -830,7 +842,14 @@ enum Sprites {
         p.addArc(center: CGPoint(x: 12, y: 10), radius: 12, startAngle: .pi, endAngle: 0, clockwise: false)
         p.addCurve(to: CGPoint(x: 0, y: -22), control1: CGPoint(x: 24, y: -2), control2: CGPoint(x: 14, y: -12))
         p.closeSubpath()
-        return shape(p, fill: UIColor(hex: "#FF4E8A"), line: 3)
+        let root = SKNode()
+        root.addChild(shape(p, fill: UIColor(hex: "#FF4E8A"), line: 3))
+        // A gloss on the left lobe: the pickup reads as a shiny thing worth
+        // taking, which a flat pink heart does not.
+        root.addChild(shape(CGPath(ellipseIn: CGRect(x: -17, y: 4, width: 13, height: 8),
+                                   transform: nil),
+                            fill: UIColor.white.withAlphaComponent(0.5), stroke: .clear, line: 0))
+        return root
     }
 
     private static func makeAsteroid() -> SKNode {
@@ -845,6 +864,15 @@ enum Sprites {
         }
         p.closeSubpath()
         root.addChild(shape(p, fill: UIColor(hex: "#4E6FD8"), line: 4))
+        // A soft light from the top left: the rock turns away into shadow at
+        // its lower rim instead of sitting as one flat blue.
+        let light = radialSprite(64,
+                                 inner: UIColor.white.withAlphaComponent(0.38),
+                                 mid: UIColor.white.withAlphaComponent(0.10),
+                                 outer: .clear,
+                                 focus: CGPoint(x: 0.36, y: 0.68))
+        light.position = CGPoint(x: -5, y: 5)
+        root.addChild(light)
         root.addChild(circle(8, CGPoint(x: -10, y: 8), fill: UIColor(hex: "#374FA8"), stroke: .clear, line: 0))
         root.addChild(circle(5, CGPoint(x: 12, y: -12), fill: UIColor(hex: "#374FA8"), stroke: .clear, line: 0))
         root.addChild(circle(4, CGPoint(x: 6, y: 16), fill: UIColor(hex: "#6B88E8"), stroke: .clear, line: 0))
@@ -1037,18 +1065,25 @@ enum Sprites {
             p.closeSubpath()
             root.addChild(shape(p, fill: color, stroke: .clear, line: 0))
         }
-        // The lit face: the bake lights the post's front, so a narrower spire
-        // down the middle keeps the flat drawing from reading as a silhouette.
-        let lit = CGMutablePath()
-        lit.move(to: CGPoint(x: -half(0.723) * 0.55, y: baseY))
-        lit.addLine(to: CGPoint(x: half(0.723) * 0.55, y: baseY))
-        lit.addLine(to: CGPoint(x: half(1.040) * 0.55, y: shoulderY))
-        lit.addLine(to: CGPoint(x: half(0.584) * 0.55, y: headY))
-        lit.addLine(to: CGPoint(x: 0, y: apexY))
-        lit.addLine(to: CGPoint(x: -half(0.584) * 0.55, y: headY))
-        lit.addLine(to: CGPoint(x: -half(1.040) * 0.55, y: shoulderY))
-        lit.closeSubpath()
-        root.addChild(shape(lit, fill: metal, stroke: .clear, line: 0))
+        /// Cylinder shading in steps. The bake lights the post's front face and
+        /// falls away dark at the flanks; nested narrower bands at rising
+        /// brightness read as a rounded surface where a single flat band read
+        /// as a stripe painted on a flat slab.
+        func litBand(_ fraction: CGFloat, _ color: UIColor) {
+            let lit = CGMutablePath()
+            lit.move(to: CGPoint(x: -half(0.723) * fraction, y: baseY))
+            lit.addLine(to: CGPoint(x: half(0.723) * fraction, y: baseY))
+            lit.addLine(to: CGPoint(x: half(1.040) * fraction, y: shoulderY))
+            lit.addLine(to: CGPoint(x: half(0.584) * fraction, y: headY))
+            lit.addLine(to: CGPoint(x: 0, y: apexY))
+            lit.addLine(to: CGPoint(x: -half(0.584) * fraction, y: headY))
+            lit.addLine(to: CGPoint(x: -half(1.040) * fraction, y: shoulderY))
+            lit.closeSubpath()
+            root.addChild(shape(lit, fill: color, stroke: .clear, line: 0))
+        }
+        litBand(0.82, metal)
+        litBand(0.54, UIColor(hex: "#A6ABC4"))
+        litBand(0.26, UIColor(hex: "#C6CBDF").withAlphaComponent(0.85))
         // The two red turns the bake paints on it: a collar just under the
         // shoulder and the head, which is what makes the spire read as a turret.
         band(y(5.560), y(5.300), danger)
